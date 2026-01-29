@@ -13,8 +13,8 @@
       <!-- 移动端 Tab 切换 -->
       <div class="mobile-tabs lg:hidden">
         <el-radio-group v-model="activeTab" class="w-full">
-          <el-radio-button label="edit" class="w-1/2">编辑</el-radio-button>
-          <el-radio-button label="preview" class="w-1/2">预览</el-radio-button>
+          <el-radio-button value="edit" class="w-1/2">编辑</el-radio-button>
+          <el-radio-button value="preview" class="w-1/2">预览</el-radio-button>
         </el-radio-group>
       </div>
 
@@ -108,18 +108,20 @@ const handleExport = async (type: 'pdf' | 'image' | 'json' | 'print') => {
     background: 'rgba(0, 0, 0, 0.7)',
   });
 
+  const filename = data.value.title || data.value.basic.name || 'resume';
+
   try {
     switch (type) {
       case 'pdf':
-        await exportToPDF('resume-canvas', `${data.value.basic.name || data.value.title || 'resume'}_简历`);
+        await exportToPDF('resume-canvas', filename);
         ElMessage.success('PDF 导出成功！');
         break;
       case 'image':
-        await exportToImage('resume-canvas', `${data.value.basic.name || data.value.title || 'resume'}_简历`, 'png');
+        await exportToImage('resume-canvas', filename, 'png');
         ElMessage.success('图片导出成功！');
         break;
       case 'json':
-        exportToJSON(data.value, `${data.value.basic.name || data.value.title || 'resume'}_数据`);
+        exportToJSON(data.value, filename);
         ElMessage.success('JSON 导出成功！');
         break;
       case 'print':

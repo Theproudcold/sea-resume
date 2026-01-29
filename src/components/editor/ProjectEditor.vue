@@ -72,12 +72,9 @@
         </el-form-item>
 
         <el-form-item label="项目描述">
-          <el-input
+          <RichTextEditor
             v-model="project.description"
-            type="textarea"
-            :rows="4"
-            placeholder="描述项目背景、功能、你的职责和成果..."
-            @change="updateItem(project.id, { description: project.description })"
+            @update:modelValue="(val) => updateItem(project.id, { description: val })"
           />
         </el-form-item>
 
@@ -120,6 +117,7 @@ import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { Plus, Delete, Folder } from '@element-plus/icons-vue';
 import type { Project } from '@/types/resume';
+import RichTextEditor from '@/components/common/RichTextEditor.vue';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);

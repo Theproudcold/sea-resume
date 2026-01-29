@@ -2,8 +2,18 @@
   <div class="editor-panel">
     <el-scrollbar height="100%">
       <div class="editor-content p-6">
-        <el-collapse v-model="activeNames" class="space-y-4">
-          <!-- 基础信息 -->
+        <!-- 基础信息 (固定) -->
+        <el-collapse v-model="activeNames" class="space-y-4 mb-4">
+          <el-collapse-item name="theme">
+            <template #title>
+              <div class="flex items-center gap-2">
+                <el-icon><Brush /></el-icon>
+                <span class="font-semibold">主题设置</span>
+              </div>
+            </template>
+            <ThemeEditor />
+          </el-collapse-item>
+
           <el-collapse-item name="basic">
             <template #title>
               <div class="flex items-center gap-2">
@@ -13,66 +23,79 @@
             </template>
             <BasicInfoEditor />
           </el-collapse-item>
-
-          <!-- 工作经历 -->
-          <el-collapse-item name="experience">
-            <template #title>
-              <div class="flex items-center gap-2">
-                <el-icon><Briefcase /></el-icon>
-                <span class="font-semibold">工作经历</span>
-              </div>
-            </template>
-            <ExperienceEditor />
-          </el-collapse-item>
-
-          <!-- 项目经验 -->
-          <el-collapse-item name="projects">
-            <template #title>
-              <div class="flex items-center gap-2">
-                <el-icon><Folder /></el-icon>
-                <span class="font-semibold">项目经验</span>
-              </div>
-            </template>
-            <ProjectEditor />
-          </el-collapse-item>
-
-          <!-- 教育背景 -->
-          <el-collapse-item name="education">
-            <template #title>
-              <div class="flex items-center gap-2">
-                <el-icon><School /></el-icon>
-                <span class="font-semibold">教育背景</span>
-              </div>
-            </template>
-            <EducationEditor />
-          </el-collapse-item>
-
-          <!-- 技能证书 -->
-          <el-collapse-item name="skills">
-            <template #title>
-              <div class="flex items-center gap-2">
-                <el-icon><Star /></el-icon>
-                <span class="font-semibold">技能证书</span>
-              </div>
-            </template>
-            <SkillEditor />
-          </el-collapse-item>
         </el-collapse>
+
+        <!-- 可排序模块 -->
+        <draggable
+          v-model="sectionsList"
+          item-key="id"
+          handle=".drag-handle"
+          :animation="200"
+          component="el-collapse"
+          :component-data="{ modelValue: activeNames, 'onUpdate:modelValue': (val: any) => activeNames = val }"
+          class="space-y-4"
+        >
+          <template #item="{ element }">
+            <el-collapse-item :name="element.id">
+              <template #title>
+                <div class="flex items-center justify-between w-full pr-4 group">
+                  <div class="flex items-center gap-2">
+                    <el-icon><component :is="element.icon" /></el-icon>
+                    <span class="font-semibold">{{ element.label }}</span>
+                  </div>
+                  <el-icon class="drag-handle cursor-move text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
+                    <Rank />
+                  </el-icon>
+                </div>
+              </template>
+              <component :is="element.component" />
+            </el-collapse-item>
+          </template>
+        </draggable>
       </div>
     </el-scrollbar>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { User, Briefcase, School, Star, Folder } from '@element-plus/icons-vue';
+import { ref, computed, markRaw } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useResumeStore } from '@/stores/resume';
+import { User, Briefcase, School, Star, Folder, Rank, Brush } from '@element-plus/icons-vue';
+import draggable from 'vuedraggable';
 import BasicInfoEditor from './BasicInfoEditor.vue';
+import ThemeEditor from './ThemeEditor.vue';
 import ExperienceEditor from './ExperienceEditor.vue';
 import EducationEditor from './EducationEditor.vue';
 import SkillEditor from './SkillEditor.vue';
 import ProjectEditor from './ProjectEditor.vue';
 
+const resumeStore = useResumeStore();
+const { data } = storeToRefs(resumeStore);
+
 const activeNames = ref(['basic', 'experience', 'projects', 'education', 'skills']);
+
+// 模块配置映射
+const sectionConfig: Record<string, any> = {
+  experience: { label: '工作经历', icon: markRaw(Briefcase), component: markRaw(ExperienceEditor) },
+  projects: { label: '项目经验', icon: markRaw(Folder), component: markRaw(ProjectEditor) },
+  education: { label: '教育背景', icon: markRaw(School), component: markRaw(EducationEditor) },
+  skills: { label: '技能证书', icon: markRaw(Star), component: markRaw(SkillEditor) },
+};
+
+// 计算属性：将 store 中的 order 转换为对象列表
+const sectionsList = computed({
+  get() {
+    return (data.value.sectionOrder || []).map(id => ({
+      id,
+      ...sectionConfig[id]
+    })).filter(item => item.label); // 过滤掉未知的 ID
+  },
+  set(newVal) {
+    const newOrder = newVal.map(item => item.id);
+    resumeStore.updateSectionOrder(newOrder);
+  }
+});
 </script>
 
 <style scoped>

@@ -72,6 +72,15 @@ export interface ResumeMeta {
   isSynced?: boolean;      // 同步状态标记
 }
 
+// 主题配置
+export interface ThemeConfig {
+  color: string;
+  fontFamily: string;
+  fontSize: number; // px
+  lineHeight: number;
+  spacing: number; // px
+}
+
 // 完整简历数据
 export interface ResumeData {
   id: string;
@@ -83,6 +92,8 @@ export interface ResumeData {
   projects: Project[];     // 项目经验（新增）
   customBlocks: CustomBlock[];
   templateId: string;
+  theme: ThemeConfig;      // 主题配置（新增）
+  sectionOrder: string[];  // 模块排序
   createdAt: string;
   updatedAt: string;
 }

@@ -86,6 +86,14 @@ export const useWorkbenchStore = defineStore('workbench', {
         projects: [],
         customBlocks: [],
         templateId,
+        theme: {
+          color: '#2563eb',
+          fontFamily: 'sans-serif',
+          fontSize: 14,
+          lineHeight: 1.5,
+          spacing: 24,
+        },
+        sectionOrder: ['experience', 'projects', 'education', 'skills'],
         createdAt: now,
         updatedAt: now,
       };

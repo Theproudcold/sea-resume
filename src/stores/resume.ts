@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import type { ResumeData, BasicInfo, Experience, Education, Skill, CustomBlock, Project, ResumeMeta } from '@/types/resume';
+import type { ResumeData, BasicInfo, Experience, Education, Skill, CustomBlock, Project, ResumeMeta, ThemeConfig } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { generateId, debounce } from '@/utils/helpers';
 
@@ -19,6 +19,14 @@ const getDefaultResumeData = (): ResumeData => ({
   projects: [],
   customBlocks: [],
   templateId: 'modern',
+  theme: {
+    color: '#2563eb', // blue-600
+    fontFamily: 'sans-serif',
+    fontSize: 14,
+    lineHeight: 1.5,
+    spacing: 24,
+  },
+  sectionOrder: ['experience', 'projects', 'education', 'skills'],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
@@ -30,6 +38,14 @@ export const useResumeStore = defineStore('resume', {
   }),
 
   actions: {
+    // ... existing actions ...
+
+    // 更新主题配置
+    updateTheme(theme: Partial<ThemeConfig>) {
+      this.data.theme = { ...this.data.theme, ...theme };
+      this.debouncedSave();
+    },
+
     /**
      * 通过 ID 加载简历
      * @param id 简历 ID
@@ -39,7 +55,14 @@ export const useResumeStore = defineStore('resume', {
       try {
         const resume = await storageManager.read(id);
         if (resume) {
-          this.data = resume;
+          // Merge with default data to ensure new properties (like theme) exist
+          this.data = {
+            ...getDefaultResumeData(),
+            ...resume,
+            // Ensure nested objects are also merged if needed (shallow mege might be enough if structure is flat, 
+            // but theme is an object, so if resume.theme is missing, it takes default. If resume.theme is present, it takes resume.theme)
+            theme: resume.theme || getDefaultResumeData().theme,
+          };
         } else {
           throw new Error(`简历 ${id} 不存在`);
         }
@@ -190,6 +213,12 @@ export const useResumeStore = defineStore('resume', {
       this.autoSave();
     },
 
+    // 更新模块排序
+    updateSectionOrder(newOrder: string[]) {
+      this.data.sectionOrder = newOrder;
+      this.autoSave();
+    },
+
     // 更新简历标题
     updateTitle(title: string) {
       this.data.title = title;
@@ -204,6 +233,10 @@ export const useResumeStore = defineStore('resume', {
     // 导入数据
     async importData(data: ResumeData) {
       this.data = data;
+      // 兼容旧数据
+      if (!this.data.sectionOrder) {
+        this.data.sectionOrder = ['experience', 'projects', 'education', 'skills'];
+      }
       await this.autoSave();
     },
 

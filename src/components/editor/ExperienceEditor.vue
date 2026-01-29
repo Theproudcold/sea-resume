@@ -79,12 +79,9 @@
         </el-row>
 
         <el-form-item label="工作描述">
-          <el-input
+          <RichTextEditor
             v-model="exp.description"
-            type="textarea"
-            :rows="4"
-            placeholder="描述你的主要工作内容和职责..."
-            @input="handleUpdate(exp.id, { description: exp.description })"
+            @update:modelValue="(val) => handleUpdate(exp.id, { description: val })"
           />
         </el-form-item>
       </el-form>
@@ -100,6 +97,7 @@ import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { Plus, Delete, Briefcase } from '@element-plus/icons-vue';
 import type { Experience } from '@/types/resume';
+import RichTextEditor from '@/components/common/RichTextEditor.vue';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);

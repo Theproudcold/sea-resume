@@ -16,26 +16,59 @@ export async function exportToPDF(
       throw new Error(`未找到元素: ${elementId}`);
     }
 
-    // 渲染为 Canvas（高清）
-    const canvas = await html2canvas(element, {
-      scale: 2, // 2倍分辨率，提高清晰度
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-    });
+// A4 dimensions in mm
+      const A4_WIDTH = 210;
+      const A4_HEIGHT = 297; 
 
-    // A4 尺寸 (210mm x 297mm)
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF('p', 'mm', 'a4');
+      // Render to Canvas (High Res)
+      const canvas = await html2canvas(element, {
+        scale: 2, // 2x resolution
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
 
-    const pdfWidth = 210;
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      const contentWidth = canvas.width;
+      const contentHeight = canvas.height;
 
-    // 如果内容超过一页，可能需要分页（简化版本先不处理）
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-    pdf.save(`${filename}.pdf`);
+      // 1 mm = ? px (on specific canvas scale)
+      const pageHeightInPx = (A4_HEIGHT * contentWidth) / A4_WIDTH;
+      
+      let position = 0; // Current vertical position on original canvas (px)
+      let leftHeight = contentHeight; // Remaining height to print (px)
+
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const imgWidth = A4_WIDTH;
+      const imgHeight = (A4_WIDTH / contentWidth) * contentHeight;
+
+      // First page
+      if (leftHeight < pageHeightInPx) {
+        // Single page
+        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgWidth, imgHeight);
+      } else {
+        // Multi-page
+        while (leftHeight > 0) {
+          pdf.addImage(
+            canvas.toDataURL('image/png'), 
+            'PNG', 
+            0, 
+            position * (A4_WIDTH / contentWidth), // y offset in PDF (negative means shifting up)
+            imgWidth, 
+            imgHeight
+          );
+          
+          leftHeight -= pageHeightInPx;
+          position -= pageHeightInPx; // Move 'window' down
+
+          if (leftHeight > 0) {
+            pdf.addPage();
+          }
+        }
+      }
+
+      pdf.save(`${filename}.pdf`);
   } catch (error) {
-    console.error('PDF 导出失败:', error);
+    console.error('PDF Export Failed:', error);
     throw error;
   }
 }
