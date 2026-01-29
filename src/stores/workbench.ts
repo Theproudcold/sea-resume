@@ -92,8 +92,15 @@ export const useWorkbenchStore = defineStore('workbench', {
           fontSize: 14,
           lineHeight: 1.5,
           spacing: 24,
+          displayIcons: true,
         },
         sectionOrder: ['experience', 'projects', 'education', 'skills'],
+        sectionTitles: {
+          experience: '工作经历',
+          projects: '项目经验',
+          education: '教育背景',
+          skills: '技能证书',
+        },
         createdAt: now,
         updatedAt: now,
       };

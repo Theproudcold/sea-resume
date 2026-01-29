@@ -39,7 +39,29 @@
 
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="邮箱" required>
+          <el-form-item label="邮箱" required class="relative">
+            <template #label>
+              <div class="flex items-center gap-2">
+                <span>邮箱</span>
+                <el-popover placement="bottom" :width="200" trigger="click">
+                  <template #reference>
+                    <el-button link size="small" :icon="Icons[(localBasic.iconOverrides?.email || 'Message') as keyof typeof Icons]">
+                    </el-button>
+                  </template>
+                  <div class="grid grid-cols-4 gap-2">
+                    <div
+                      v-for="icon in iconOptions.email"
+                      :key="icon"
+                      class="flex items-center justify-center p-2 rounded hover:bg-gray-100 cursor-pointer"
+                      :class="{ 'bg-blue-50 text-blue-600': localBasic.iconOverrides?.email === icon }"
+                      @click="updateIcon('email', icon)"
+                    >
+                      <el-icon><component :is="Icons[icon as keyof typeof Icons]" /></el-icon>
+                    </div>
+                  </div>
+                </el-popover>
+              </div>
+            </template>
             <el-input
               v-model="localBasic.email"
               placeholder="your@email.com"
@@ -50,6 +72,28 @@
         </el-col>
         <el-col :span="12">
           <el-form-item label="电话" required>
+            <template #label>
+              <div class="flex items-center gap-2">
+                <span>电话</span>
+                <el-popover placement="bottom" :width="200" trigger="click">
+                  <template #reference>
+                    <el-button link size="small" :icon="Icons[(localBasic.iconOverrides?.phone || 'Iphone') as keyof typeof Icons]">
+                    </el-button>
+                  </template>
+                  <div class="grid grid-cols-4 gap-2">
+                    <div
+                      v-for="icon in iconOptions.phone"
+                      :key="icon"
+                      class="flex items-center justify-center p-2 rounded hover:bg-gray-100 cursor-pointer"
+                      :class="{ 'bg-blue-50 text-blue-600': localBasic.iconOverrides?.phone === icon }"
+                      @click="updateIcon('phone', icon)"
+                    >
+                      <el-icon><component :is="Icons[icon as keyof typeof Icons]" /></el-icon>
+                    </div>
+                  </div>
+                </el-popover>
+              </div>
+            </template>
             <el-input
               v-model="localBasic.phone"
               placeholder="手机号码"
@@ -60,6 +104,28 @@
       </el-row>
 
       <el-form-item label="所在城市">
+        <template #label>
+          <div class="flex items-center gap-2">
+            <span>所在城市</span>
+             <el-popover placement="bottom" :width="200" trigger="click">
+              <template #reference>
+                <el-button link size="small" :icon="Icons[(localBasic.iconOverrides?.location || 'Location') as keyof typeof Icons]">
+                </el-button>
+              </template>
+              <div class="grid grid-cols-4 gap-2">
+                <div
+                  v-for="icon in iconOptions.location"
+                  :key="icon"
+                  class="flex items-center justify-center p-2 rounded hover:bg-gray-100 cursor-pointer"
+                  :class="{ 'bg-blue-50 text-blue-600': localBasic.iconOverrides?.location === icon }"
+                  @click="updateIcon('location', icon)"
+                >
+                  <el-icon><component :is="Icons[icon as keyof typeof Icons]" /></el-icon>
+                </div>
+              </div>
+            </el-popover>
+          </div>
+        </template>
         <el-input
           v-model="localBasic.location"
           placeholder="例如：北京"
@@ -68,6 +134,28 @@
       </el-form-item>
 
       <el-form-item label="个人网站">
+        <template #label>
+          <div class="flex items-center gap-2">
+            <span>个人网站</span>
+             <el-popover placement="bottom" :width="200" trigger="click">
+              <template #reference>
+                <el-button link size="small" :icon="Icons[(localBasic.iconOverrides?.website || 'Monitor') as keyof typeof Icons]">
+                </el-button>
+              </template>
+              <div class="grid grid-cols-4 gap-2">
+                <div
+                  v-for="icon in iconOptions.website"
+                  :key="icon"
+                  class="flex items-center justify-center p-2 rounded hover:bg-gray-100 cursor-pointer"
+                  :class="{ 'bg-blue-50 text-blue-600': localBasic.iconOverrides?.website === icon }"
+                  @click="updateIcon('website', icon)"
+                >
+                  <el-icon><component :is="Icons[icon as keyof typeof Icons]" /></el-icon>
+                </div>
+              </div>
+            </el-popover>
+          </div>
+        </template>
         <el-input
           v-model="localBasic.website"
           placeholder="https://..."
@@ -90,6 +178,7 @@ import { ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { Plus, Edit } from '@element-plus/icons-vue';
+import * as Icons from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import type { BasicInfo } from '@/types/resume';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
@@ -127,6 +216,21 @@ const handleAvatarChange = (file: any) => {
     localBasic.value.avatar = reader.result as string;
     handleUpdate();
   };
+};
+
+const iconOptions = {
+  email: ['Message', 'Postcard', 'Promotion', 'ChatDotRound'],
+  phone: ['Iphone', 'Phone', 'Cellphone', 'Service'],
+  location: ['Location', 'MapLocation', 'Place', 'House'],
+  website: ['Monitor', 'Link', 'ChromeFilled', 'Compass', 'Platform'],
+};
+
+const updateIcon = (field: 'email' | 'phone' | 'location' | 'website', icon: string) => {
+  if (!localBasic.value.iconOverrides) {
+    localBasic.value.iconOverrides = {};
+  }
+  localBasic.value.iconOverrides[field] = icon;
+  handleUpdate();
 };
 </script>
 

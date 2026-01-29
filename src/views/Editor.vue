@@ -113,8 +113,11 @@ const handleExport = async (type: 'pdf' | 'image' | 'json' | 'print') => {
   try {
     switch (type) {
       case 'pdf':
-        await exportToPDF('resume-canvas', filename);
-        ElMessage.success('PDF 导出成功！');
+        // 使用原生打印以获取矢量清晰度
+        ElMessage.info('请在打印窗口中选择 "另存为 PDF" 以获取最佳清晰度');
+        setTimeout(() => {
+          window.print();
+        }, 500);
         break;
       case 'image':
         await exportToImage('resume-canvas', filename, 'png');

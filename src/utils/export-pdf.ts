@@ -22,10 +22,11 @@ export async function exportToPDF(
 
       // Render to Canvas (High Res)
       const canvas = await html2canvas(element, {
-        scale: 2, // 2x resolution
+        scale: 3, // 3x resolution for better clarity
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
+        ignoreElements: (element) => element.classList.contains('no-print')
       });
 
       const contentWidth = canvas.width;

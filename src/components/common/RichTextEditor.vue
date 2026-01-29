@@ -32,8 +32,9 @@ watch(() => props.modelValue, (newVal) => {
   }
 });
 
-const updateContent = () => {
-  emit('update:modelValue', content.value);
+const updateContent = (newContent: string) => {
+  content.value = newContent; // Ensure local ref is updated (though v-model might do it too, being explicit is safer if we drop v-model)
+  emit('update:modelValue', newContent);
 };
 
 const toolbarOptions = [

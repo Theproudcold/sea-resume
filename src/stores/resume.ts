@@ -25,8 +25,15 @@ const getDefaultResumeData = (): ResumeData => ({
     fontSize: 14,
     lineHeight: 1.5,
     spacing: 24,
+    displayIcons: true,
   },
   sectionOrder: ['experience', 'projects', 'education', 'skills'],
+  sectionTitles: {
+    experience: '工作经历',
+    projects: '项目经验',
+    education: '教育背景',
+    skills: '技能证书',
+  },
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
@@ -35,6 +42,7 @@ export const useResumeStore = defineStore('resume', {
   state: () => ({
     data: getDefaultResumeData(),
     isLoading: false,
+    activeSection: null as string | null, // 当前选中的模块 ID
   }),
 
   actions: {
@@ -43,6 +51,15 @@ export const useResumeStore = defineStore('resume', {
     // 更新主题配置
     updateTheme(theme: Partial<ThemeConfig>) {
       this.data.theme = { ...this.data.theme, ...theme };
+      this.debouncedSave();
+    },
+
+    // 更新模块标题
+    updateSectionTitle(section: string, title: string) {
+      if (!this.data.sectionTitles) {
+        this.data.sectionTitles = getDefaultResumeData().sectionTitles;
+      }
+      this.data.sectionTitles[section] = title;
       this.debouncedSave();
     },
 
@@ -55,13 +72,19 @@ export const useResumeStore = defineStore('resume', {
       try {
         const resume = await storageManager.read(id);
         if (resume) {
-          // Merge with default data to ensure new properties (like theme) exist
+          // Merge with default data to ensure new properties exist
+          const defaults = getDefaultResumeData();
           this.data = {
-            ...getDefaultResumeData(),
+            ...defaults,
             ...resume,
-            // Ensure nested objects are also merged if needed (shallow mege might be enough if structure is flat, 
-            // but theme is an object, so if resume.theme is missing, it takes default. If resume.theme is present, it takes resume.theme)
-            theme: resume.theme || getDefaultResumeData().theme,
+            theme: {
+              ...defaults.theme,
+              ...(resume.theme || {}),
+            },
+            sectionTitles: {
+              ...defaults.sectionTitles,
+              ...(resume.sectionTitles || {}),
+            },
           };
         } else {
           throw new Error(`简历 ${id} 不存在`);
@@ -186,10 +209,12 @@ export const useResumeStore = defineStore('resume', {
     },
 
     // 添加自定义模块
-    addCustomBlock(block: Omit<CustomBlock, 'id'>) {
-      const newBlock: CustomBlock = { id: generateId(), ...block };
+    addCustomBlock(block: Omit<CustomBlock, 'id'>): string {
+      const id = generateId();
+      const newBlock: CustomBlock = { id, ...block };
       this.data.customBlocks.push(newBlock);
       this.autoSave();
+      return id;
     },
 
     // 更新自定义模块
@@ -205,6 +230,11 @@ export const useResumeStore = defineStore('resume', {
     removeCustomBlock(id: string) {
       this.data.customBlocks = this.data.customBlocks.filter((b) => b.id !== id);
       this.autoSave();
+    },
+
+    // 设置当前选中模块
+    setActiveSection(id: string | null) {
+      this.activeSection = id;
     },
 
     // 切换模板

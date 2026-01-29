@@ -43,31 +43,36 @@
         </el-form-item>
 
         <el-form-item label="项目时间">
-          <div class="flex gap-2 items-center">
+          <div class="flex flex-col gap-2">
             <el-date-picker
               v-model="project.startDate"
               type="month"
               placeholder="开始时间"
               format="YYYY-MM"
               value-format="YYYY-MM"
+              class="!w-full"
               @change="updateItem(project.id, { startDate: project.startDate })"
             />
-            <span>至</span>
-            <el-date-picker
-              v-if="project.endDate !== 'present'"
-              v-model="project.endDate"
-              type="month"
-              placeholder="结束时间"
-              format="YYYY-MM"
-              value-format="YYYY-MM"
-              @change="updateItem(project.id, { endDate: project.endDate })"
-            />
-            <el-checkbox
-              v-model="isPresentEnd[index]"
-              @change="handlePresentChange(project.id, index)"
-            >
-              至今
-            </el-checkbox>
+            <div class="flex items-center gap-2">
+              <el-date-picker
+                v-if="!isPresentEnd[index]"
+                v-model="project.endDate"
+                type="month"
+                placeholder="结束时间"
+                format="YYYY-MM"
+                value-format="YYYY-MM"
+                class="!w-full"
+                @change="updateItem(project.id, { endDate: project.endDate })"
+              />
+              <span v-else class="flex-1 text-center text-gray-500 text-sm px-3 py-2 bg-gray-100 rounded border border-gray-200">至今</span>
+              <el-checkbox
+                v-model="isPresentEnd[index]"
+                @change="(val: any) => handlePresentChange(project.id, index, val)"
+                class="whitespace-nowrap"
+              >
+                至今
+              </el-checkbox>
+            </div>
           </div>
         </el-form-item>
 
@@ -165,8 +170,9 @@ const updateItem = (id: string, updates: Partial<Project>) => {
   resumeStore.updateProject(id, updates);
 };
 
-const handlePresentChange = (id: string, index: number) => {
-  const endDate = isPresentEnd.value[index] ? 'present' : '';
+const handlePresentChange = (id: string, index: number, isPresent: any) => {
+  // isPresent is the new boolean value from checkbox
+  const endDate = isPresent ? 'present' : '';
   const project = projects.value[index];
   if (project) {
     project.endDate = endDate;

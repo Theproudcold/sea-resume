@@ -46,10 +46,6 @@
                 <el-icon><folder /></el-icon>
                 导出为 JSON
               </el-dropdown-item>
-              <el-dropdown-item command="print" divided>
-                <el-icon><printer /></el-icon>
-                打印
-              </el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>

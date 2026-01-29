@@ -8,6 +8,12 @@ export interface BasicInfo {
   website?: string;
   avatar?: string;
   summary?: string;       // 个人简介
+  iconOverrides?: {       // 图标自定义
+    email?: string;
+    phone?: string;
+    location?: string;
+    website?: string;
+  };
 }
 
 // 工作经历
@@ -79,21 +85,29 @@ export interface ThemeConfig {
   fontSize: number; // px
   lineHeight: number;
   spacing: number; // px
+  displayIcons: boolean; // 是否显示图标
 }
 
 // 完整简历数据
 export interface ResumeData {
   id: string;
-  title: string;           // 简历名称（新增）
+  title: string;           // 简历名称
   basic: BasicInfo;
   experiences: Experience[];
   education: Education[];
   skills: Skill[];
-  projects: Project[];     // 项目经验（新增）
+  projects: Project[];
   customBlocks: CustomBlock[];
   templateId: string;
-  theme: ThemeConfig;      // 主题配置（新增）
-  sectionOrder: string[];  // 模块排序
+  theme: ThemeConfig;
+  sectionOrder: string[];
+  sectionTitles: {         // 自定义模块标题
+    experience: string;
+    education: string;
+    projects: string;
+    skills: string;
+    [key: string]: string; // 支持自定义模块ID
+  };
   createdAt: string;
   updatedAt: string;
 }

@@ -15,7 +15,7 @@
 
         <div class="actions">
           <el-button :icon="Setting" @click="showSettings = true">设置</el-button>
-          <el-button type="primary" :icon="Plus" @click="showCreateDialog = true">
+          <el-button type="primary" :icon="Plus" @click="goToTemplates">
             新建简历
           </el-button>
         </div>
@@ -154,6 +154,10 @@ const handleCardClick = (id: string) => {
 
 const handleEdit = (id: string) => {
   router.push(`/editor/${id}`);
+};
+
+const goToTemplates = () => {
+  router.push('/templates');
 };
 
 const handleCreate = async () => {

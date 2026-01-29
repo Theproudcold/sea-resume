@@ -51,6 +51,15 @@
         @change="handleUpdate"
       />
     </div>
+
+    <!-- 图标显示 -->
+    <div class="form-item flex justify-between items-center">
+      <label class="text-sm font-medium text-gray-700">显示联系方式图标</label>
+      <el-switch
+        v-model="imgIconState"
+        @change="updateIconState"
+      />
+    </div>
   </div>
 </template>
 
@@ -63,6 +72,11 @@ const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
 const customColor = ref(data.value.theme?.color || '#2563eb');
+const imgIconState = ref(data.value.theme.displayIcons !== false);
+
+const updateIconState = (val: any) => {
+  resumeStore.updateTheme({ displayIcons: val });
+};
 
 const presetColors = [
   '#2563eb', // Blue (Default)
@@ -86,9 +100,11 @@ const handleUpdate = () => {
 };
 </script>
 
-<style scoped>
+<style scoped lang="scss">
+@use '@/styles/variables' as *;
+
 .form-item {
-  background: white;
+  background: $bg-white;
   padding: 0;
 }
 </style>
