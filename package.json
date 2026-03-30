@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -29,7 +31,10 @@
     "sass": "^1.97.3",
     "tailwindcss": "^3.4.19",
     "typescript": "~5.9.3",
+    "vitest": "^3.2.4",
     "vite": "npm:rolldown-vite@7.2.5",
+    "jsdom": "^26.1.0",
+    "@vue/test-utils": "^2.4.6",
     "vue-tsc": "^3.1.4"
   },
   "pnpm": {
