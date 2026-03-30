@@ -20,7 +20,10 @@ vi.stubGlobal('matchMedia', (query: string) => ({
   },
 }));
 
-if (typeof globalThis.localStorage?.setItem !== 'function') {
+const hasDomGlobals =
+  typeof window !== 'undefined' && typeof document !== 'undefined';
+
+if (hasDomGlobals && typeof globalThis.localStorage?.setItem !== 'function') {
   const storage = new Map<string, string>();
   vi.stubGlobal('localStorage', {
     get length() {
