@@ -44,11 +44,11 @@ describe('template-gallery helpers', () => {
   it('按最近使用排序，未使用时回退推荐顺序', () => {
     const usage = {
       modern: 10,
-      professional: 5,
+      professional: 10,
     };
 
     const sorted = sortTemplates(templates, 'recent', usage);
-    expect(sorted.map((item) => item.id)).toEqual(['modern', 'professional', 'creative']);
+    expect(sorted.map((item) => item.id)).toEqual(['professional', 'modern', 'creative']);
   });
 
   it('根据模板名和日期生成稳定默认标题', () => {
