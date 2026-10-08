@@ -119,4 +119,7 @@ export interface TemplateMetadata {
   description: string;
   thumbnail?: string;
   category: 'modern' | 'professional' | 'creative' | 'minimal' | 'tech';
+  categoryLabel: string;
+  keywords: string[];
+  recommendedOrder: number;
 }
