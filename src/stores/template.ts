@@ -51,7 +51,53 @@ const templates: TemplateMetadata[] = [
 
 export const useTemplateStore = defineStore('template', {
   state: () => ({
-    templates,
+    templates: [
+      {
+        id: 'modern',
+        name: '现代简约',
+        description: '单栏布局，信息清晰，适合互联网与通用岗位投递',
+        category: 'modern' as const,
+        categoryLabel: '现代',
+        keywords: ['前端', '互联网', '产品', '运营'],
+        recommendedOrder: 1,
+      },
+      {
+        id: 'professional',
+        name: '商务专业',
+        description: '双栏结构，排版稳重，适合金融、咨询与职能岗位',
+        category: 'professional' as const,
+        categoryLabel: '商务',
+        keywords: ['金融', '咨询', '人事', '行政'],
+        recommendedOrder: 2,
+      },
+      {
+        id: 'creative',
+        name: '创意设计',
+        description: '强调视觉表达与作品感，适合设计与创意相关岗位',
+        category: 'creative' as const,
+        categoryLabel: '创意',
+        keywords: ['设计', '品牌', '视觉', 'UI'],
+        recommendedOrder: 4,
+      },
+      {
+        id: 'minimal',
+        name: '极简主义',
+        description: '纯净留白，阅读负担低，适合正式简历投递场景',
+        category: 'minimal' as const,
+        categoryLabel: '极简',
+        keywords: ['简洁', '应届生', '通用', '正式'],
+        recommendedOrder: 3,
+      },
+      {
+        id: 'tech',
+        name: '科技感',
+        description: '模块层次分明，项目与技能突出，适合技术岗位展示',
+        category: 'tech' as const,
+        categoryLabel: '技术',
+        keywords: ['后端', '算法', '开发', '工程师'],
+        recommendedOrder: 5,
+      },
+    ] as TemplateMetadata[],
     currentTemplateId: 'modern',
   }),
 

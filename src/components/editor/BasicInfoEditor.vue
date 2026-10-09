@@ -49,15 +49,18 @@
                     </el-button>
                   </template>
                   <div class="grid grid-cols-4 gap-2">
-                    <div
+                    <button
                       v-for="icon in iconOptions.email"
                       :key="icon"
-                      class="flex items-center justify-center p-2 rounded hover:bg-gray-100 cursor-pointer"
-                      :class="{ 'bg-blue-50 text-blue-600': localBasic.iconOverrides?.email === icon }"
+                      type="button"
+                      class="icon-option-button"
+                      :class="{ 'is-active': localBasic.iconOverrides?.email === icon }"
+                      :aria-label="`邮箱图标 ${icon}`"
+                      :aria-pressed="localBasic.iconOverrides?.email === icon"
                       @click="updateIcon('email', icon)"
                     >
                       <el-icon><component :is="Icons[icon as keyof typeof Icons]" /></el-icon>
-                    </div>
+                    </button>
                   </div>
                 </el-popover>
               </div>
@@ -81,15 +84,18 @@
                     </el-button>
                   </template>
                   <div class="grid grid-cols-4 gap-2">
-                    <div
+                    <button
                       v-for="icon in iconOptions.phone"
                       :key="icon"
-                      class="flex items-center justify-center p-2 rounded hover:bg-gray-100 cursor-pointer"
-                      :class="{ 'bg-blue-50 text-blue-600': localBasic.iconOverrides?.phone === icon }"
+                      type="button"
+                      class="icon-option-button"
+                      :class="{ 'is-active': localBasic.iconOverrides?.phone === icon }"
+                      :aria-label="`电话图标 ${icon}`"
+                      :aria-pressed="localBasic.iconOverrides?.phone === icon"
                       @click="updateIcon('phone', icon)"
                     >
                       <el-icon><component :is="Icons[icon as keyof typeof Icons]" /></el-icon>
-                    </div>
+                    </button>
                   </div>
                 </el-popover>
               </div>
@@ -113,15 +119,18 @@
                 </el-button>
               </template>
               <div class="grid grid-cols-4 gap-2">
-                <div
+                <button
                   v-for="icon in iconOptions.location"
                   :key="icon"
-                  class="flex items-center justify-center p-2 rounded hover:bg-gray-100 cursor-pointer"
-                  :class="{ 'bg-blue-50 text-blue-600': localBasic.iconOverrides?.location === icon }"
+                  type="button"
+                  class="icon-option-button"
+                  :class="{ 'is-active': localBasic.iconOverrides?.location === icon }"
+                  :aria-label="`位置图标 ${icon}`"
+                  :aria-pressed="localBasic.iconOverrides?.location === icon"
                   @click="updateIcon('location', icon)"
                 >
                   <el-icon><component :is="Icons[icon as keyof typeof Icons]" /></el-icon>
-                </div>
+                </button>
               </div>
             </el-popover>
           </div>
@@ -133,6 +142,33 @@
         />
       </el-form-item>
 
+      <el-form-item label="出生日期（可选）">
+        <el-date-picker
+          v-model="localBasic.birthDate"
+          type="date"
+          value-format="YYYY-MM-DD"
+          format="YYYY 年 MM 月 DD 日"
+          placeholder="仅本地保存，用于年龄计算"
+          clearable
+          class="w-full"
+          @change="handleUpdate"
+        />
+        <p class="privacy-note">生日默认不会显示在简历；只有开启“显示年龄”后才会在预览/打印中显示。</p>
+      </el-form-item>
+
+      <el-row :gutter="16">
+        <el-col :span="12">
+          <el-form-item label="显示年龄">
+            <el-switch v-model="localBasic.showAge" :disabled="!localBasic.birthDate" @change="handleUpdate" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="12">
+          <el-form-item label="显示工作经验时长">
+            <el-switch v-model="localBasic.showExperienceYears" @change="handleUpdate" />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
       <el-form-item label="个人网站">
         <template #label>
           <div class="flex items-center gap-2">
@@ -143,15 +179,18 @@
                 </el-button>
               </template>
               <div class="grid grid-cols-4 gap-2">
-                <div
+                <button
                   v-for="icon in iconOptions.website"
                   :key="icon"
-                  class="flex items-center justify-center p-2 rounded hover:bg-gray-100 cursor-pointer"
-                  :class="{ 'bg-blue-50 text-blue-600': localBasic.iconOverrides?.website === icon }"
+                  type="button"
+                  class="icon-option-button"
+                  :class="{ 'is-active': localBasic.iconOverrides?.website === icon }"
+                  :aria-label="`个人网站图标 ${icon}`"
+                  :aria-pressed="localBasic.iconOverrides?.website === icon"
                   @click="updateIcon('website', icon)"
                 >
                   <el-icon><component :is="Icons[icon as keyof typeof Icons]" /></el-icon>
-                </div>
+                </button>
               </div>
             </el-popover>
           </div>
@@ -237,5 +276,11 @@ const updateIcon = (field: 'email' | 'phone' | 'location' | 'website', icon: str
 <style scoped>
 .basic-info-editor {
   width: 100%;
+}
+.privacy-note {
+  margin: 6px 0 0;
+  color: var(--ui-text-muted);
+  font-size: var(--ui-font-xs);
+  line-height: 1.4;
 }
 </style>

@@ -1,6 +1,15 @@
 <template>
   <el-card class="resume-card" :class="{ 'is-selected': selected }" shadow="hover">
-    <div class="card-content" @click="$emit('click')">
+    <div
+      class="card-content"
+      role="button"
+      tabindex="0"
+      :aria-label="`编辑简历：${resume.title}`"
+      @click="$emit('click')"
+      @keyup.enter="$emit('click')"
+      @keydown.space.prevent="$event.preventDefault()"
+      @keyup.space="$emit('click')"
+    >
       <!-- 缩略图 -->
       <div class="thumbnail">
         <div class="placeholder">
@@ -116,11 +125,13 @@ const handleCommand = (command: string) => {
 .resume-card {
   position: relative;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.resume-card:hover {
-  transform: translateY(-4px);
+@media (hover: hover) {
+  .resume-card:hover {
+    transform: translateY(-3px);
+  }
 }
 
 .resume-card.is-selected {
@@ -131,14 +142,18 @@ const handleCommand = (command: string) => {
 .card-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--ui-space-3);
+}
+
+.card-content:focus-visible {
+  border-radius: var(--ui-radius-md);
 }
 
 .thumbnail {
   width: 100%;
-  aspect-ratio: 210 / 297; /* A4 比例 */
-  background: #f5f5f5;
-  border-radius: 8px;
+  aspect-ratio: 210 / 297;
+  background: var(--ui-bg-subtle);
+  border-radius: var(--ui-radius-md);
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -146,7 +161,7 @@ const handleCommand = (command: string) => {
 }
 
 .placeholder {
-  color: #ccc;
+  color: var(--ui-text-secondary);
 }
 
 .info {
@@ -156,7 +171,7 @@ const handleCommand = (command: string) => {
 .title {
   font-size: 16px;
   font-weight: 600;
-  margin: 0 0 8px 0;
+  margin: 0 0 var(--ui-space-2) 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -165,8 +180,9 @@ const handleCommand = (command: string) => {
 .meta {
   display: flex;
   justify-content: space-between;
+  gap: var(--ui-space-2);
   font-size: 13px;
-  color: #666;
+  color: var(--ui-text-secondary);
 }
 
 .actions {
@@ -174,10 +190,17 @@ const handleCommand = (command: string) => {
   top: 12px;
   right: 12px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s ease;
 }
 
-.resume-card:hover .actions {
+.resume-card:hover .actions,
+.resume-card:focus-within .actions {
   opacity: 1;
+}
+
+@media (hover: none) {
+  .actions {
+    opacity: 1;
+  }
 }
 </style>

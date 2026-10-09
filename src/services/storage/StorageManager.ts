@@ -66,7 +66,48 @@ export class StorageManager {
 
     // 初始化适配器
     await adapter.init();
+    if (type === 'file_system' && !adapter.isReady()) throw new Error('本地文件夹尚未授权；请在设置中手动选择文件夹。');
     this.currentAdapter = adapter;
+  }
+
+  /** Merge current resumes into a selected folder without overwriting existing IDs. */
+  async switchToFileSystem(
+    directoryHandle: FileSystemDirectoryHandle,
+    mergeExisting = false,
+  ): Promise<{ directoryName: string; addedCount: number; conflictCount: number }> {
+    const sourceAdapter = this.currentAdapter;
+    const targetAdapter = new FileSystemAdapter(directoryHandle);
+    await targetAdapter.init();
+    if (!targetAdapter.isReady()) throw new Error('所选目录尚未获得读写授权。');
+
+    const initialResumes = await targetAdapter.list();
+    if (initialResumes.length && !mergeExisting) {
+      const error = new Error('所选目录已有 Sea Resume 数据。');
+      error.name = 'DirectoryContainsResumeDataError';
+      throw error;
+    }
+    await targetAdapter.upgradeLayout();
+    const existingResumes = await targetAdapter.list();
+
+    const existingIds = new Set(existingResumes.map((resume) => resume.id));
+    const sourceResumes = await sourceAdapter.list();
+    let addedCount = 0;
+    let conflictCount = 0;
+    for (const meta of sourceResumes) {
+      if (existingIds.has(meta.id)) {
+        conflictCount++;
+        continue;
+      }
+      const resume = await sourceAdapter.read(meta.id);
+      if (resume) {
+        await targetAdapter.save(resume, meta);
+        existingIds.add(meta.id);
+        addedCount++;
+      }
+    }
+    this.adapterCache.set('file_system', targetAdapter);
+    this.currentAdapter = targetAdapter;
+    return { directoryName: targetAdapter.getDirectoryName(), addedCount, conflictCount };
   }
 
   /**
@@ -78,7 +119,7 @@ export class StorageManager {
         return new LocalStorageAdapter();
 
       case 'file_system':
-        return new FileSystemAdapter();
+        return new FileSystemAdapter(config?.fileSystem?.directoryHandle);
 
       case 'webdav':
         // TODO: 实现 WebDavAdapter

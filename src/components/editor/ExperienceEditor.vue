@@ -6,13 +6,13 @@
       </el-button>
     </div>
 
-    <div v-if="experiences.length === 0" class="empty-state text-center py-8 text-gray-400">
+    <div v-if="experiences.length === 0" class="resume-editor-empty">
       <el-icon :size="48"><Briefcase /></el-icon>
       <p class="mt-2">暂无工作经历，点击上方按钮添加</p>
     </div>
 
-    <div v-for="(exp, index) in experiences" :key="exp.id" class="experience-item">
-      <div class="item-header flex items-center justify-between mb-3">
+    <div v-for="(exp, index) in experiences" :key="exp.id" class="experience-item resume-entry-card">
+      <div class="resume-entry-card__header">
         <span class="text-sm text-gray-600">工作经历 {{ index + 1 }}</span>
         <el-button
           type="danger"
@@ -102,10 +102,10 @@ import RichTextEditor from '@/components/common/RichTextEditor.vue';
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const experiences = ref<Experience[]>([...data.value.experiences]);
+const experiences = ref<Experience[]>(JSON.parse(JSON.stringify(data.value.experiences)));
 
 watch(() => data.value.experiences, (newVal) => {
-  experiences.value = [...newVal];
+  experiences.value = JSON.parse(JSON.stringify(newVal));
 }, { deep: true });
 
 const addNew = () => {
@@ -126,17 +126,3 @@ const handleUpdate = (id: string, updates: Partial<Experience>) => {
   resumeStore.updateExperience(id, updates);
 };
 </script>
-
-<style scoped>
-.experience-item {
-  padding: 16px;
-  background: #f9fafb;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.item-header {
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e5e7eb;
-}
-</style>

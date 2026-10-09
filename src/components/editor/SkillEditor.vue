@@ -6,13 +6,13 @@
       </el-button>
     </div>
 
-    <div v-if="skills.length === 0" class="empty-state text-center py-8 text-gray-400">
+    <div v-if="skills.length === 0" class="resume-editor-empty">
       <el-icon :size="48"><Star /></el-icon>
       <p class="mt-2">暂无技能信息，点击上方按钮添加</p>
     </div>
 
-    <div v-for="(skill, index) in skills" :key="skill.id" class="skill-item">
-      <div class="item-header flex items-center justify-between mb-3">
+    <div v-for="(skill, index) in skills" :key="skill.id" class="skill-item resume-entry-card">
+      <div class="resume-entry-card__header">
         <span class="text-sm text-gray-600">技能分类 {{ index + 1 }}</span>
         <el-button
           type="danger"
@@ -73,10 +73,10 @@ import type { Skill } from '@/types/resume';
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const skills = ref<Skill[]>([...data.value.skills]);
+const skills = ref<Skill[]>(JSON.parse(JSON.stringify(data.value.skills)));
 
 watch(() => data.value.skills, (newVal) => {
-  skills.value = [...newVal];
+  skills.value = JSON.parse(JSON.stringify(newVal));
 }, { deep: true });
 
 const addNew = () => {
@@ -99,17 +99,3 @@ const handleItemsUpdate = (id: string, value: string) => {
   handleUpdate(id, { items });
 };
 </script>
-
-<style scoped>
-.skill-item {
-  padding: 16px;
-  background: #f9fafb;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.item-header {
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e5e7eb;
-}
-</style>

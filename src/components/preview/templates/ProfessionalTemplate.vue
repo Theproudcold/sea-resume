@@ -1,11 +1,14 @@
 <template>
   <div class="professional-template" :style="{
-    '--padding': (data.theme?.spacing || 24) + 'px',
+    '--margin-top': (data.theme?.moduleMargins?.top || 0) + 'px',
+    '--margin-bottom': (data.theme?.moduleMargins?.bottom || 16) + 'px',
+    '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
+    '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
     '--font-size': (data.theme?.fontSize || 13) + 'px',
     '--line-height': data.theme?.lineHeight || 1.4,
-    '--spacing': (data.theme?.spacing || 16) + 'px',
     '--primary-color': data.theme?.color || '#1a1a1a',
-    padding: 'var(--padding)',
+    padding: (data.theme?.pageMargins !== undefined ? data.theme.pageMargins : 24) + 'px',
+    fontFamily: data.theme?.fontFamily || 'serif',
     fontSize: 'var(--font-size)',
     lineHeight: 'var(--line-height)',
     color: '#333'
@@ -15,26 +18,30 @@
       <!-- 左侧栏 -->
       <div class="col-span-1 border-r border-gray-200 pr-8">
         <div class="mb-8 cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded transition-colors" @click="setActiveSection('basic')">
+        <div v-if="data.basic.avatar" class="mb-4">
+          <img :src="data.basic.avatar" alt="头像" class="w-20 h-20 rounded-full object-cover border border-gray-200" />
+        </div>
           <h1 class="text-2xl font-bold text-gray-900 mb-2" style="color: var(--primary-color)">{{ data.basic.name || '您的姓名' }}</h1>
           <div class="text-base text-gray-600 mb-4">{{ data.basic.title || '求职意向' }}</div>
           
           <div class="space-y-2 text-sm text-gray-500">
              <div v-if="data.basic.email" class="flex items-center gap-2">
-              <ContactIcon type="email" :icon="data.basic.iconOverrides?.email" class="shrink-0" :size="14" style="color: var(--primary-color)" />
+              <ContactIcon v-if="data.theme.displayIcons !== false" type="email" :icon="data.basic.iconOverrides?.email" class="shrink-0" :size="14" style="color: var(--primary-color)" />
               <span class="break-all">{{ data.basic.email }}</span>
             </div>
             <div v-if="data.basic.phone" class="flex items-center gap-2">
-              <ContactIcon type="phone" :icon="data.basic.iconOverrides?.phone" class="shrink-0" :size="14" style="color: var(--primary-color)" />
+              <ContactIcon v-if="data.theme.displayIcons !== false" type="phone" :icon="data.basic.iconOverrides?.phone" class="shrink-0" :size="14" style="color: var(--primary-color)" />
               <span>{{ data.basic.phone }}</span>
             </div>
             <div v-if="data.basic.location" class="flex items-center gap-2">
-              <ContactIcon type="location" :icon="data.basic.iconOverrides?.location" class="shrink-0" :size="14" style="color: var(--primary-color)" />
+              <ContactIcon v-if="data.theme.displayIcons !== false" type="location" :icon="data.basic.iconOverrides?.location" class="shrink-0" :size="14" style="color: var(--primary-color)" />
               <span>{{ data.basic.location }}</span>
             </div>
              <div v-if="data.basic.website" class="flex items-center gap-2">
-              <ContactIcon type="website" :icon="data.basic.iconOverrides?.website" class="shrink-0" :size="14" style="color: var(--primary-color)" />
+              <ContactIcon v-if="data.theme.displayIcons !== false" type="website" :icon="data.basic.iconOverrides?.website" class="shrink-0" :size="14" style="color: var(--primary-color)" />
               <a :href="data.basic.website" target="_blank" class="break-all hover:text-blue-600 transition-colors">{{ data.basic.website }}</a>
             </div>
+            <ResumeSmartFields :data="data" />
           </div>
         </div>
 
@@ -87,14 +94,20 @@
         <!-- 动态渲染主要模块 (工作、项目、自定义) -->
         <draggable
           v-model="sortedMainSections"
-          :item-key="section => section"
+          :item-key="(section: string) => section"
           :animation="200"
           handle=".section-content"
           group="main-sections"
         >
           <template #item="{ element: section }">
             <div 
-              class="section-content cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-offset-2 rounded transition-all mb-8"
+              class="section-content cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-offset-2 rounded transition-all"
+              style="
+                margin-top: var(--margin-top);
+                margin-bottom: var(--margin-bottom);
+                margin-left: var(--margin-left);
+                margin-right: var(--margin-right);
+              "
               @click.stop="setActiveSection(section)"
             >
               <!-- 工作经历 -->
@@ -135,7 +148,21 @@
                 <h2 class="text-lg font-bold text-gray-900 mb-3 border-b-2 pb-1" style="border-color: var(--primary-color)">
                   {{ getSectionTitle(section) }}
                 </h2>
-                <div class="text-gray-700 rich-text" v-html="getCustomContent(section)" style="font-size: var(--font-size); line-height: var(--line-height)"></div>
+                <div v-if="Array.isArray(getCustomContent(section))" style="gap: var(--spacing); display: flex; flex-direction: column;">
+                  <div v-for="item in getCustomItems(section)" :key="item.id" style="margin-bottom: 0">
+                    <div class="flex justify-between items-baseline mb-1">
+                      <div>
+                        <h3 v-if="item.title" class="font-bold text-gray-900" style="font-size: calc(var(--font-size) + 2px)">{{ item.title }}</h3>
+                        <div v-if="item.subtitle" class="text-gray-600" style="font-size: var(--font-size)">{{ item.subtitle }}</div>
+                      </div>
+                      <div v-if="item.date" class="text-sm text-gray-500 whitespace-nowrap ml-4">
+                        {{ item.date }}
+                      </div>
+                    </div>
+                    <div class="text-gray-700 rich-text" v-html="item.description" style="font-size: var(--font-size); line-height: var(--line-height)"></div>
+                  </div>
+                </div>
+                <div v-else class="text-gray-700 rich-text" v-html="getCustomContent(section)" style="font-size: var(--font-size); line-height: var(--line-height)"></div>
               </div>
             </div>
           </template>
@@ -148,7 +175,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ResumeData } from '@/types/resume';
-import { formatDateRange } from '@/utils/helpers';
+import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import ContactIcon from '@/components/common/ContactIcon.vue';
 import draggable from 'vuedraggable';
 import { useResumeStore } from '@/stores/resume';
@@ -156,6 +183,28 @@ import { useResumeStore } from '@/stores/resume';
 const props = defineProps<{
   data: ResumeData;
 }>();
+
+const formatDateRange = (start: string, end: string | 'present') => {
+  const format = props.data.theme.dateFormat || 'YYYY.MM';
+  const formatFn = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      const y = date.getFullYear();
+      const m = date.getMonth() + 1;
+      const mm = m.toString().padStart(2, '0');
+      const mmm = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+      switch (format) {
+        case 'YYYY-MM': return `${y}-${mm}`;
+        case 'YYYY/MM': return `${y}/${mm}`;
+        case 'MM/YYYY': return `${mm}/${y}`;
+        case 'MMM YYYY': return `${mmm} ${y}`;
+        case 'YYYY.MM': default: return `${y}.${mm}`;
+      }
+    } catch { return dateStr; }
+  };
+  return `${formatFn(start)} - ${end === 'present' ? '至今' : formatFn(end)}`;
+};
 
 const resumeStore = useResumeStore();
 
@@ -205,6 +254,11 @@ const getCustomContent = (id: string) => {
   return block ? block.content : '';
 };
 
+const getCustomItems = (id: string): import('@/types/resume').CustomItem[] => {
+  const content = getCustomContent(id);
+  return Array.isArray(content) ? content : [];
+};
+
 const setActiveSection = (id: string) => {
   resumeStore.setActiveSection(id);
 };
@@ -212,7 +266,6 @@ const setActiveSection = (id: string) => {
 
 <style scoped>
 .professional-template {
-  font-family: 'Georgia', serif;
   color: #1a1a1a;
 }
 </style>

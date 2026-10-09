@@ -1,6 +1,11 @@
 <template>
   <div class="tech-template min-h-full bg-gray-900 text-gray-100" :style="{
-    padding: (data.theme?.spacing || 24) + 'px',
+    '--margin-top': (data.theme?.moduleMargins?.top || 0) + 'px',
+    '--margin-bottom': (data.theme?.moduleMargins?.bottom || 24) + 'px',
+    '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
+    '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
+    padding: (data.theme?.pageMargins !== undefined ? data.theme.pageMargins : 24) + 'px',
+    fontFamily: data.theme?.fontFamily || 'monospace',
     fontSize: (data.theme?.fontSize || 14) + 'px',
     lineHeight: data.theme?.lineHeight || 1.6,
     '--primary-color': data.theme?.color || '#4ade80'
@@ -11,20 +16,22 @@
       style="border-color: var(--primary-color)"
       @click="setActiveSection('basic')"
     >
+      <img v-if="data.basic.avatar" :src="data.basic.avatar" alt="头像" class="w-20 h-20 rounded-full object-cover mb-4 border-2" style="border-color: var(--primary-color)" />
       <h1 class="text-4xl font-mono font-bold mb-2" style="color: var(--primary-color)">
         {{ data.basic.name || 'YOUR_NAME' }}
       </h1>
       <div class="text-lg text-green-300 font-mono">{{ data.basic.title || 'POSITION' }}</div>
       <div class="flex gap-4 mt-3 text-sm text-gray-400 font-mono">
         <span v-if="data.basic.email" class="flex items-center gap-1">
-          <ContactIcon type="email" :icon="data.basic.iconOverrides?.email" /> {{ data.basic.email }}
+          <ContactIcon v-if="data.theme.displayIcons !== false" type="email" :icon="data.basic.iconOverrides?.email" /> {{ data.basic.email }}
         </span>
         <span v-if="data.basic.phone" class="flex items-center gap-1">
-          <ContactIcon type="phone" :icon="data.basic.iconOverrides?.phone" /> {{ data.basic.phone }}
+          <ContactIcon v-if="data.theme.displayIcons !== false" type="phone" :icon="data.basic.iconOverrides?.phone" /> {{ data.basic.phone }}
         </span>
         <span v-if="data.basic.location" class="flex items-center gap-1">
-          <ContactIcon type="location" :icon="data.basic.iconOverrides?.location" /> {{ data.basic.location }}
+          <ContactIcon v-if="data.theme.displayIcons !== false" type="location" :icon="data.basic.iconOverrides?.location" /> {{ data.basic.location }}
         </span>
+        <ResumeSmartFields :data="data" />
       </div>
     </header>
 
@@ -42,14 +49,20 @@
       <!-- 动态排序模块 -->
       <draggable
         v-model="sortedSections"
-        :item-key="section => section"
+        :item-key="(section: string) => section"
         :animation="200"
         handle=".section-header"
         group="resume-sections"
       >
         <template #item="{ element: section }">
           <div 
-            class="section-item cursor-pointer hover:ring-1 hover:ring-green-500 hover:ring-offset-2 hover:ring-offset-gray-900 rounded transition-all mb-6"
+            class="section-item cursor-pointer hover:ring-1 hover:ring-green-500 hover:ring-offset-2 hover:ring-offset-gray-900 rounded transition-all"
+            style="
+              margin-top: var(--margin-top);
+              margin-bottom: var(--margin-bottom);
+              margin-left: var(--margin-left);
+              margin-right: var(--margin-right);
+            "
             @click.stop="setActiveSection(section)"
           >
             <!-- 工作经历 -->
@@ -124,7 +137,17 @@
               <h2 class="section-header font-mono text-sm mb-3" style="color: var(--primary-color)">
                 // {{ getSectionTitle(section).toUpperCase() }}
               </h2>
-              <div class="pl-4 border-l border-gray-700 text-gray-300 text-sm rich-text" v-html="getCustomContent(section)"></div>
+              <div v-if="Array.isArray(getCustomContent(section))" class="pl-4 border-l border-gray-700 space-y-4">
+                <div v-for="item in getCustomItems(section)" :key="item.id">
+                  <div class="flex justify-between items-start mb-1">
+                    <h3 v-if="item.title" class="font-semibold text-white">{{ item.title }}</h3>
+                    <span v-if="item.date" class="text-xs font-mono" style="color: var(--primary-color)">{{ item.date }}</span>
+                  </div>
+                  <div v-if="item.subtitle" class="text-sm mb-1" style="color: var(--primary-color); opacity: 0.8">// {{ item.subtitle }}</div>
+                  <div class="text-sm text-gray-400 rich-text" v-html="item.description"></div>
+                </div>
+              </div>
+              <div v-else class="pl-4 border-l border-gray-700 text-gray-300 text-sm rich-text" v-html="getCustomContent(section)"></div>
             </section>
           </div>
         </template>
@@ -136,7 +159,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ResumeData } from '@/types/resume';
-import { formatDateRange } from '@/utils/helpers';
+import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import ContactIcon from '@/components/common/ContactIcon.vue';
 import draggable from 'vuedraggable';
 import { useResumeStore } from '@/stores/resume';
@@ -145,11 +168,42 @@ const props = defineProps<{
   data: ResumeData;
 }>();
 
+const formatDateRange = (start: string, end: string | 'present') => {
+  const format = props.data.theme.dateFormat || 'YYYY.MM';
+  const formatFn = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      const y = date.getFullYear();
+      const m = date.getMonth() + 1;
+      const mm = m.toString().padStart(2, '0');
+      const mmm = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+      switch (format) {
+        case 'YYYY-MM': return `${y}-${mm}`;
+        case 'YYYY/MM': return `${y}/${mm}`;
+        case 'MM/YYYY': return `${mm}/${y}`;
+        case 'MMM YYYY': return `${mmm} ${y}`;
+        case 'YYYY.MM': default: return `${y}.${mm}`;
+      }
+    } catch { return dateStr; }
+  };
+  return `${formatFn(start)} - ${end === 'present' ? 'PRESENT' : formatFn(end)}`;
+};
+
 const resumeStore = useResumeStore();
 
+const isSectionHidden = (id: string) => {
+  return props.data.hiddenSections?.includes(id) || false;
+};
+
 const sortedSections = computed({
-  get: () => props.data.sectionOrder || [],
-  set: (val) => resumeStore.updateSectionOrder(val)
+  get: () => {
+    return (props.data.sectionOrder || []).filter(id => !isSectionHidden(id));
+  },
+  set: (val) => {
+    const newOrder = [...val, ...(props.data.hiddenSections || [])];
+    resumeStore.updateSectionOrder(Array.from(new Set(newOrder)));
+  }
 });
 
 const isCustomBlock = (id: string) => {
@@ -166,6 +220,11 @@ const getCustomContent = (id: string) => {
   return block ? block.content : '';
 };
 
+const getCustomItems = (id: string): import('@/types/resume').CustomItem[] => {
+  const content = getCustomContent(id);
+  return Array.isArray(content) ? content : [];
+};
+
 const setActiveSection = (id: string) => {
   resumeStore.setActiveSection(id);
 };
@@ -173,7 +232,7 @@ const setActiveSection = (id: string) => {
 
 <style scoped>
 .tech-template {
-  font-family: 'Courier New', 'Monaco', monospace;
+  /* font-family via inline style */
 }
 
 @media print {

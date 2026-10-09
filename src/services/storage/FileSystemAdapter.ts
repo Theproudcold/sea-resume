@@ -17,6 +17,14 @@ const DB_VERSION = 1;
 const STORE_NAME = 'handles';
 const HANDLE_KEY = 'directory-handle';
 const INDEX_FILE_NAME = 'index.json';
+const MANIFEST_FILE_NAME = 'manifest.json';
+const MANIFEST_VERSION = 1;
+interface ResumeManifest {
+  schemaVersion: number;
+  resumes: ResumeMeta[];
+}
+
+const RESUMES_DIRECTORY_NAME = 'resumes';
 const RESUME_FILE_PREFIX = 'resume-';
 
 /**
@@ -29,50 +37,36 @@ export class FileSystemAdapter implements IStorageAdapter {
   private db: IDBPDatabase<FileSystemDB> | null = null;
   private _isReady = false;
 
-  /**
-   * 初始化适配器
-   * 1. 打开 IndexedDB
-   * 2. 尝试从 IndexedDB 恢复目录句柄
-   * 3. 如果没有，提示用户选择目录
-   */
+  constructor(directoryHandle?: FileSystemDirectoryHandle) {
+    this.directoryHandle = directoryHandle ?? null;
+  }
+
+  /** Restore an already-authorized directory only; requesting a new one is always user initiated. */
   async init(): Promise<void> {
-    // 1. 打开 IndexedDB
     this.db = await openDB<FileSystemDB>(DB_NAME, DB_VERSION, {
       upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-          db.createObjectStore(STORE_NAME);
-        }
+        if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
       },
     });
 
-    // 2. 尝试恢复目录句柄
-    const savedHandle = await this.db.get(STORE_NAME, HANDLE_KEY);
-    if (savedHandle) {
-      try {
-        // 验证句柄是否仍然有效（尝试获取权限）
-        // @ts-ignore - File System Access API 权限方法
-        const permission = await savedHandle.queryPermission?.({ mode: 'readwrite' });
-
-        if (permission === 'granted') {
-          this.directoryHandle = savedHandle;
-          this._isReady = true;
-          return;
-        } else if (permission === 'prompt') {
-          // @ts-ignore - File System Access API 权限方法
-          const newPermission = await savedHandle.requestPermission?.({ mode: 'readwrite' });
-          if (newPermission === 'granted') {
-            this.directoryHandle = savedHandle;
-            this._isReady = true;
-            return;
-          }
-        }
-      } catch (error) {
-        console.warn('恢复目录句柄失败:', error);
-      }
+    if (this.directoryHandle) {
+      await this.db.put(STORE_NAME, this.directoryHandle, HANDLE_KEY);
+      this._isReady = true;
+      return;
     }
 
-    // 3. 如果没有保存的句柄或权限被拒绝，提示用户选择目录
-    await this.pickDirectory();
+    const savedHandle = await this.db.get(STORE_NAME, HANDLE_KEY);
+    if (!savedHandle) return;
+    try {
+      // @ts-ignore File System Access API permission methods are not in all DOM typings.
+      const permission = await savedHandle.queryPermission?.({ mode: 'readwrite' });
+      if (permission === 'granted') {
+        this.directoryHandle = savedHandle;
+        this._isReady = true;
+      }
+    } catch (error) {
+      console.warn('恢复目录句柄失败；需要用户重新授权:', error);
+    }
   }
 
   /**
@@ -110,50 +104,41 @@ export class FileSystemAdapter implements IStorageAdapter {
     return this._isReady && this.directoryHandle !== null;
   }
 
+  /** Ensure a selected folder is upgraded to the current manifest layout. */
+  async upgradeLayout(): Promise<void> {
+    const currentList = await this.list();
+    await this.upgradeLegacyLayout(currentList);
+  }
+
   /**
    * 获取所有简历的元数据列表
    */
   async list(): Promise<ResumeMeta[]> {
-    if (!this.directoryHandle) {
-      throw new Error('文件系统未初始化');
-    }
-
-    try {
-      // 读取 index.json
-      const fileHandle = await this.directoryHandle.getFileHandle(INDEX_FILE_NAME);
-      const file = await fileHandle.getFile();
-      const text = await file.text();
-      const index: ResumeMeta[] = JSON.parse(text);
-
-      // 按更新时间倒序排列
-      return index.sort((a, b) => b.updatedAt - a.updatedAt);
-    } catch (error) {
-      // 如果 index.json 不存在，返回空数组
-      if (error instanceof Error && error.name === 'NotFoundError') {
-        return [];
-      }
-      throw error;
-    }
+    if (!this.directoryHandle) throw new Error('文件系统未初始化');
+    const manifest = await this.readManifest();
+    return (manifest ?? await this.readLegacyIndex()).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   /**
    * 读取指定简历的完整数据
    */
   async read(id: string): Promise<ResumeData | null> {
-    if (!this.directoryHandle) {
-      throw new Error('文件系统未初始化');
-    }
-
+    if (!this.directoryHandle) throw new Error('文件系统未初始化');
     try {
-      const fileName = `${RESUME_FILE_PREFIX}${id}.json`;
-      const fileHandle = await this.directoryHandle.getFileHandle(fileName);
+      const modernManifest = await this.readManifest();
+      const dataDirectory = modernManifest
+        ? await this.directoryHandle.getDirectoryHandle(RESUMES_DIRECTORY_NAME)
+        : this.directoryHandle;
+      const fileName = modernManifest ? `${encodeURIComponent(id)}.json` : `${RESUME_FILE_PREFIX}${id}.json`;
+      const fileHandle = await dataDirectory.getFileHandle(fileName);
       const file = await fileHandle.getFile();
-      const text = await file.text();
-      return JSON.parse(text) as ResumeData;
-    } catch (error) {
-      if (error instanceof Error && error.name === 'NotFoundError') {
-        return null;
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== 'object' || (parsed as ResumeData).id !== id) {
+        throw new Error(`简历文件 ${id} 数据无效或 ID 不匹配。`);
       }
+      return parsed as ResumeData;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'NotFoundError') return null;
       throw error;
     }
   }
@@ -162,35 +147,33 @@ export class FileSystemAdapter implements IStorageAdapter {
    * 保存简历数据和元数据
    */
   async save(data: ResumeData, meta: ResumeMeta): Promise<void> {
-    if (!this.directoryHandle) {
-      throw new Error('文件系统未初始化');
-    }
-
+    const root = this.directoryHandle;
+    if (!root) throw new Error('文件系统未初始化');
+    if (data.id !== meta.id) throw new Error('简历数据与元数据 ID 不一致。');
     try {
-      // 1. 保存详情数据
-      const fileName = `${RESUME_FILE_PREFIX}${data.id}.json`;
-      const fileHandle = await this.directoryHandle.getFileHandle(fileName, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(JSON.stringify(data, null, 2));
-      await writable.close();
-
-      // 2. 更新索引
-      const index = await this.list();
+      const currentList = await this.list();
+      await this.upgradeLegacyLayout(currentList);
+      const index = await this.readManifest();
+      if (!index) throw new Error('目录清单升级失败；原目录数据保持不变。');
       const existingIndex = index.findIndex((item) => item.id === data.id);
-
-      if (existingIndex >= 0) {
-        index[existingIndex] = meta;
-      } else {
-        index.push(meta);
+      const previousData = existingIndex >= 0 ? await this.read(data.id) : null;
+      if (existingIndex >= 0 && !previousData) throw new Error(`清单记录 ${data.id} 对应的简历文件缺失；已取消覆盖。`);
+      if (existingIndex >= 0) index[existingIndex] = meta;
+      else index.push(meta);
+      const resumesDirectory = await root.getDirectoryHandle(RESUMES_DIRECTORY_NAME, { create: true });
+      const resumeFileName = `${encodeURIComponent(data.id)}.json`;
+      try {
+        await this.writeJsonFile(resumesDirectory, resumeFileName, data);
+        await this.writeJsonFile(root, MANIFEST_FILE_NAME, { schemaVersion: MANIFEST_VERSION, resumes: index });
+      } catch (error) {
+        try {
+          if (previousData) await this.writeJsonFile(resumesDirectory, resumeFileName, previousData);
+          else await resumesDirectory.removeEntry(resumeFileName);
+        } catch (rollbackError) {
+          throw new Error(`保存失败且回滚未完成：${rollbackError instanceof Error ? rollbackError.message : '未知错误'}`);
+        }
+        throw error;
       }
-
-      // 保存索引文件
-      const indexFileHandle = await this.directoryHandle.getFileHandle(INDEX_FILE_NAME, {
-        create: true,
-      });
-      const indexWritable = await indexFileHandle.createWritable();
-      await indexWritable.write(JSON.stringify(index, null, 2));
-      await indexWritable.close();
     } catch (error) {
       console.error(`保存简历 ${data.id} 失败:`, error);
       throw error;
@@ -201,26 +184,26 @@ export class FileSystemAdapter implements IStorageAdapter {
    * 删除指定简历
    */
   async delete(id: string): Promise<void> {
-    if (!this.directoryHandle) {
-      throw new Error('文件系统未初始化');
-    }
-
+    const root = this.directoryHandle;
+    if (!root) throw new Error('文件系统未初始化');
     try {
-      // 1. 删除详情文件
-      const fileName = `${RESUME_FILE_PREFIX}${id}.json`;
-      await this.directoryHandle.removeEntry(fileName);
-
-      // 2. 从索引中移除
-      const index = await this.list();
-      const newIndex = index.filter((item) => item.id !== id);
-
-      // 保存索引文件
-      const indexFileHandle = await this.directoryHandle.getFileHandle(INDEX_FILE_NAME, {
-        create: true,
-      });
-      const writable = await indexFileHandle.createWritable();
-      await writable.write(JSON.stringify(newIndex, null, 2));
-      await writable.close();
+      const currentList = await this.list();
+      await this.upgradeLegacyLayout(currentList);
+      const manifest = await this.readManifest();
+      if (!manifest) throw new Error('目录清单不可用，无法安全删除。');
+      const updatedManifest = manifest.filter((item) => item.id !== id);
+      await this.writeJsonFile(root, MANIFEST_FILE_NAME, { schemaVersion: MANIFEST_VERSION, resumes: updatedManifest });
+      const resumesDirectory = await root.getDirectoryHandle(RESUMES_DIRECTORY_NAME);
+      try {
+        await resumesDirectory.removeEntry(`${encodeURIComponent(id)}.json`);
+      } catch (error) {
+        try {
+          await this.writeJsonFile(root, MANIFEST_FILE_NAME, { schemaVersion: MANIFEST_VERSION, resumes: manifest });
+        } catch (rollbackError) {
+          throw new Error(`删除失败且目录清单回滚失败：${rollbackError instanceof Error ? rollbackError.message : '未知错误'}`);
+        }
+        throw error;
+      }
     } catch (error) {
       console.error(`删除简历 ${id} 失败:`, error);
       throw error;
@@ -237,6 +220,78 @@ export class FileSystemAdapter implements IStorageAdapter {
     }
     const jsonStr = JSON.stringify(data, null, 2);
     return new Blob([jsonStr], { type: 'application/json' });
+  }
+
+  private async readManifest(): Promise<ResumeMeta[] | null> {
+    const root = this.directoryHandle;
+    if (!root) throw new Error('文件系统未初始化');
+    try {
+      const fileHandle = await root.getFileHandle(MANIFEST_FILE_NAME);
+      const file = await fileHandle.getFile();
+      const parsed: unknown = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== 'object') throw new Error('目录清单格式无效；原数据未修改。');
+      const manifest = parsed as Partial<ResumeManifest>;
+      if (manifest.schemaVersion !== MANIFEST_VERSION) throw new Error(`不支持的目录数据版本：${String(manifest.schemaVersion)}`);
+      return this.validateMetaList(manifest.resumes, '目录清单');
+    } catch (error) {
+      if (error instanceof Error && error.name === 'NotFoundError') return null;
+      throw error;
+    }
+  }
+
+  private async readLegacyIndex(): Promise<ResumeMeta[]> {
+    const root = this.directoryHandle;
+    if (!root) throw new Error('文件系统未初始化');
+    try {
+      const fileHandle = await root.getFileHandle(INDEX_FILE_NAME);
+      const file = await fileHandle.getFile();
+      return this.validateMetaList(JSON.parse(await file.text()), '旧版索引');
+    } catch (error) {
+      if (error instanceof Error && error.name === 'NotFoundError') return [];
+      throw error;
+    }
+  }
+
+  private validateMetaList(value: unknown, label: string): ResumeMeta[] {
+    if (!Array.isArray(value)) throw new Error(`${label}格式无效；原数据未修改。`);
+    const index = value as ResumeMeta[];
+    const ids = new Set<string>();
+    for (const item of index) {
+      if (!item || typeof item.id !== 'string' || !item.id || typeof item.title !== 'string' || !Number.isFinite(item.updatedAt) || ids.has(item.id)) {
+        throw new Error(`${label}包含无效或重复的简历记录；原数据未修改。`);
+      }
+      ids.add(item.id);
+    }
+    return index;
+  }
+
+  /** Copy the legacy layout and commit the new manifest last; legacy files remain untouched. */
+  private async upgradeLegacyLayout(legacyIndex: ResumeMeta[]): Promise<void> {
+    if (await this.readManifest()) return;
+    const root = this.directoryHandle;
+    if (!root) throw new Error('文件系统未初始化');
+    const resumesDirectory = await root.getDirectoryHandle(RESUMES_DIRECTORY_NAME, { create: true });
+    for (const meta of legacyIndex) {
+      const legacyFile = await root.getFileHandle(`${RESUME_FILE_PREFIX}${meta.id}.json`);
+      const parsed: unknown = JSON.parse(await (await legacyFile.getFile()).text());
+      if (!parsed || typeof parsed !== 'object' || (parsed as ResumeData).id !== meta.id) {
+        throw new Error(`旧版简历 ${meta.id} 缺失或损坏；原数据未修改。`);
+      }
+      await this.writeJsonFile(resumesDirectory, `${encodeURIComponent(meta.id)}.json`, parsed);
+    }
+    await this.writeJsonFile(root, MANIFEST_FILE_NAME, { schemaVersion: MANIFEST_VERSION, resumes: legacyIndex });
+  }
+
+  private async writeJsonFile(directory: FileSystemDirectoryHandle, fileName: string, value: unknown): Promise<void> {
+    const fileHandle = await directory.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    try {
+      await writable.write(JSON.stringify(value, null, 2));
+      await writable.close();
+    } catch (error) {
+      await writable.abort().catch(() => undefined);
+      throw error;
+    }
   }
 
   /**

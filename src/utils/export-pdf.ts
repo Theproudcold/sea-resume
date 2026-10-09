@@ -21,8 +21,9 @@ export async function exportToPDF(
       const A4_HEIGHT = 297; 
 
       // Render to Canvas (High Res)
+      // Increase scale to 4 for even better quality (approx 300dpi)
       const canvas = await html2canvas(element, {
-        scale: 3, // 3x resolution for better clarity
+        scale: 4, 
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
@@ -32,34 +33,34 @@ export async function exportToPDF(
       const contentWidth = canvas.width;
       const contentHeight = canvas.height;
 
-      // 1 mm = ? px (on specific canvas scale)
+      // Calculate A4 size in PDF points (approx 595.28 x 841.89 points) or mm
+      // jsPDF('p', 'mm', 'a4') -> 210 x 297 mm
+      
       const pageHeightInPx = (A4_HEIGHT * contentWidth) / A4_WIDTH;
       
-      let position = 0; // Current vertical position on original canvas (px)
-      let leftHeight = contentHeight; // Remaining height to print (px)
+      let position = 0; 
+      let leftHeight = contentHeight;
 
       const pdf = new jsPDF('p', 'mm', 'a4');
       const imgWidth = A4_WIDTH;
       const imgHeight = (A4_WIDTH / contentWidth) * contentHeight;
 
-      // First page
+      // Check if content fits effectively
       if (leftHeight < pageHeightInPx) {
-        // Single page
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, imgWidth, imgHeight);
+        pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, imgWidth, imgHeight);
       } else {
-        // Multi-page
         while (leftHeight > 0) {
           pdf.addImage(
-            canvas.toDataURL('image/png'), 
-            'PNG', 
+            canvas.toDataURL('image/jpeg', 1.0), 
+            'JPEG', 
             0, 
-            position * (A4_WIDTH / contentWidth), // y offset in PDF (negative means shifting up)
+            position * (A4_WIDTH / contentWidth), // y offset
             imgWidth, 
             imgHeight
           );
           
           leftHeight -= pageHeightInPx;
-          position -= pageHeightInPx; // Move 'window' down
+          position -= pageHeightInPx;
 
           if (leftHeight > 0) {
             pdf.addPage();

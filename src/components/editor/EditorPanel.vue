@@ -2,6 +2,7 @@
   <div class="editor-panel">
     <el-scrollbar height="100%">
       <div class="editor-content p-6">
+        <SectionQuickNav :sections="quickNavSections" :active-id="resumeStore.activeSection" @navigate="jumpToSection" />
         <!-- 基础信息 (固定) -->
         <el-collapse v-model="fixedActiveNames" class="space-y-4 mb-4">
           <el-collapse-item name="theme">
@@ -14,7 +15,7 @@
             <ThemeEditor />
           </el-collapse-item>
 
-          <el-collapse-item name="basic">
+          <el-collapse-item id="editor-section-basic" name="basic">
             <template #title>
               <div class="flex items-center gap-2">
                 <el-icon><User /></el-icon>
@@ -28,6 +29,7 @@
         <el-divider content-position="center">模块排序与内容</el-divider>
 
         <!-- 可排序模块 -->
+        <p v-if="isDraggingSections" class="reorder-status" role="status">正在调整顺序，松开后会自动保存。</p>
         <draggable
           v-model="sectionsList"
           item-key="id"
@@ -35,16 +37,22 @@
           :animation="200"
           group="sections"
           class="space-y-4"
+          aria-label="拖动章节手柄调整顺序"
+          :class="{ 'is-reordering': isDraggingSections }"
+          @start="isDraggingSections = true"
+          @end="isDraggingSections = false"
         >
           <template #item="{ element }">
             <EditorSection
               :id="`editor-section-${element.id}`"
               :title="getSectionTitle(element.id)"
               :is-open="isSectionOpen(element.id)"
+              :visible="!isSectionHidden(element.id)"
               :icon="element.icon"
-              :removable="isCustomBlock(element.id)"
+              :removable="true"
               @update:is-open="(val) => setSectionOpen(element.id, val)"
               @update:title="(val) => updateTitle(element.id, val)"
+              @toggle-visibility="toggleVisibility(element.id)"
               @remove="removeBlock(element.id)"
             >
               <!-- 动态加载组件 -->
@@ -54,18 +62,44 @@
               />
               <CustomBlockEditor
                 v-else
+                :id="element.id"
                 :model-value="getCustomContent(element.id)"
                 @update:model-value="(val) => updateCustomContent(element.id, val)"
+                @delete="deleteBlock(element.id)"
               />
             </EditorSection>
           </template>
         </draggable>
 
-        <!-- 添加自定义模块按钮 -->
+        <!-- 添加模块按钮 -->
         <div class="mt-6 text-center">
-          <el-button @click="addCustomBlock" :icon="Plus" dashed class="w-full">
-            添加自定义模块
-          </el-button>
+          <el-dropdown trigger="click" class="w-full" @command="(cmd: string) => cmd === 'create_new' ? createCustomBlock() : addExistingSection(cmd)">
+            <el-button :icon="Plus" dashed class="w-full">
+              添加模块
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <!-- 可用的模块 (标准 + 隐藏的自定义) -->
+                <el-dropdown-item 
+                  v-for="section in availableSections" 
+                  :key="section.id" 
+                  :command="section.id"
+                >
+                  <div class="flex items-center justify-between w-full gap-2">
+                    <span>添加 {{ section.name }}</span>
+                    <el-tag v-if="section.isCustom" size="small" type="info" effect="plain">自定义</el-tag>
+                  </div>
+                </el-dropdown-item>
+                
+                <el-dropdown-item v-if="availableSections.length > 0" divided disabled />
+                
+                <!-- 创建新模块 -->
+                <el-dropdown-item command="create_new">
+                  <el-icon><Plus /></el-icon> 创建新模块
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
         
       </div>
@@ -74,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, markRaw, watch } from 'vue';
+import { ref, computed, markRaw, watch, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { User, Briefcase, School, Star, Folder, Rank, Brush, Plus, Tickets } from '@element-plus/icons-vue';
@@ -87,6 +121,7 @@ import SkillEditor from './SkillEditor.vue';
 import ProjectEditor from './ProjectEditor.vue';
 import EditorSection from './EditorSection.vue';
 import CustomBlockEditor from './CustomBlockEditor.vue';
+import SectionQuickNav from './SectionQuickNav.vue';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
@@ -96,6 +131,7 @@ const fixedActiveNames = ref(['basic']);
 
 // 独立管理每个模块的展开状态
 const openSections = ref<Set<string>>(new Set(['experience']));
+const isDraggingSections = ref(false);
 
 const isSectionOpen = (id: string) => openSections.value.has(id);
 const setSectionOpen = (id: string, isOpen: boolean) => {
@@ -120,7 +156,10 @@ watch(() => resumeStore.activeSection, (newId) => {
       fixedActiveNames.value = ['basic'];
       return;
     }
-    // 其他模块，展开对应的 Accordion
+    if (['experience', 'projects', 'education', 'skills'].includes(newId)
+      && !data.value.sectionOrder.includes(newId)) {
+      resumeStore.updateSectionOrder([...data.value.sectionOrder, newId]);
+    }
     const newSet = new Set(openSections.value);
     newSet.add(newId);
     openSections.value = newSet;
@@ -134,6 +173,15 @@ watch(() => resumeStore.activeSection, (newId) => {
     }, 100);
   }
 });
+
+const jumpToSection = async (id: string) => {
+  resumeStore.setActiveSection(id);
+  await nextTick();
+  window.setTimeout(() => {
+    document.getElementById(id === 'basic' ? 'editor-section-basic' : `editor-section-${id}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 120);
+};
 
 // 模块配置映射 (标准模块)
 const sectionConfig: Record<string, any> = {
@@ -176,12 +224,71 @@ const getCustomContent = (id: string) => {
 };
 
 // 更新自定义内容
-const updateCustomContent = (id: string, content: string) => {
+const updateCustomContent = (id: string, content: any) => {
   resumeStore.updateCustomBlock(id, { content });
 };
 
-// 添加自定义模块
-const addCustomBlock = () => {
+// 判断模块是否隐藏
+const isSectionHidden = (id: string) => {
+  return data.value.hiddenSections?.includes(id) || false;
+};
+
+// 切换模块可见性
+const toggleVisibility = (id: string) => {
+  resumeStore.toggleSectionVisibility(id);
+};
+
+// 移除模块 (仅从排序中移除，相当于隐藏)
+const removeBlock = (id: string) => {
+  const newOrder = data.value.sectionOrder.filter(lid => lid !== id);
+  resumeStore.updateSectionOrder(newOrder);
+};
+
+// 永久删除自定义模块
+const deleteBlock = (id: string) => {
+  removeBlock(id);
+  resumeStore.removeCustomBlock(id);
+};
+
+// 计算可用的模块（包括标准模块和已隐藏的自定义模块）
+const availableSections = computed(() => {
+  const currentIds = new Set(data.value.sectionOrder);
+  
+  // 标准模块
+  const standard = Object.keys(sectionConfig)
+    .filter(id => !currentIds.has(id))
+    .map(id => ({ 
+      id, 
+      name: sectionConfig[id].defaultTitle, 
+      isCustom: false 
+    }));
+
+  // 已隐藏的自定义模块
+  const custom = data.value.customBlocks
+    .filter(b => !currentIds.has(b.id))
+    .map(b => ({ 
+      id: b.id, 
+      name: b.title || '自定义模块', 
+      isCustom: true 
+    }));
+
+  return [...standard, ...custom];
+});
+
+// 添加模块 (标准或已存在的自定义)
+const addExistingSection = (id: string) => {
+  const newOrder = [...data.value.sectionOrder, id];
+  resumeStore.updateSectionOrder(newOrder);
+  
+  // 自动展开
+  const newSet = new Set(openSections.value);
+  newSet.add(id);
+  openSections.value = newSet;
+  resumeStore.setActiveSection(id);
+};
+
+// 创建新的自定义模块
+const createCustomBlock = () => {
   const id = resumeStore.addCustomBlock({
     title: '自定义模块',
     type: 'text',
@@ -189,22 +296,7 @@ const addCustomBlock = () => {
     order: data.value.sectionOrder.length
   });
   
-  // 添加到排序列表
-  const newOrder = [...data.value.sectionOrder, id];
-  resumeStore.updateSectionOrder(newOrder);
-  
-  // 自动展开
-  openSections.value.add(id);
-};
-
-// 删除模块
-const removeBlock = (id: string) => {
-  // 只允许删除自定义模块
-  if (isCustomBlock(id)) {
-    resumeStore.removeCustomBlock(id);
-    const newOrder = data.value.sectionOrder.filter(lid => lid !== id);
-    resumeStore.updateSectionOrder(newOrder);
-  }
+  addExistingSection(id);
 };
 
 // 计算属性：将 store 中的 order 转换为对象列表
@@ -227,6 +319,10 @@ const sectionsList = computed({
     resumeStore.updateSectionOrder(newOrder);
   }
 });
+const quickNavSections = computed(() => [
+  { id: 'basic', title: '基础信息' },
+  ...sectionsList.value.map((section) => ({ id: section.id, title: getSectionTitle(section.id) })),
+]);
 </script>
 
 <style scoped lang="scss">
@@ -235,13 +331,17 @@ const sectionsList = computed({
 
 .editor-panel {
   width: 400px;
+  min-width: 0;
   height: 100%;
+  flex: 0 0 400px;
   background: $bg-white;
   border-right: 1px solid $border-color;
   overflow: hidden;
 
   @media (max-width: 1024px) {
     width: 100%;
+    height: 100%;
+    flex: 1 1 auto;
     border-right: none;
     border-bottom: 1px solid $border-color;
   }
@@ -258,7 +358,7 @@ const sectionsList = computed({
 :deep(.el-collapse-item__header) {
   height: auto;
   padding: $spacing-sm $spacing-md;
-  background: #f9fafb; // Keep explicit for specific UI element or added to variables
+  background: var(--ui-bg-subtle);
   border-radius: $border-radius-md;
   border: none;
   margin-bottom: $spacing-sm;
@@ -275,4 +375,6 @@ const sectionsList = computed({
   border: 1px solid $border-color;
   margin-bottom: $spacing-md;
 }
+.reorder-status { margin: 0 0 10px; color: var(--ui-primary); font-size: var(--ui-font-sm); }
+.is-reordering { outline: 2px dashed var(--ui-primary); outline-offset: 4px; }
 </style>

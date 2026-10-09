@@ -1,84 +1,160 @@
 <template>
-  <header class="app-header bg-white shadow-sm no-print">
-    <div class="header-content flex items-center justify-between px-6 py-4">
-      <div class="flex items-center gap-4">
-        <!-- 返回按钮 -->
-        <el-button text :icon="ArrowLeft" @click="$emit('back')">
-          返回
+  <header class="app-header no-print">
+    <div class="header-content">
+      <div class="header-identity">
+        <el-button
+          v-if="showBack"
+          class="back-button"
+          text
+          :icon="ArrowLeft"
+          @click="$emit('back')"
+        >
+          {{ backLabel }}
         </el-button>
-
-        <!-- Logo -->
-        <div class="logo flex items-center gap-3">
-          <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-            <span class="text-white font-bold text-xl">简</span>
-          </div>
-          <div>
-            <h1 class="text-xl font-bold text-gray-800">简历制作工具</h1>
-            <p class="text-xs text-gray-500">Sea Resume</p>
-          </div>
+        <img class="brand-mark" :src="logoUrl" alt="Sea Resume" width="40" height="40" />
+        <div class="page-heading">
+          <h1>{{ title }}</h1>
+          <p v-if="subtitle">{{ subtitle }}</p>
         </div>
       </div>
 
-      <!-- 操作按钮 -->
-      <div class="actions flex items-center gap-3">
-        <el-button @click="$emit('fullscreen')" :icon="FullScreen">
-          全屏预览
-        </el-button>
-        <el-button @click="$router.push('/templates')" :icon="Grid">
-          模板选择
-        </el-button>
-        <el-dropdown @command="handleExport">
-          <el-button type="primary" :icon="Download">
-            导出简历
-            <el-icon class="el-icon--right"><arrow-down /></el-icon>
-          </el-button>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item command="pdf">
-                <el-icon><document /></el-icon>
-                导出为 PDF
-              </el-dropdown-item>
-              <el-dropdown-item command="image">
-                <el-icon><picture /></el-icon>
-                导出为图片
-              </el-dropdown-item>
-              <el-dropdown-item command="json">
-                <el-icon><folder /></el-icon>
-                导出为 JSON
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+      <div class="header-trailing">
+        <div v-if="$slots.context" class="header-context">
+          <slot name="context" />
+        </div>
+        <div v-if="$slots.actions" class="header-actions">
+          <slot name="actions" />
+        </div>
       </div>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { Download, Grid, ArrowDown, ArrowLeft, FullScreen, Document, Folder, Printer } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ArrowLeft } from '@element-plus/icons-vue';
 
-const emit = defineEmits<{
-  export: [type: 'pdf' | 'image' | 'json' | 'print'];
+withDefaults(defineProps<{
+  title: string;
+  subtitle?: string;
+  showBack?: boolean;
+  backLabel?: string;
+}>(), {
+  subtitle: '',
+  showBack: false,
+  backLabel: '返回',
+});
+
+defineEmits<{
   back: [];
-  fullscreen: [];
 }>();
 
-const handleExport = (command: string) => {
-  emit('export', command as 'pdf' | 'image' | 'json' | 'print');
-};
+const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`;
 </script>
 
 <style scoped>
 .app-header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  border-bottom: 1px solid #e5e7eb;
+  position: relative;
+  z-index: 10;
+  flex: 0 0 auto;
+  background: var(--ui-bg-surface);
+  border-bottom: 1px solid var(--ui-border);
+  box-shadow: var(--ui-shadow-sm);
 }
 
 .header-content {
-  max-width: 100%;
+  width: 100%;
+  max-width: var(--ui-content-max-width);
+  min-height: 76px;
   margin: 0 auto;
+  padding: var(--ui-space-4) var(--ui-page-gutter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-4);
+}
+
+.header-identity,
+.header-trailing,
+.header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.header-identity {
+  min-width: 0;
+  gap: var(--ui-space-3);
+}
+
+.back-button {
+  flex: 0 0 auto;
+  margin-right: var(--ui-space-1);
+}
+
+.brand-mark {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.page-heading {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.page-heading h1 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ui-text-main);
+  font-size: var(--ui-font-lg);
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-heading p {
+  overflow: hidden;
+  margin: var(--ui-space-1) 0 0;
+  color: var(--ui-text-muted);
+  font-size: var(--ui-font-sm);
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.header-trailing {
+  min-width: 0;
+  justify-content: flex-end;
+  gap: var(--ui-space-4);
+}
+
+.header-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--ui-space-2);
+}
+
+@media (max-width: 768px) {
+  .header-content {
+    min-height: 0;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--ui-space-3);
+    padding-block: var(--ui-space-3);
+  }
+
+  .header-identity {
+    width: 100%;
+  }
+
+  .header-trailing,
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .header-trailing {
+    flex-wrap: wrap;
+  }
 }
 </style>

@@ -48,24 +48,38 @@ const toolbarOptions = [
 
 <style scoped>
 .rich-text-editor {
-  background: white;
-  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-bg-surface);
 }
 
 :deep(.ql-toolbar) {
-  border-radius: 4px 4px 0 0;
-  border-color: #dcdfe6;
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-bg-subtle);
 }
 
 :deep(.ql-container) {
-  border-radius: 0 0 4px 4px;
-  border-color: #dcdfe6;
+  border: 0;
   font-family: inherit;
-  font-size: 14px;
-  height: 200px; /* Adjust height as needed */
+  font-size: var(--ui-font-md);
+  height: 200px;
 }
 
 :deep(.ql-editor) {
   min-height: 150px;
+}
+
+:deep(.ql-snow .ql-stroke) {
+  stroke: var(--ui-text-secondary);
+}
+
+:deep(.ql-snow .ql-fill) {
+  fill: var(--ui-text-secondary);
+}
+
+:deep(.ql-snow .ql-picker) {
+  color: var(--ui-text-secondary);
 }
 </style>

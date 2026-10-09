@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { ResumeMeta, ResumeData } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { generateId } from '@/utils/helpers';
+import { createJobResumeVersion, type JobTarget } from '@/utils/resumeVersions';
 
 /**
  * 工作台 Store
@@ -91,10 +92,18 @@ export const useWorkbenchStore = defineStore('workbench', {
           fontFamily: 'sans-serif',
           fontSize: 14,
           lineHeight: 1.5,
-          spacing: 24,
+          moduleMargins: {
+            top: 0,
+            bottom: 24,
+            left: 0,
+            right: 0,
+          },
+          pageMargins: 24,
+          dateFormat: 'YYYY.MM',
           displayIcons: true,
         },
         sectionOrder: ['experience', 'projects', 'education', 'skills'],
+        hiddenSections: [],
         sectionTitles: {
           experience: '工作经历',
           projects: '项目经验',
@@ -121,6 +130,55 @@ export const useWorkbenchStore = defineStore('workbench', {
         console.error('创建简历失败:', error);
         throw error;
       }
+    },
+
+    /** Create a distinct resume from imported or restored structured data. */
+    async createResumeFromData(source: ResumeData, title = source.title, templateId = source.templateId): Promise<string> {
+      const now = new Date().toISOString();
+      const id = generateId();
+      const moduleMargins = source.theme?.moduleMargins || { top: 0, bottom: 24, left: 0, right: 0 };
+      const newResume: ResumeData = {
+        ...JSON.parse(JSON.stringify(source)) as ResumeData,
+        id,
+        title: title.trim() || source.title || '导入的简历',
+        templateId: ['modern', 'professional', 'creative', 'minimal', 'tech'].includes(templateId) ? templateId : 'modern',
+        theme: {
+          color: source.theme?.color || '#2563eb',
+          fontFamily: source.theme?.fontFamily || 'sans-serif',
+          fontSize: source.theme?.fontSize || 14,
+          lineHeight: source.theme?.lineHeight || 1.5,
+          moduleMargins: { ...{ top: 0, bottom: 24, left: 0, right: 0 }, ...moduleMargins },
+          pageMargins: source.theme?.pageMargins ?? 24,
+          dateFormat: source.theme?.dateFormat || 'YYYY.MM',
+          displayIcons: source.theme?.displayIcons !== false,
+        },
+        sectionOrder: source.sectionOrder?.length ? [...source.sectionOrder] : ['experience', 'projects', 'education', 'skills'],
+        hiddenSections: [...(source.hiddenSections || [])],
+        createdAt: now,
+        updatedAt: now,
+      };
+      const timestamp = Date.now();
+      const meta: ResumeMeta = { id, title: newResume.title, templateId: newResume.templateId, createdAt: timestamp, updatedAt: timestamp };
+      await storageManager.save(newResume, meta);
+      await this.refresh();
+      return id;
+    },
+
+    async createJobVersion(sourceId: string, target: Omit<JobTarget, 'sourceResumeId'>): Promise<string> {
+      const source = await storageManager.read(sourceId);
+      if (!source) throw new Error('源简历不存在。');
+      const version = createJobResumeVersion(source, target, generateId());
+      const timestamp = Date.now();
+      const meta: ResumeMeta = {
+        id: version.id,
+        title: version.title,
+        templateId: version.templateId,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      await storageManager.save(version, meta);
+      await this.refresh();
+      return version.id;
     },
 
     /**

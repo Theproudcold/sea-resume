@@ -6,13 +6,13 @@
       </el-button>
     </div>
 
-    <div v-if="education.length === 0" class="empty-state text-center py-8 text-gray-400">
+    <div v-if="education.length === 0" class="resume-editor-empty">
       <el-icon :size="48"><School /></el-icon>
       <p class="mt-2">暂无教育背景，点击上方按钮添加</p>
     </div>
 
-    <div v-for="(edu, index) in education" :key="edu.id" class="education-item">
-      <div class="item-header flex items-center justify-between mb-3">
+    <div v-for="(edu, index) in education" :key="edu.id" class="education-item resume-entry-card">
+      <div class="resume-entry-card__header">
         <span class="text-sm text-gray-600">教育背景 {{ index + 1 }}</span>
         <el-button
           type="danger"
@@ -111,10 +111,10 @@ import type { Education } from '@/types/resume';
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const education = ref<Education[]>([...data.value.education]);
+const education = ref<Education[]>(JSON.parse(JSON.stringify(data.value.education)));
 
 watch(() => data.value.education, (newVal) => {
-  education.value = [...newVal];
+  education.value = JSON.parse(JSON.stringify(newVal));
 }, { deep: true });
 
 const addNew = () => {
@@ -135,17 +135,3 @@ const handleUpdate = (id: string, updates: Partial<Education>) => {
   resumeStore.updateEducation(id, updates);
 };
 </script>
-
-<style scoped>
-.education-item {
-  padding: 16px;
-  background: #f9fafb;
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.item-header {
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e5e7eb;
-}
-</style>

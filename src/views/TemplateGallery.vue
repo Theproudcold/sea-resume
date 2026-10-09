@@ -1,146 +1,233 @@
 <template>
   <div class="template-gallery">
-    <AppHeader @export="() => {}" />
+    <TemplateGalleryHeader :can-apply-to-current="canApplyToCurrent" @back="handleBack" />
 
-    <div class="gallery-container p-8">
-      <div class="max-w-7xl mx-auto">
-        <div class="mb-8 flex items-center gap-4">
-          <h2 class="text-3xl font-bold text-gray-800">模板</h2>
-        </div>
+    <main class="template-gallery__content">
+      <div class="template-gallery__inner">
+        <TemplateGalleryToolbar
+          :categories="categories"
+          :active-category="activeCategory"
+          :search="search"
+          :sort-by="sortBy"
+          @update:category="activeCategory = $event"
+          @update:search="search = $event"
+          @update:sort="sortBy = $event"
+        />
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          <div
-            v-for="template in templates"
+        <div v-if="displayTemplates.length" class="template-gallery__grid">
+          <TemplateCard
+            v-for="template in displayTemplates"
             :key="template.id"
-            class="template-card bg-white rounded-xl overflow-hidden hover:shadow-xl transition-all duration-300 border border-gray-100"
-          >
-            <!-- Preview Image Area -->
-            <div class="card-preview aspect-[210/297] bg-gray-50 relative group overflow-hidden border-b border-gray-100">
-              <!-- Placeholder for Template Snapshot -->
-              <div class="absolute inset-0 flex items-center justify-center bg-white">
-                <img 
-                  v-if="template.thumbnail" 
-                  :src="template.thumbnail" 
-                  class="w-full h-full object-cover" 
-                  alt="Template Preview"
-                />
-                <div v-else class="text-center p-6">
-                  <span class="text-6xl mb-4 block">📄</span>
-                  <span class="text-gray-400 font-medium">{{ template.name }}</span>
-                </div>
-              </div>
-
-              <!-- Hover Overlay with Buttons -->
-              <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4 backdrop-blur-[2px]">
-                <el-button color="white" round @click="openPreview(template.id)">
-                  预览
-                </el-button>
-                <el-button type="primary" round class="!bg-gray-900 !border-gray-900" @click="handleUseTemplate(template.id)">
-                  使用此模板
-                </el-button>
-              </div>
-
-              <!-- Top Right Badge -->
-               <div class="absolute top-4 right-4 bg-white/90 backdrop-blur px-3 py-1 rounded text-xs font-medium text-gray-600 shadow-sm">
-                 {{ template.name }}
-               </div>
-            </div>
-            
-            <!-- Removed bottom meta info to match the clean look in screenshot, 
-                 or keep minimal if needed. The screenshot shows name inside the card on top right. 
-                 Let's stick to the screenshot style. -->
-          </div>
+            :template="template"
+            :demo-data="previewData"
+            @preview="openPreview(template.id)"
+          />
         </div>
 
-        <div class="mt-12 text-center">
-          <el-button @click="goToEditor" plain>返回编辑器</el-button>
-        </div>
+        <el-empty
+          v-else
+          description="没有找到符合条件的模板，换个关键词或分类试试。"
+          class="template-gallery__empty"
+        />
       </div>
-    </div>
+    </main>
 
-    <!-- Preview Modal (Placeholder) -->
-    <el-dialog v-model="showPreview" :title="previewTemplateName" width="800px" align-center>
-      <div class="h-[600px] bg-gray-100 flex items-center justify-center">
-        <p class="text-gray-500">预览功能开发中...</p>
-      </div>
-    </el-dialog>
+    <TemplatePreviewDialog
+      :visible="previewVisible"
+      :template="selectedTemplate"
+      :preview-data="previewData"
+      :can-apply-to-current="canApplyToCurrent"
+      @update:visible="previewVisible = $event"
+      @create="createResumeFromTemplate"
+      @apply="applyTemplateToCurrent"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
-import { useTemplateStore } from '@/stores/template';
+import { useRoute, useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 import { useResumeStore } from '@/stores/resume';
+import { useTemplateStore } from '@/stores/template';
 import { useWorkbenchStore } from '@/stores/workbench';
-import AppHeader from '@/components/common/AppHeader.vue';
+import { templateDemoData as demoResumeData } from '@/data/template-demo';
+import TemplateCard from '@/components/template-gallery/TemplateCard.vue';
+import TemplateGalleryHeader from '@/components/template-gallery/TemplateGalleryHeader.vue';
+import TemplateGalleryToolbar from '@/components/template-gallery/TemplateGalleryToolbar.vue';
+import TemplatePreviewDialog from '@/components/template-gallery/TemplatePreviewDialog.vue';
+import type { TemplateMetadata } from '@/types/resume';
+import { buildTemplateResumeTitle, filterTemplates, sortTemplates, type TemplateSortKey } from '@/utils/template-gallery';
+import { getTemplateUsageMap, markTemplateUsed } from '@/utils/template-usage';
 
+const route = useRoute();
 const router = useRouter();
-const templateStore = useTemplateStore();
 const resumeStore = useResumeStore();
+const templateStore = useTemplateStore();
 const workbenchStore = useWorkbenchStore();
 
-const { templates } = storeToRefs(templateStore);
 const { data } = storeToRefs(resumeStore);
+const { templates } = storeToRefs(templateStore);
 
-const showPreview = ref(false);
-const previewTemplateId = ref('');
-const previewTemplateName = computed(() => {
-  return templates.value.find(t => t.id === previewTemplateId.value)?.name || '';
+const previewVisible = ref(false);
+const selectedTemplateId = ref<string>('');
+const search = ref('');
+const activeCategory = ref<TemplateMetadata['category'] | 'all'>('all');
+const sortBy = ref<TemplateSortKey>('recommended');
+const usageMap = ref<Record<string, number>>({});
+
+const activeResumeId = computed(() =>
+  typeof route.query.resumeId === 'string' ? route.query.resumeId : '',
+);
+
+const canApplyToCurrent = computed(() => Boolean(activeResumeId.value));
+const previewData = computed(() => ({
+  ...demoResumeData,
+  templateId: selectedTemplate.value?.id || demoResumeData.templateId,
+}));
+
+const selectedTemplate = computed(
+  () => templates.value.find((template) => template.id === selectedTemplateId.value) || null,
+);
+
+const categories = computed(() => [
+  { value: 'all' as const, label: '全部' },
+  ...templates.value.map((template) => ({
+    value: template.category,
+    label: template.categoryLabel,
+  })),
+].filter((item, index, items) => items.findIndex((current) => current.value === item.value) === index));
+
+const displayTemplates = computed(() => {
+  const filteredTemplates = filterTemplates(templates.value, {
+    category: activeCategory.value,
+    search: search.value,
+  });
+  return sortTemplates(filteredTemplates, sortBy.value, usageMap.value);
 });
 
-const openPreview = (id: string) => {
-  previewTemplateId.value = id;
-  showPreview.value = true;
+onMounted(async () => {
+  usageMap.value = getTemplateUsageMap();
+
+  if (activeResumeId.value && data.value.id !== activeResumeId.value) {
+    try {
+      await resumeStore.loadResume(activeResumeId.value);
+    } catch (error) {
+      ElMessage.error('当前简历加载失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      router.push('/');
+    }
+  }
+});
+
+const syncUsageMap = () => {
+  usageMap.value = getTemplateUsageMap();
 };
 
-const handleUseTemplate = async (id: string) => {
+const openPreview = (templateId: string) => {
+  selectedTemplateId.value = templateId;
+  previewVisible.value = true;
+};
+
+const closeDialogs = () => {
+  previewVisible.value = false;
+};
+
+const createResumeFromTemplate = async () => {
+  if (!selectedTemplate.value) {
+    return;
+  }
+
   try {
-    // Optimization: Don't switch live resume immediately which causes lag.
-    // Instead, ask if they want to apply to current or create new.
-    await ElMessageBox.confirm(
-      '您想如何使用此模板？',
-      '选择操作',
-      {
-        confirmButtonText: '创建新简历',
-        cancelButtonText: '应用到当前简历',
-        distinguishCancelAndClose: true,
-        type: 'info',
-      }
-    ).then(async () => {
-      // Create New
-      const newId = await workbenchStore.createResume(`${data.value.basic.name || '我的'}简历 - ${new Date().toLocaleDateString()}`, id);
-      // Wait a tick to ensure store updates if needed, though createResume returns id
-      router.push(`/editor/${newId}`);
-      ElMessage.success('已创建新简历');
-    }).catch(async (action) => {
-      if (action === 'cancel') {
-         // Apply to Current
-         resumeStore.setTemplate(id);
-         ElMessage.success('已应用模板');
-         router.push(`/editor/${data.value.id}`);
-      }
-    });
-  } catch (e) {
-    // Dialog closed
+    const template = selectedTemplate.value;
+    const newId = await workbenchStore.createResume(
+      buildTemplateResumeTitle(template.name, new Date()),
+      template.id,
+    );
+    markTemplateUsed(template.id);
+    syncUsageMap();
+    closeDialogs();
+    ElMessage.success('已创建新简历');
+    router.push(`/editor/${newId}`);
+  } catch (error) {
+    ElMessage.error('创建失败: ' + (error instanceof Error ? error.message : '未知错误'));
   }
 };
 
-const goToEditor = () => {
+const applyTemplateToCurrent = async () => {
+  if (!selectedTemplate.value || !activeResumeId.value) {
+    return;
+  }
+
+  try {
+    if (data.value.id !== activeResumeId.value) {
+      await resumeStore.loadResume(activeResumeId.value);
+    }
+    resumeStore.setTemplate(selectedTemplate.value.id);
+    markTemplateUsed(selectedTemplate.value.id);
+    syncUsageMap();
+    closeDialogs();
+    ElMessage.success('模板已应用到当前简历');
+    router.push(`/editor/${activeResumeId.value}`);
+  } catch (error) {
+    ElMessage.error('应用模板失败: ' + (error instanceof Error ? error.message : '未知错误'));
+  }
+};
+
+const handleBack = () => {
+  if (activeResumeId.value) {
+    router.push(`/editor/${activeResumeId.value}`);
+    return;
+  }
   router.push('/');
 };
 </script>
 
 <style scoped>
 .template-gallery {
-  width: 100%;
   min-height: 100vh;
-  background: #fff;
+  min-height: 100dvh;
+  background: var(--ui-bg-page);
 }
 
-.gallery-container {
-  width: 100%;
+.template-gallery__content {
+  padding: var(--ui-space-8) var(--ui-page-gutter) 48px;
+}
+
+.template-gallery__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-6);
+}
+
+.template-gallery__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--ui-space-6);
+}
+
+.template-gallery__empty {
+  padding: 60px 0;
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-bg-surface);
+}
+
+@media (max-width: 1024px) {
+  .template-gallery__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .template-gallery__content {
+    padding: 20px var(--ui-page-gutter) 40px;
+  }
+
+  .template-gallery__grid {
+    grid-template-columns: 1fr;
+    gap: var(--ui-space-4);
+  }
 }
 </style>

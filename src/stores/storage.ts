@@ -15,6 +15,7 @@ export const useStorageStore = defineStore('storage', {
     lastSyncTime: null as number | null,
     migrationProgress: null as MigrationProgress | null,
     isMigrating: false,
+    initializationWarning: '',
   }),
 
   getters: {
@@ -51,24 +52,47 @@ export const useStorageStore = defineStore('storage', {
      * 初始化存储配置
      */
     async init() {
-      // 从 LocalStorage 读取存储配置
+      this.initializationWarning = '';
       try {
         const savedConfig = localStorage.getItem(STORAGE_CONFIG_KEY);
-        if (savedConfig) {
-          const config: StorageConfig = JSON.parse(savedConfig);
-          this.config = config;
-          this.currentType = config.type;
-
-          // 初始化存储管理器
-          await storageManager.init(config);
-        } else {
-          // 首次使用，默认 LocalStorage
-          await storageManager.init();
-        }
+        const config: StorageConfig = savedConfig ? JSON.parse(savedConfig) : { type: 'local_storage' };
+        this.config = config;
+        this.currentType = config.type;
+        await storageManager.init(savedConfig ? config : undefined);
       } catch (error) {
         console.error('初始化存储配置失败:', error);
-        // 回退到默认的 LocalStorage
+        this.initializationWarning = `本地文件夹暂不可用，已回退到浏览器缓存。${error instanceof Error ? ` ${error.message}` : ''}`;
+        this.currentType = 'local_storage';
+        this.config = { type: 'local_storage' };
         await storageManager.init();
+      }
+    },
+
+    async switchToFileSystem(directoryHandle: FileSystemDirectoryHandle, useExisting = false) {
+      this.isMigrating = true;
+      try {
+        const result = await storageManager.switchToFileSystem(directoryHandle, useExisting);
+        const config: StorageConfig = { type: 'file_system', fileSystem: { directoryPath: result.directoryName } };
+        this.currentType = 'file_system';
+        this.config = config;
+        this.initializationWarning = '';
+        localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(config));
+        return { addedCount: result.addedCount, conflictCount: result.conflictCount };
+      } finally {
+        this.isMigrating = false;
+      }
+    },
+
+    async switchToBrowserStorage() {
+      this.isMigrating = true;
+      try {
+        if (this.currentType === 'file_system') await storageManager.migrate('file_system', 'local_storage');
+        const config: StorageConfig = { type: 'local_storage' };
+        this.currentType = 'local_storage';
+        this.config = config;
+        localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(config));
+      } finally {
+        this.isMigrating = false;
       }
     },
 
@@ -142,6 +166,14 @@ export const useStorageStore = defineStore('storage', {
      */
     clearMigrationProgress() {
       this.migrationProgress = null;
+    },
+
+    /**
+     * 清空当前存储中的所有简历
+     */
+    async clearAll() {
+      const resumes = await storageManager.list();
+      await Promise.all(resumes.map((resume) => storageManager.delete(resume.id)));
     },
   },
 });

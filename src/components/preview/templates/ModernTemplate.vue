@@ -1,17 +1,17 @@
 <template>
   <div class="modern-template" :style="{
-    '--padding': (data.theme?.spacing || 24) + 'px',
-    '--font-size': (data.theme?.fontSize || 14) + 'px',
-    '--line-height': data.theme?.lineHeight || 1.6,
-    '--spacing': (data.theme?.spacing || 24) + 'px',
+    '--margin-top': (data.theme?.moduleMargins?.top || 0) + 'px',
+    '--margin-bottom': (data.theme?.moduleMargins?.bottom || 24) + 'px',
+    '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
+    '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
     '--primary-color': data.theme?.color || '#2563eb',
-    padding: 'var(--padding)',
+    padding: (data.theme?.pageMargins !== undefined ? data.theme.pageMargins : 24) + 'px',
     fontSize: 'var(--font-size)',
     lineHeight: 'var(--line-height)',
     color: '#333'
   }">
     <!-- 基础信息 -->
-    <header class="header flex flex-col md:flex-row gap-6 items-start" style="margin-bottom: calc(var(--spacing) * 1.5)">
+    <header class="header flex flex-col md:flex-row gap-6 items-start" style="margin-bottom: calc(var(--margin-bottom) * 1.5)">
       <div v-if="data.basic.avatar" class="avatar-container shrink-0">
         <img :src="data.basic.avatar" class="w-28 h-28 rounded-full object-cover border-2 border-white shadow-sm" />
       </div>
@@ -39,6 +39,7 @@
           <ContactIcon v-if="data.theme.displayIcons !== false" type="website" :icon="data.basic.iconOverrides?.website" style="color: var(--primary-color)" />
           <span>{{ data.basic.website }}</span>
         </div>
+        <ResumeSmartFields :data="data" />
       </div>
       </div>
     </header>
@@ -57,7 +58,7 @@
     <!-- 动态排序模块 -->
     <draggable
       v-model="sortedSections"
-      :item-key="section => section"
+      :item-key="(section: string) => section"
       :animation="200"
       handle=".section-title"
       group="modern-sections"
@@ -68,16 +69,40 @@
           @click.stop="setActiveSection(section)"
         >
           <!-- 自定义模块 -->
-          <section v-if="isCustomBlock(section)" class="section" style="margin-bottom: var(--spacing)">
+          <section v-if="isCustomBlock(section)" class="section" style="
+            margin-top: var(--margin-top);
+            margin-bottom: var(--margin-bottom);
+            margin-left: var(--margin-left);
+            margin-right: var(--margin-right);
+          ">
             <h2 class="section-title font-semibold text-gray-800 mb-3 flex items-center gap-2">
               <span class="w-1 h-6 rounded" style="background-color: var(--primary-color)"></span>
               {{ getSectionTitle(section) }}
             </h2>
-            <div class="ql-editor px-0" v-html="getCustomContent(section)" style="font-size: var(--font-size); line-height: var(--line-height)"></div>
+            <div v-if="Array.isArray(getCustomContent(section))" style="gap: var(--spacing); display: flex; flex-direction: column;">
+              <div v-for="item in getCustomItems(section)" :key="item.id" class="custom-item" style="margin-bottom: 0">
+                <div class="flex justify-between items-start mb-2">
+                  <div>
+                    <h3 v-if="item.title" class="font-semibold text-gray-900" style="font-size: calc(var(--font-size) + 4px)">{{ item.title }}</h3>
+                    <div v-if="item.subtitle" style="font-size: var(--font-size)">{{ item.subtitle }}</div>
+                  </div>
+                  <div v-if="item.date" class="text-sm text-gray-500 whitespace-nowrap ml-4">
+                    {{ item.date }}
+                  </div>
+                </div>
+                <div class="ql-editor px-0" v-html="item.description" style="font-size: var(--font-size); line-height: var(--line-height)"></div>
+              </div>
+            </div>
+            <div v-else class="ql-editor px-0" v-html="getCustomContent(section)" style="font-size: var(--font-size); line-height: var(--line-height)"></div>
           </section>
 
           <!-- 工作经历 -->
-          <section v-else-if="section === 'experience' && data.experiences.length > 0" class="section" style="margin-bottom: var(--spacing)">
+          <section v-else-if="section === 'experience' && data.experiences.length > 0" class="section" style="
+            margin-top: var(--margin-top);
+            margin-bottom: var(--margin-bottom);
+            margin-left: var(--margin-left);
+            margin-right: var(--margin-right);
+          ">
             <h2 class="section-title font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <span class="w-1 h-6 rounded" style="background-color: var(--primary-color)"></span>
               {{ data.sectionTitles?.experience || '工作经历' }}
@@ -99,7 +124,12 @@
           </section>
 
           <!-- 项目经验 -->
-          <section v-else-if="section === 'projects' && data.projects.length > 0" class="section" style="margin-bottom: var(--spacing)">
+          <section v-else-if="section === 'projects' && data.projects.length > 0" class="section" style="
+            margin-top: var(--margin-top);
+            margin-bottom: var(--margin-bottom);
+            margin-left: var(--margin-left);
+            margin-right: var(--margin-right);
+          ">
             <h2 class="section-title font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <span class="w-1 h-6 rounded" style="background-color: var(--primary-color)"></span>
               {{ data.sectionTitles?.projects || '项目经验' }}
@@ -131,7 +161,12 @@
           </section>
 
           <!-- 教育背景 -->
-          <section v-else-if="section === 'education' && data.education.length > 0" class="section" style="margin-bottom: var(--spacing)">
+          <section v-else-if="section === 'education' && data.education.length > 0" class="section" style="
+            margin-top: var(--margin-top);
+            margin-bottom: var(--margin-bottom);
+            margin-left: var(--margin-left);
+            margin-right: var(--margin-right);
+          ">
             <h2 class="section-title font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <span class="w-1 h-6 rounded" style="background-color: var(--primary-color)"></span>
               {{ data.sectionTitles?.education || '教育背景' }}
@@ -154,7 +189,12 @@
           </section>
 
           <!-- 技能 -->
-          <section v-else-if="section === 'skills' && data.skills.length > 0" class="section" style="margin-bottom: var(--spacing)">
+          <section v-else-if="section === 'skills' && data.skills.length > 0" class="section" style="
+            margin-top: var(--margin-top);
+            margin-bottom: var(--margin-bottom);
+            margin-left: var(--margin-left);
+            margin-right: var(--margin-right);
+          ">
             <h2 class="section-title font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <span class="w-1 h-6 rounded" style="background-color: var(--primary-color)"></span>
               {{ data.sectionTitles?.skills || '专业技能' }}
@@ -175,7 +215,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ResumeData } from '@/types/resume';
-import { formatDateRange } from '@/utils/helpers';
+import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import ContactIcon from '@/components/common/ContactIcon.vue';
 import draggable from 'vuedraggable';
 import { useResumeStore } from '@/stores/resume';
@@ -185,12 +225,62 @@ const props = defineProps<{
   data: ResumeData;
 }>();
 
+const formatDateRange = (start: string, end: string | 'present') => {
+  const format = props.data.theme.dateFormat || 'YYYY.MM';
+  const formatFn = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      const y = date.getFullYear();
+      const m = date.getMonth() + 1;
+      const mm = m.toString().padStart(2, '0');
+      const mmm = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+      switch (format) {
+        case 'YYYY-MM': return `${y}-${mm}`;
+        case 'YYYY/MM': return `${y}/${mm}`;
+        case 'MM/YYYY': return `${mm}/${y}`;
+        case 'MMM YYYY': return `${mmm} ${y}`;
+        case 'YYYY.MM': default: return `${y}.${mm}`;
+      }
+    } catch { return dateStr; }
+  };
+  return `${formatFn(start)} - ${end === 'present' ? '至今' : formatFn(end)}`;
+};
+
 const resumeStore = useResumeStore();
 
 // 可写计算属性，处理拖拽排序
+const isSectionHidden = (id: string) => {
+  return props.data.hiddenSections?.includes(id) || false;
+};
+
 const sortedSections = computed({
-  get: () => props.data.sectionOrder || [],
-  set: (val) => resumeStore.updateSectionOrder(val)
+  get: () => {
+    return (props.data.sectionOrder || []).filter(id => !isSectionHidden(id));
+  },
+  set: (val) => {
+    // 拖拽排序时，需要合并隐藏的模块
+    const visibleOrder = val;
+    const hiddenOrder = (props.data.sectionOrder || []).filter(id => isSectionHidden(id));
+    // 简单的合并策略：可见的在前（或按新顺序），隐藏的追加在后? 
+    // 不，这会打乱隐藏项目的位置。
+    // 更好的做法：只更新可见项目的相对顺序。
+    // 但为了简化，我们假设用户只在“可见”列表中排序。
+    // 实际上，如果模板里只渲染可见的，那么 v-model 绑定的也是可见的列表。
+    // 更新时，我们需要重建完整的 sectionOrder。
+    
+    // 临时方案：直接更新 store 的 order，但要保留隐藏项?
+    // 由于 draggable 只包含可见项，val 也是可见项的新顺序。
+    // 我们需要把隐藏项插回去，或者是追加？
+    // 既然在预览中不可见，它们的位置暂不重要，可以追加在最后，或者保持原样?
+    // 最稳妥：activeSections = val (new visible order).
+    // finalOrder = activeSections + hiddenSections.
+    
+    const newOrder = [...visibleOrder, ...props.data.hiddenSections || []];
+    // 去重 (防守性)
+    const uniqueOrder = Array.from(new Set(newOrder));
+    resumeStore.updateSectionOrder(uniqueOrder);
+  }
 });
 
 // Helpers for template rendering
@@ -208,6 +298,11 @@ const getCustomContent = (id: string) => {
   return block ? block.content : '';
 };
 
+const getCustomItems = (id: string): import('@/types/resume').CustomItem[] => {
+  const content = getCustomContent(id);
+  return Array.isArray(content) ? content : [];
+};
+
 const setActiveSection = (id: string) => {
   resumeStore.setActiveSection(id);
 };
@@ -215,14 +310,12 @@ const setActiveSection = (id: string) => {
 
 <style scoped lang="scss">
 @use '@/styles/variables' as *;
-@use '@/styles/mixins' as *;
 
 .modern-template {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   line-height: $line-height-base + 0.1;
   color: #333; // Dark gray
 
-  @include no-print;
 }
 
 .section {

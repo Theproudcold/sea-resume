@@ -1,6 +1,6 @@
 <template>
   <div class="resume-canvas-wrapper">
-    <div id="resume-canvas" class="resume-canvas">
+    <div ref="canvasRef" class="resume-canvas">
       <slot></slot>
       
       <!-- Visual Page Breaks (for Editor View only) -->
@@ -16,42 +16,46 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { estimateA4PageCount } from '@/utils/pageFit';
+
+const canvasRef = ref<HTMLElement | null>(null);
+let resizeObserver: ResizeObserver | null = null;
+let mutationObserver: MutationObserver | null = null;
+let scheduledFrame = 0;
 
 const pageCount = ref(0);
-let resizeObserver: ResizeObserver | null = null;
-
 const updatePageBreaks = () => {
-    const el = document.getElementById('resume-canvas');
-    if (!el) return;
-    
-    // Get A4 height in pixels (approx 1123px at 96dpi, but better to read from CSS var if possible or hardcode mm->px ratio)
-    // 297mm at 96dpi is approx 1122.5px.
-    // Let's use getComputedStyle to be safe if --a4-height is set in px or absolute units.
-    // Actually, simpler: read .resume-canvas height and divide by expected A4 height.
-    
-    // We need to know the pixel value of 297mm on this screen.
-    // A trick is to create a temp element.
-    const tempDiv = document.createElement('div');
-    tempDiv.style.height = '297mm';
-    document.body.appendChild(tempDiv);
-    const a4HeightPx = tempDiv.offsetHeight;
-    document.body.removeChild(tempDiv);
+  const canvas = canvasRef.value;
+  if (!canvas) return;
+  const measure = document.createElement('div');
+  measure.style.cssText = 'position:fixed;left:-10000px;top:0;height:297mm;width:1px;visibility:hidden;';
+  document.body.appendChild(measure);
+  const a4Height = measure.getBoundingClientRect().height || measure.offsetHeight;
+  measure.remove();
+  const totalPages = estimateA4PageCount(canvas.scrollHeight, a4Height);
+  pageCount.value = Math.max(0, totalPages - 1);
+};
 
-    if (a4HeightPx > 0) {
-        const totalHeight = el.scrollHeight;
-        pageCount.value = Math.floor(totalHeight / a4HeightPx);
-    }
+const scheduleUpdate = () => {
+  if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
+  scheduledFrame = requestAnimationFrame(updatePageBreaks);
 };
 
 onMounted(() => {
-    updatePageBreaks();
-    resizeObserver = new ResizeObserver(updatePageBreaks);
-    const el = document.getElementById('resume-canvas');
-    if (el) resizeObserver.observe(el);
+  const canvas = canvasRef.value;
+  if (!canvas) return;
+  scheduleUpdate();
+  resizeObserver = new ResizeObserver(scheduleUpdate);
+  resizeObserver.observe(canvas);
+  mutationObserver = new MutationObserver(scheduleUpdate);
+  mutationObserver.observe(canvas, { childList: true, subtree: true, characterData: true });
+  if ('fonts' in document) void document.fonts.ready.then(scheduleUpdate);
 });
 
 onUnmounted(() => {
-    if (resizeObserver) resizeObserver.disconnect();
+  resizeObserver?.disconnect();
+  mutationObserver?.disconnect();
+  if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
 });
 </script>
 
@@ -59,39 +63,39 @@ onUnmounted(() => {
 .resume-canvas-wrapper {
   display: flex;
   justify-content: center;
-  padding: 20px;
-  background: #f5f5f5;
-  overflow: auto; /* Allow scrolling if canvas is huge */
+  padding: var(--ui-space-4);
+  background: var(--ui-bg-page);
+  overflow: auto;
 }
 
 .resume-canvas {
   width: var(--a4-width);
   min-height: var(--a4-height);
-  background: white;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: #fff;
+  box-shadow: var(--ui-shadow-md);
   margin: 0 auto;
   position: relative; /* For absolute positioning of breaks */
 }
 
 .page-break-line {
-    position: absolute;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: repeating-linear-gradient(to right, #ff6b6b 0, #ff6b6b 5px, transparent 5px, transparent 10px);
-    z-index: 50;
-    pointer-events: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: repeating-linear-gradient(to right, var(--ui-danger) 0, var(--ui-danger) 5px, transparent 5px, transparent 10px);
+  z-index: 50;
+  pointer-events: none;
 }
 
 .page-number {
-    position: absolute;
-    right: 0;
-    top: -20px;
-    background: #ff6b6b;
-    color: white;
-    font-size: 12px;
-    padding: 2px 6px;
-    border-radius: 4px 0 0 4px;
+  position: absolute;
+  right: 0;
+  top: -20px;
+  padding: var(--ui-space-1) var(--ui-space-2);
+  border-radius: var(--ui-radius-sm) 0 0 var(--ui-radius-sm);
+  background: var(--ui-danger);
+  color: white;
+  font-size: var(--ui-font-xs);
 }
 
 @media print {

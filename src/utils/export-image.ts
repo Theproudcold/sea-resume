@@ -12,7 +12,9 @@ export async function exportToImage(
   format: 'png' | 'jpeg' = 'png'
 ): Promise<void> {
   try {
-    const element = document.getElementById(elementId);
+    const element = (elementId.startsWith('.')
+      ? document.querySelector<HTMLElement>(elementId)
+      : document.getElementById(elementId)) as HTMLElement | null;
     if (!element) {
       throw new Error(`未找到元素: ${elementId}`);
     }
