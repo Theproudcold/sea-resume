@@ -5,6 +5,7 @@ import { storageManager } from '@/services/storage/StorageManager';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 
 describe('resume editor history and save feedback', () => {
+  beforeEach(() => {
     vi.restoreAllMocks();
     setActivePinia(createPinia());
     vi.useFakeTimers();
