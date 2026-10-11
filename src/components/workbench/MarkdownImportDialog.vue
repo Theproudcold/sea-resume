@@ -2,7 +2,8 @@
   <el-dialog
     :model-value="modelValue"
     title="导入 Markdown 简历"
-    width="min(760px, 94vw)"
+    width="var(--ui-dialog-width-md)"
+    align-center
     destroy-on-close
     @update:model-value="emit('update:modelValue', $event)"
   >

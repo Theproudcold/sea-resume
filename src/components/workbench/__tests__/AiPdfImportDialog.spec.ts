@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MarkdownImportResult } from '@/types/markdown-import';
 import type { ResumeData } from '@/types/resume';
 import AiPdfImportDialog from '@/components/workbench/AiPdfImportDialog.vue';
+import { clearAiModelSettings, clearAiSessionApiKey, saveAiModelSettings, setAiSessionApiKey } from '@/services/ai/AiSettings';
 
 const mocks = vi.hoisted(() => ({
   extractPdfText: vi.fn(),
@@ -126,7 +127,6 @@ async function extractPdf(wrapper: ReturnType<typeof createWrapper>) {
 
 async function parseWithConsent(wrapper: ReturnType<typeof createWrapper>) {
   await extractPdf(wrapper);
-  await getField(wrapper, 'API Key（仅当前会话）').setValue('test-api-key');
   await wrapper.find('input[type="checkbox"]').setValue(true);
   const parseButton = wrapper.findAll('button').find((button) => button.text().includes('发送文本并解析简历'));
   if (!parseButton) throw new Error('Missing parse button');
@@ -136,6 +136,10 @@ async function parseWithConsent(wrapper: ReturnType<typeof createWrapper>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearAiModelSettings();
+  clearAiSessionApiKey();
+  saveAiModelSettings({ presetId: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' });
+  setAiSessionApiKey('test-api-key');
   mocks.extractPdfText.mockResolvedValue({ text: 'Locally extracted resume text', pageCount: 1 });
   mocks.requestAiPdfMarkdown.mockResolvedValue({ markdown: '# Resume', explanation: 'Check the extracted details.' });
   mocks.parseResumeMarkdown.mockReturnValue(importedResult);
@@ -146,6 +150,12 @@ describe('AiPdfImportDialog', () => {
     const wrapper = createWrapper();
     await parseWithConsent(wrapper);
 
+
+    expect(mocks.requestAiPdfMarkdown).toHaveBeenCalledWith({
+      baseUrl: 'https://api.deepseek.com/v1',
+      apiKey: 'test-api-key',
+      model: 'deepseek-chat',
+    }, 'candidate.pdf', 'Locally extracted resume text');
     expect(wrapper.text()).toContain('请检查项目日期。');
     await getField(wrapper, '姓名').setValue('Corrected Name');
     await getField(wrapper, '公司').setValue('Corrected Company');
@@ -181,7 +191,6 @@ describe('AiPdfImportDialog', () => {
   it('does not call the AI service without explicit consent', async () => {
     const wrapper = createWrapper();
     await extractPdf(wrapper);
-    await getField(wrapper, 'API Key（仅当前会话）').setValue('test-api-key');
     const parseButton = wrapper.findAll('button').find((button) => button.text().includes('发送文本并解析简历'));
 
     expect(parseButton?.attributes('disabled')).toBeDefined();

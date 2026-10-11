@@ -2,7 +2,8 @@
   <el-dialog
     :model-value="modelValue"
     title="简历质量检查"
-    width="min(600px, calc(100vw - 32px))"
+    width="var(--ui-dialog-width-md)"
+    align-center
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <p class="quality-intro">检查只提供内容完整性建议，不会自动修改简历。</p>

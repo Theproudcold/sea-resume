@@ -2,7 +2,8 @@
   <el-dialog
     :model-value="modelValue"
     title="AI 导入 PDF 简历"
-    width="min(760px, 94vw)"
+    width="var(--ui-dialog-width-md)"
+    align-center
     destroy-on-close
     @update:model-value="emit('update:modelValue', $event)"
   >
@@ -31,22 +32,18 @@
         <template #title>发送前请确认</template>
         <p>PDF 文件未上传；只有提取出的文本和文件名会在你点击解析并明确勾选后发送给配置的 AI 服务。API Key 仅保存在本次会话内存。</p>
       </el-alert>
-      <el-form label-position="top" class="pdf-ai-form">
-        <el-form-item label="服务商预设">
-          <el-select v-model="presetId" class="w-full" @change="applyProviderPreset">
-            <el-option v-for="preset in AI_PROVIDER_PRESETS" :key="preset.id" :label="preset.label" :value="preset.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="OpenAI-compatible 服务地址">
-          <el-input v-model="baseUrl" @input="presetId = 'custom'" placeholder="https://api.openai.com/v1" />
-        </el-form-item>
-        <el-form-item label="模型名称">
-          <el-input v-model="model" />
-        </el-form-item>
-        <el-form-item label="API Key（仅当前会话）">
-          <el-input v-model="apiKey" type="password" show-password autocomplete="off" placeholder="输入服务商 API Key" />
-        </el-form-item>
-      </el-form>
+      <div class="pdf-provider-card">
+        <div class="pdf-provider-summary">
+          <span class="eyebrow">当前模型服务</span>
+          <strong>{{ providerLabel }} · {{ modelSettings?.model || '未配置模型' }}</strong>
+          <span :class="{ 'is-ready': isModelReady }">{{ isModelReady ? 'API Key 已配置' : '需要完成模型配置' }}</span>
+        </div>
+        <el-button type="primary" plain @click="showModelSettings = !showModelSettings">
+          {{ showModelSettings ? '收起配置' : '配置模型' }}
+        </el-button>
+      </div>
+      <AiProviderSettingsPanel v-if="showModelSettings" @saved="refreshAiConfiguration" />
+      <p class="pdf-model-note">服务商与模型设置会和 AI 助手共用；API Key 只保存在当前页面会话。</p>
       <el-checkbox v-model="consent" class="consent-check">我确认将 PDF 提取文本发送给上方 AI 服务用于本次解析。</el-checkbox>
       <el-button type="primary" class="parse-button" :loading="requesting" :disabled="!canRequest" @click="parseWithAi">发送文本并解析简历</el-button>
     </template>
@@ -158,6 +155,7 @@
             <el-option label="创意设计" value="creative" />
             <el-option label="极简主义" value="minimal" />
             <el-option label="科技感" value="tech" />
+            <el-option label="AI Agent 技术" value="ai-agent" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -174,12 +172,11 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
 import type { ResumeData } from '@/types/resume';
 import type { MarkdownImportResult } from '@/types/markdown-import';
-import type { AiModelSettings, AiProviderPresetId } from '@/services/ai/AiSettings';
-import { AI_PROVIDER_PRESETS, loadAiModelSettings } from '@/services/ai/AiSettings';
+import { AI_PROVIDER_PRESETS, getAiSessionApiKey, hasAiSessionApiKey, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
+import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
 import { extractPdfText, requestAiPdfMarkdown, type ExtractedPdfText } from '@/services/ai/pdfResumeImport';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { markdownToSafeHtml } from '@/utils/markdown/markdownSafety';
@@ -190,11 +187,9 @@ const emit = defineEmits<{
   confirm: [payload: { resume: ResumeData; title: string; templateId: string }];
 }>();
 
-const defaultPreset = AI_PROVIDER_PRESETS.find((preset) => preset.id === 'openai')!;
-const presetId = ref<AiProviderPresetId>(defaultPreset.id);
-const baseUrl = ref(defaultPreset.baseUrl);
-const model = ref(defaultPreset.model);
-const apiKey = ref('');
+const modelSettings = ref<AiModelSettings | null>(loadAiModelSettings());
+const sessionKeyAvailable = ref(hasAiSessionApiKey());
+const showModelSettings = ref(false);
 const fileName = ref('');
 const fileInput = ref<HTMLInputElement>();
 const extracted = ref<ExtractedPdfText | null>(null);
@@ -208,39 +203,34 @@ const extracting = ref(false);
 const requesting = ref(false);
 const isDragging = ref(false);
 const errorMessage = ref('');
-const canRequest = computed(() => !!apiKey.value.trim() && !!baseUrl.value.trim() && !!model.value.trim() && consent.value && !requesting.value);
+const isModelReady = computed(() => !!modelSettings.value?.baseUrl.trim() && !!modelSettings.value?.model.trim() && sessionKeyAvailable.value);
+const canRequest = computed(() => isModelReady.value && consent.value && !requesting.value);
+const providerLabel = computed(() => modelSettings.value?.profileName || AI_PROVIDER_PRESETS.find((preset) => preset.id === modelSettings.value?.presetId)?.label || '未配置');
 
-onMounted(() => {
-  const saved = loadAiModelSettings();
-  if (!saved) return;
-  presetId.value = saved.presetId;
-  baseUrl.value = saved.baseUrl;
-  model.value = saved.model;
-});
-watch(() => props.modelValue, (visible) => { if (!visible) reset(); });
-
-function applyProviderPreset(id: AiProviderPresetId) {
-  presetId.value = id;
-  if (id === 'custom') {
-    baseUrl.value = '';
-    model.value = '';
-    return;
-  }
-  const preset = AI_PROVIDER_PRESETS.find((item) => item.id === id);
-  if (preset) { baseUrl.value = preset.baseUrl; model.value = preset.model; }
+function refreshAiConfiguration() {
+  modelSettings.value = loadAiModelSettings();
+  sessionKeyAvailable.value = hasAiSessionApiKey();
 }
+
+onMounted(refreshAiConfiguration);
+watch(() => props.modelValue, (visible) => {
+  if (visible) refreshAiConfiguration();
+  else reset();
+});
+
 function reset() {
   extracted.value = null;
   parsed.value = null;
   draftResume.value = null;
   fileName.value = '';
   title.value = '';
-  apiKey.value = '';
   consent.value = false;
   explanation.value = '';
   errorMessage.value = '';
+  showModelSettings.value = false;
   if (fileInput.value) fileInput.value.value = '';
 }
+
 async function readFile(file?: File) {
   errorMessage.value = '';
   if (!file) return;
@@ -251,29 +241,34 @@ async function readFile(file?: File) {
     fileName.value = file.name;
     parsed.value = null;
     draftResume.value = null;
+    refreshAiConfiguration();
+    showModelSettings.value = !isModelReady.value;
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'PDF 读取失败。';
   } finally {
     extracting.value = false;
   }
 }
+
 function handleFileChange(event: Event) {
   void readFile((event.target as HTMLInputElement).files?.[0]);
 }
+
 function handleDrop(event: DragEvent) {
   isDragging.value = false;
   void readFile(event.dataTransfer?.files?.[0]);
 }
+
 async function parseWithAi() {
-  if (!canRequest.value || !extracted.value) return;
+  if (!canRequest.value || !extracted.value || !modelSettings.value) return;
   requesting.value = true;
   errorMessage.value = '';
   try {
-    const result = await requestAiPdfMarkdown(
-      { baseUrl: baseUrl.value, apiKey: apiKey.value, model: model.value },
-      fileName.value,
-      extracted.value.text,
-    );
+    const result = await requestAiPdfMarkdown({
+      baseUrl: modelSettings.value.baseUrl,
+      apiKey: getAiSessionApiKey(modelSettings.value.profileId),
+      model: modelSettings.value.model,
+    }, fileName.value, extracted.value.text);
     const imported = parseResumeMarkdown(result.markdown, fileName.value.replace(/\.pdf$/i, '.md'));
     parsed.value = imported;
     draftResume.value = JSON.parse(JSON.stringify(imported.resume)) as ResumeData;
@@ -286,6 +281,7 @@ async function parseWithAi() {
     requesting.value = false;
   }
 }
+
 function richTextToEditorText(value?: string): string {
   if (!value) return '';
   const htmlWithBreaks = value
@@ -294,18 +290,22 @@ function richTextToEditorText(value?: string): string {
   if (typeof DOMParser === 'undefined') return htmlWithBreaks.replace(/<[^>]*>/g, '').trim();
   return new DOMParser().parseFromString(htmlWithBreaks, 'text/html').body.textContent?.trim() ?? '';
 }
+
 function setExperienceHighlights(index: number, value: string) {
   const experience = draftResume.value?.experiences[index];
   if (experience) experience.highlights = value.split('\n').map((item) => item.trim()).filter(Boolean);
 }
+
 function setProjectTechStack(index: number, value: string) {
   const project = draftResume.value?.projects[index];
   if (project) project.techStack = value.split(/[,，、\n]/).map((item) => item.trim()).filter(Boolean);
 }
+
 function setSkillItems(index: number, value: string) {
   const skill = draftResume.value?.skills[index];
   if (skill) skill.items = value.split(/[,，、\n]/).map((item) => item.trim()).filter(Boolean);
 }
+
 function confirmImport() {
   if (!draftResume.value || !title.value.trim()) return;
   emit('confirm', { resume: draftResume.value, title: title.value.trim(), templateId: templateId.value });
@@ -323,7 +323,13 @@ function confirmImport() {
 .text-preview { margin: 12px 0 16px; padding: 10px 12px; background: #f7f8fa; border-radius: 8px; }
 .text-preview summary { cursor: pointer; font-size: 13px; font-weight: 600; }
 .text-preview pre { max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; }
-.pdf-ai-form, .result-options { margin-top: 16px; }
+.pdf-provider-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--ui-primary) 20%, var(--ui-border)); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-primary) 4%, white); }
+.pdf-provider-summary { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.pdf-provider-summary strong { overflow-wrap: anywhere; color: var(--ui-text-main); font-size: 14px; }
+.pdf-provider-summary > span:last-child { color: var(--ui-warning); font-size: 12px; }
+.pdf-provider-summary > span:last-child.is-ready { color: var(--ui-success); }
+.pdf-model-note { margin: -8px 0 0; color: var(--ui-text-muted); font-size: 12px; line-height: 1.5; }
+.result-options { margin-top: 16px; }
 .pdf-ai-form :deep(.el-form-item), .result-options :deep(.el-form-item) { margin-bottom: 12px; }
 .consent-check { margin: 0 0 14px; white-space: normal; }
 .parse-button { width: 100%; }

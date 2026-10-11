@@ -2,6 +2,7 @@ import type { CustomBlock, CustomItem, ResumeData } from '@/types/resume';
 import type { MarkdownImportResult, MarkdownImportWarning } from '@/types/markdown-import';
 import { generateId } from '@/utils/helpers';
 import { markdownToSafeHtml, sanitizeMarkdownUrl } from './markdownSafety';
+import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 
 const DATE_TOKEN = '(?:\\d{4}(?:[./-]\\d{1,2})?|至今|现在|目前|present|current)';
 const DATE_RANGE = new RegExp(`(${DATE_TOKEN})\\s*(?:-|–|—|~|至|到|to)\\s*(${DATE_TOKEN})`, 'i');
@@ -96,7 +97,7 @@ function emptyResume(title: string): ResumeData {
   return {
     id: generateId(), title, basic: { name: '', title: '', email: '', phone: '' },
     experiences: [], education: [], skills: [], projects: [], customBlocks: [], templateId: 'modern',
-    theme: { color: '#2563eb', fontFamily: 'sans-serif', fontSize: 14, lineHeight: 1.5, moduleMargins: { top: 0, bottom: 24, left: 0, right: 0 }, pageMargins: 24, dateFormat: 'YYYY.MM', displayIcons: true },
+    theme: { color: '#2563eb', fontFamily: RECOMMENDED_FONT_FAMILY, fontSize: 14, lineHeight: 1.5, moduleMargins: { top: 0, bottom: 24, left: 0, right: 0 }, pageMargins: 24, dateFormat: 'YYYY.MM', displayIcons: true },
     sectionOrder: ['experience', 'projects', 'education', 'skills'], hiddenSections: [],
     sectionTitles: { experience: '工作经历', projects: '项目经验', education: '教育背景', skills: '技能证书' },
     createdAt: now, updatedAt: now,
@@ -216,7 +217,7 @@ export function parseResumeMarkdown(source: string, filename = 'resume.md'): Mar
   const website = values.website || values.url;
   if (website && sanitizeMarkdownUrl(website)) resume.basic.website = website;
   if (values.summary) resume.basic.summary = markdownToSafeHtml(values.summary);
-  if (values.template && ['modern', 'professional', 'creative', 'minimal', 'tech'].includes(values.template)) resume.templateId = values.template;
+  if (values.template && ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'].includes(values.template)) resume.templateId = values.template;
 
   const unknownMetadata = Object.entries(values).filter(([key]) => !knownFrontmatter.has(key));
   for (const [key, value] of unknownMetadata) warnings.push({ code: 'unknown-frontmatter', message: `未识别的 frontmatter 字段“${key}”，已保留在自定义模块。`, detail: value });

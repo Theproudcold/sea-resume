@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { ResumeMeta, ResumeData } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { generateId } from '@/utils/helpers';
+import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 import { createJobResumeVersion, type JobTarget } from '@/utils/resumeVersions';
 
 /**
@@ -89,7 +90,7 @@ export const useWorkbenchStore = defineStore('workbench', {
         templateId,
         theme: {
           color: '#2563eb',
-          fontFamily: 'sans-serif',
+          fontFamily: RECOMMENDED_FONT_FAMILY,
           fontSize: 14,
           lineHeight: 1.5,
           moduleMargins: {
@@ -141,10 +142,12 @@ export const useWorkbenchStore = defineStore('workbench', {
         ...JSON.parse(JSON.stringify(source)) as ResumeData,
         id,
         title: title.trim() || source.title || '导入的简历',
-        templateId: ['modern', 'professional', 'creative', 'minimal', 'tech'].includes(templateId) ? templateId : 'modern',
+        templateId: ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'].includes(templateId) ? templateId : 'modern',
         theme: {
           color: source.theme?.color || '#2563eb',
-          fontFamily: source.theme?.fontFamily || 'sans-serif',
+          fontFamily: source.theme?.fontFamily && source.theme.fontFamily !== 'sans-serif'
+            ? source.theme.fontFamily
+            : RECOMMENDED_FONT_FAMILY,
           fontSize: source.theme?.fontSize || 14,
           lineHeight: source.theme?.lineHeight || 1.5,
           moduleMargins: { ...{ top: 0, bottom: 24, left: 0, right: 0 }, ...moduleMargins },

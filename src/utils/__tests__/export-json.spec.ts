@@ -12,6 +12,27 @@ describe('validateResumeData', () => {
     expect(validated.sectionOrder).toEqual(parsed.sectionOrder);
   });
 
+  it('preserves the AI Agent template when importing Markdown and JSON resume data', () => {
+    const imported = parseResumeMarkdown('---\ntemplate: ai-agent\n---\n# Jia').resume;
+    expect(imported.templateId).toBe('ai-agent');
+    expect(validateResumeData(imported).templateId).toBe('ai-agent');
+  });
+
+  it('preserves custom contact labels, values, and icons when importing JSON data', () => {
+    const parsed = parseResumeMarkdown('# Jia').resume;
+    const imported = validateResumeData({
+      ...parsed,
+      basic: {
+        ...parsed.basic,
+        customContacts: [{ id: 'contact-1', label: '微信', value: 'jia-dev', icon: 'ChatDotRound' }],
+      },
+    });
+
+    expect(imported.basic.customContacts).toEqual([
+      { id: 'contact-1', label: '微信', value: 'jia-dev', icon: 'ChatDotRound' },
+    ]);
+  });
+
   it('rejects malformed structures and sanitizes rich-text HTML', () => {
     const parsed = parseResumeMarkdown('# Jia\n\n## 工作经历\n### Acme | Engineer\n- Ship product').resume;
     const untrusted = {

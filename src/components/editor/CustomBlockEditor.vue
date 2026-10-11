@@ -1,8 +1,8 @@
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useResumeStore } from '@/stores/resume';
-import { Plus, Delete, Calendar, Edit } from '@element-plus/icons-vue';
+import { Delete, Calendar, Edit, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import type { CustomItem } from '@/types/resume';
 
@@ -17,6 +17,15 @@ const emit = defineEmits<{
 }>();
 
 const resumeStore = useResumeStore();
+const collapsedItemIds = ref<string[]>([]);
+
+const isItemCollapsed = (id: string) => collapsedItemIds.value.includes(id);
+
+const toggleItemCollapsed = (id: string) => {
+  collapsedItemIds.value = isItemCollapsed(id)
+    ? collapsedItemIds.value.filter(itemId => itemId !== id)
+    : [...collapsedItemIds.value, id];
+};
 
 // 判断是否为列表模式 (如果是数组，或者为空，或者用户选择了列表模式)
 const isListMode = computed(() => Array.isArray(props.modelValue));
@@ -61,6 +70,7 @@ const updateItem = (itemId: string, updates: Partial<CustomItem>) => {
 const removeItem = (itemId: string) => {
   resumeStore.removeCustomItem(props.id, itemId);
 };
+defineExpose({ addItem });
 </script>
 
 <template>
@@ -82,23 +92,42 @@ const removeItem = (itemId: string) => {
     <!-- 列表模式 -->
     <div v-else class="space-y-6">
       <div v-if="items.length === 0" class="resume-editor-empty">
-        <p class="text-gray-500 mb-4">暂无条目，您可以添加多个项目</p>
-        <el-button type="primary" :icon="Plus" @click="addItem">添加条目</el-button>
+        <p class="text-gray-500">暂无条目，您可以添加多个项目</p>
       </div>
 
-      <div v-for="(item, index) in items" :key="item.id" class="item-card resume-entry-card relative">
-        <!-- 删除按钮 -->
-        <el-button 
-          type="danger" 
-          link 
-          class="item-card__delete"
-          :icon="Delete"
-          aria-label="删除此条目"
-          title="删除此条目"
-          @click="removeItem(item.id)"
-        />
+      <div v-for="(item, index) in items" :key="item.id" class="item-card resume-entry-card relative" :class="{ 'is-collapsed': isItemCollapsed(item.id) }">
+        <div class="resume-entry-card__header">
+          <span class="text-sm text-gray-600">自定义条目 {{ index + 1 }}</span>
+          <div class="flex items-center gap-2">
+            <el-button
+              link
+              :type="item.visible === false ? 'info' : ''"
+              :icon="item.visible === false ? Hide : View"
+              :aria-label="item.visible === false ? '显示此条目' : '隐藏此条目'"
+              :title="item.visible === false ? '显示此条目' : '隐藏此条目'"
+              @click="updateItem(item.id, { visible: item.visible === false })"
+            />
+            <el-button
+              link
+              :icon="isItemCollapsed(item.id) ? ArrowDown : ArrowUp"
+              :aria-expanded="!isItemCollapsed(item.id)"
+              :aria-label="isItemCollapsed(item.id) ? '展开此条目' : '折叠此条目'"
+              :title="isItemCollapsed(item.id) ? '展开此条目' : '折叠此条目'"
+              @click="toggleItemCollapsed(item.id)"
+            />
+            <el-button
+              type="danger"
+              link
+              :icon="Delete"
+              aria-label="删除此条目"
+              title="删除此条目"
+              @click="removeItem(item.id)"
+            />
+          </div>
+        </div>
 
-        <div class="space-y-3 pr-8">
+        <div v-show="!isItemCollapsed(item.id)" class="item-card__body">
+          <div class="space-y-3">
           <!-- 标题行 -->
           <div class="item-heading-fields grid grid-cols-2 gap-3">
             <el-input 
@@ -140,14 +169,10 @@ const removeItem = (itemId: string) => {
               placeholder="请输入详细描述..."
             />
           </div>
+          </div>
         </div>
       </div>
 
-      <div v-if="items.length > 0" class="text-center">
-        <el-button type="primary" plain :icon="Plus" class="w-full" @click="addItem">
-          添加新条目
-        </el-button>
-      </div>
     </div>
 
     <!-- 永久删除按钮 -->

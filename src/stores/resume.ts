@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { ResumeData, BasicInfo, Experience, Education, Skill, CustomBlock, Project, ResumeMeta, ThemeConfig, CustomItem } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { generateId } from '@/utils/helpers';
+import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 
 // 默认简历数据
 const getDefaultResumeData = (): ResumeData => ({
@@ -21,7 +22,7 @@ const getDefaultResumeData = (): ResumeData => ({
   templateId: 'modern',
   theme: {
     color: '#2563eb', // blue-600
-    fontFamily: 'sans-serif',
+    fontFamily: RECOMMENDED_FONT_FAMILY,
     fontSize: 14,
     lineHeight: 1.5,
     moduleMargins: {
@@ -165,6 +166,9 @@ export const useResumeStore = defineStore('resume', {
           theme: {
             ...defaults.theme,
             ...(resume.theme || {}),
+            fontFamily: resume.theme?.fontFamily === 'sans-serif'
+              ? defaults.theme.fontFamily
+              : resume.theme?.fontFamily || defaults.theme.fontFamily,
           },
           sectionTitles: {
             ...defaults.sectionTitles,

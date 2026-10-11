@@ -1,4 +1,11 @@
 // 基础信息
+export interface CustomContact {
+  id: string;
+  label: string;
+  value: string;
+  icon: string;
+}
+
 export interface BasicInfo {
   name: string;
   title: string;          // 求职意向
@@ -17,8 +24,9 @@ export interface BasicInfo {
     location?: string;
     website?: string;
   };
-}
+  customContacts?: CustomContact[];
 
+}
 // 工作经历
 export interface Experience {
   id: string;
@@ -28,6 +36,7 @@ export interface Experience {
   endDate: string | 'present';
   description: string;
   highlights?: string[];  // 亮点成就
+  visible?: boolean;       // 是否在简历预览和导出中显示，未设置时默认显示
 }
 
 // 教育背景
@@ -39,6 +48,7 @@ export interface Education {
   startDate: string;
   endDate: string;
   gpa?: string;
+  visible?: boolean;       // 是否在简历预览和导出中显示，未设置时默认显示
 }
 
 // 技能
@@ -47,6 +57,7 @@ export interface Skill {
   category: string;       // 分类（如：编程语言、框架）
   items: string[];        // 具体技能列表
   level?: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+  visible?: boolean;       // 是否在简历预览和导出中显示，未设置时默认显示
 }
 
 // 项目经验
@@ -59,8 +70,9 @@ export interface Project {
   description: string;
   link?: string;           // 项目链接
   techStack?: string[];    // 技术栈
-}
+  visible?: boolean;       // 是否在简历预览和导出中显示，未设置时默认显示
 
+}
 // 自定义模块
 export interface CustomBlock {
   id: string;
@@ -75,6 +87,7 @@ export interface CustomItem {
   title: string;       // 主标题 (如: 奖项名称)
   subtitle?: string;   // 副标题 (如: 颁奖机构)
   date?: string;       // 时间
+  visible?: boolean;       // 是否在简历预览和导出中显示，未设置时默认显示
   description: string; // 描述
 }
 

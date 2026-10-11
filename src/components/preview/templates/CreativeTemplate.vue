@@ -5,7 +5,7 @@
     '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
     '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
     padding: (data.theme?.pageMargins !== undefined ? data.theme.pageMargins : 24) + 'px',
-    fontFamily: data.theme?.fontFamily || 'sans-serif',
+    fontFamily: data.theme?.fontFamily || 'var(--resume-font-family)',
     fontSize: (data.theme?.fontSize || 14) + 'px',
     lineHeight: data.theme?.lineHeight || 1.6,
     '--primary-color': data.theme?.color || '#9333ea'
@@ -27,6 +27,14 @@
         <div class="flex justify-center gap-4 mt-4 text-sm text-gray-600">
           <span v-if="data.basic.email">{{ data.basic.email }}</span>
           <span v-if="data.basic.phone">{{ data.basic.phone }}</span>
+          <span
+            v-for="contact in data.basic.customContacts?.filter((item) => item.label || item.value) || []"
+            :key="contact.id"
+            class="inline-flex max-w-full items-center gap-1"
+          >
+            <ContactIcon v-if="data.theme.displayIcons !== false" type="custom" :icon="contact.icon" />
+            <span class="truncate"><span v-if="contact.label">{{ contact.label }}：</span>{{ contact.value }}</span>
+          </span>
         </div>
         <ResumeSmartFields :data="data" class="justify-center mt-3" />
       </div>
@@ -64,10 +72,10 @@
             @click.stop="setActiveSection(section)"
           >
             <!-- 工作经历 -->
-            <div v-if="section === 'experience' && data.experiences.length > 0" class="card bg-white rounded-xl shadow p-6">
+            <div v-if="section === 'experience' && data.experiences.some(exp => exp.visible !== false)" class="card bg-white rounded-xl shadow p-6">
               <h2 class="card-header text-xl font-bold mb-4" style="color: var(--primary-color)">💼 工作经历</h2>
               <div class="space-y-4">
-                <div v-for="exp in data.experiences" :key="exp.id" class="border-l-4 pl-4" style="border-color: var(--primary-color); opacity: 0.8">
+                <div v-for="exp in data.experiences.filter(exp => exp.visible !== false)" :key="exp.id" class="border-l-4 pl-4" style="border-color: var(--primary-color); opacity: 0.8">
                   <div class="flex justify-between items-start mb-1">
                     <h3 class="font-bold text-gray-900">{{ exp.company }}</h3>
                     <span class="text-xs text-gray-500">{{ formatDateRange(exp.startDate, exp.endDate) }}</span>
@@ -79,10 +87,10 @@
             </div>
 
             <!-- 项目经验 -->
-            <div v-else-if="section === 'projects' && data.projects.length > 0" class="card bg-white rounded-xl shadow p-6">
+            <div v-else-if="section === 'projects' && data.projects.some(project => project.visible !== false)" class="card bg-white rounded-xl shadow p-6">
               <h2 class="card-header text-xl font-bold mb-4" style="color: var(--primary-color)">🚀 项目经验</h2>
               <div class="space-y-4">
-                <div v-for="project in data.projects" :key="project.id" class="border-l-4 pl-4" style="border-color: var(--primary-color); opacity: 0.8">
+                <div v-for="project in data.projects.filter(project => project.visible !== false)" :key="project.id" class="border-l-4 pl-4" style="border-color: var(--primary-color); opacity: 0.8">
                   <div class="flex justify-between items-start mb-1">
                     <h3 class="font-bold text-gray-900">{{ project.name }}</h3>
                     <span class="text-xs text-gray-500">{{ formatDateRange(project.startDate, project.endDate) }}</span>
@@ -104,10 +112,10 @@
             </div>
 
             <!-- 教育背景 -->
-            <div v-else-if="section === 'education' && data.education.length > 0" class="card bg-white rounded-xl shadow p-6">
+            <div v-else-if="section === 'education' && data.education.some(edu => edu.visible !== false)" class="card bg-white rounded-xl shadow p-6">
               <h2 class="card-header text-xl font-bold mb-4" style="color: var(--primary-color)">🎓 教育背景</h2>
               <div class="space-y-3">
-                <div v-for="edu in data.education" :key="edu.id" class="border-l-4 pl-4" style="border-color: var(--primary-color); opacity: 0.8">
+                <div v-for="edu in data.education.filter(edu => edu.visible !== false)" :key="edu.id" class="border-l-4 pl-4" style="border-color: var(--primary-color); opacity: 0.8">
                   <h3 class="font-bold text-gray-900">{{ edu.school }}</h3>
                   <div class="text-sm text-gray-700">{{ edu.degree }} · {{ edu.major }}</div>
                 </div>
@@ -115,11 +123,11 @@
             </div>
 
             <!-- 技能 -->
-            <div v-else-if="section === 'skills' && data.skills.length > 0" class="card bg-white rounded-xl shadow p-6">
+            <div v-else-if="section === 'skills' && data.skills.some(skill => skill.visible !== false)" class="card bg-white rounded-xl shadow p-6">
               <h2 class="card-header text-xl font-bold mb-4" style="color: var(--primary-color)">⭐ 专业技能</h2>
               <div class="flex flex-wrap gap-2">
                 <span
-                  v-for="skill in data.skills.flatMap(s => s.items)"
+                  v-for="skill in data.skills.filter(skill => skill.visible !== false).flatMap(s => s.items)"
                   :key="skill"
                   class="px-3 py-1 rounded-full text-sm"
                   style="color: var(--primary-color); background: #fdf2f8; border: 1px solid var(--primary-color);"
@@ -157,6 +165,7 @@
 import { computed } from 'vue';
 import type { ResumeData } from '@/types/resume';
 import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
+import ContactIcon from '@/components/common/ContactIcon.vue';
 import draggable from 'vuedraggable';
 import { useResumeStore } from '@/stores/resume';
 
@@ -203,7 +212,10 @@ const sortedSections = computed({
 });
 
 const isCustomBlock = (id: string) => {
-  return !['experience', 'projects', 'education', 'skills'].includes(id);
+  if (['experience', 'projects', 'education', 'skills'].includes(id)) return false;
+  const block = props.data.customBlocks.find(b => b.id === id);
+  if (!block) return false;
+  return !Array.isArray(block.content) || block.content.length === 0 || block.content.some(item => item.visible !== false);
 };
 
 const getSectionTitle = (id: string) => {
@@ -218,7 +230,7 @@ const getCustomContent = (id: string) => {
 
 const getCustomItems = (id: string): import('@/types/resume').CustomItem[] => {
   const content = getCustomContent(id);
-  return Array.isArray(content) ? content : [];
+  return Array.isArray(content) ? content.filter(item => item.visible !== false) : [];
 };
 
 const setActiveSection = (id: string) => {

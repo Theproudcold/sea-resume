@@ -5,7 +5,7 @@
     '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
     '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
     padding: (data.theme?.pageMargins !== undefined ? data.theme.pageMargins : 24) + 'px',
-    fontFamily: data.theme?.fontFamily || 'sans-serif',
+    fontFamily: data.theme?.fontFamily || 'var(--resume-font-family)',
     fontSize: (data.theme?.fontSize || 14) + 'px',
     lineHeight: data.theme?.lineHeight || 1.6,
     '--primary-color': data.theme?.color || '#000000'
@@ -25,6 +25,14 @@
       <span v-if="data.basic.email">{{ data.basic.email }}</span>
       <span v-if="data.basic.phone">{{ data.basic.phone }}</span>
       <span v-if="data.basic.location">{{ data.basic.location }}</span>
+      <span
+        v-for="contact in data.basic.customContacts?.filter((item) => item.label || item.value) || []"
+        :key="contact.id"
+        class="inline-flex max-w-full items-center gap-1"
+      >
+        <ContactIcon v-if="data.theme.displayIcons !== false" type="custom" :icon="contact.icon" />
+        <span class="truncate"><span v-if="contact.label">{{ contact.label }}：</span>{{ contact.value }}</span>
+      </span>
       <ResumeSmartFields :data="data" class="justify-center mt-2" />
     </div>
 
@@ -57,10 +65,10 @@
           @click.stop="setActiveSection(section)"
         >
           <!-- 工作经历 -->
-          <section v-if="section === 'experience' && data.experiences.length > 0">
+          <section v-if="section === 'experience' && data.experiences.some(exp => exp.visible !== false)">
             <h2 class="section-header text-xs tracking-widest uppercase text-center mb-8 font-semibold">Experience</h2>
             <div class="space-y-8">
-              <div v-for="exp in data.experiences" :key="exp.id" class="text-center">
+              <div v-for="exp in data.experiences.filter(exp => exp.visible !== false)" :key="exp.id" class="text-center">
                 <h3 class="font-semibold text-lg mb-1">{{ exp.company }}</h3>
                 <div class="text-sm text-gray-600 mb-1">{{ exp.position }}</div>
                 <div class="text-xs text-gray-500 mb-3">{{ formatDateRange(exp.startDate, exp.endDate) }}</div>
@@ -70,10 +78,10 @@
           </section>
 
           <!-- 项目经验 -->
-          <section v-else-if="section === 'projects' && data.projects.length > 0">
+          <section v-else-if="section === 'projects' && data.projects.some(project => project.visible !== false)">
             <h2 class="section-header text-xs tracking-widest uppercase text-center mb-8 font-semibold">Projects</h2>
             <div class="space-y-8">
-              <div v-for="project in data.projects" :key="project.id" class="text-center">
+              <div v-for="project in data.projects.filter(project => project.visible !== false)" :key="project.id" class="text-center">
                 <h3 class="font-semibold text-lg mb-1">{{ project.name }}</h3>
                 <div class="text-sm text-gray-600 mb-1">{{ project.role }}</div>
                 <div class="text-xs text-gray-500 mb-3">{{ formatDateRange(project.startDate, project.endDate) }}</div>
@@ -86,10 +94,10 @@
           </section>
 
           <!-- 教育背景 -->
-          <section v-else-if="section === 'education' && data.education.length > 0">
+          <section v-else-if="section === 'education' && data.education.some(edu => edu.visible !== false)">
             <h2 class="section-header text-xs tracking-widest uppercase text-center mb-8 font-semibold">Education</h2>
             <div class="space-y-6">
-              <div v-for="edu in data.education" :key="edu.id" class="text-center">
+              <div v-for="edu in data.education.filter(edu => edu.visible !== false)" :key="edu.id" class="text-center">
                 <h3 class="font-semibold">{{ edu.school }}</h3>
                 <div class="text-sm text-gray-600">{{ edu.degree }} · {{ edu.major }}</div>
                 <div class="text-xs text-gray-500">{{ formatDateRange(edu.startDate, edu.endDate) }}</div>
@@ -98,10 +106,10 @@
           </section>
 
           <!-- 技能 -->
-          <section v-else-if="section === 'skills' && data.skills.length > 0">
+          <section v-else-if="section === 'skills' && data.skills.some(skill => skill.visible !== false)">
             <h2 class="section-header text-xs tracking-widest uppercase text-center mb-8 font-semibold">Skills</h2>
             <div class="text-center space-y-2">
-              <div v-for="skill in data.skills" :key="skill.id" class="text-sm">
+              <div v-for="skill in data.skills.filter(skill => skill.visible !== false)" :key="skill.id" class="text-sm">
                 <span class="font-medium">{{ skill.category }}</span>
                 <span class="text-gray-600"> · {{ skill.items.join(' · ') }}</span>
               </div>
@@ -133,6 +141,7 @@
 import { computed } from 'vue';
 import type { ResumeData } from '@/types/resume';
 import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
+import ContactIcon from '@/components/common/ContactIcon.vue';
 import draggable from 'vuedraggable';
 import { useResumeStore } from '@/stores/resume';
 
@@ -179,7 +188,10 @@ const sortedSections = computed({
 });
 
 const isCustomBlock = (id: string) => {
-  return !['experience', 'projects', 'education', 'skills'].includes(id);
+  if (['experience', 'projects', 'education', 'skills'].includes(id)) return false;
+  const block = props.data.customBlocks.find(b => b.id === id);
+  if (!block) return false;
+  return !Array.isArray(block.content) || block.content.length === 0 || block.content.some(item => item.visible !== false);
 };
 
 const getSectionTitle = (id: string) => {
@@ -194,7 +206,7 @@ const getCustomContent = (id: string) => {
 
 const getCustomItems = (id: string): import('@/types/resume').CustomItem[] => {
   const content = getCustomContent(id);
-  return Array.isArray(content) ? content : [];
+  return Array.isArray(content) ? content.filter(item => item.visible !== false) : [];
 };
 
 const setActiveSection = (id: string) => {

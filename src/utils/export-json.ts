@@ -26,6 +26,7 @@ export function validateResumeData(input: unknown): ResumeData {
   if (!isRecord(input.basic)) throw new Error('JSON 简历缺少个人信息。');
   const basic = input.basic;
   const experiences = normalizeRecords(input.experiences, 'experiences', ['company', 'position', 'description']);
+  const customContacts = normalizeRecords(basic.customContacts, 'basic.customContacts', ['label', 'value', 'icon']);
   const education = normalizeRecords(input.education, 'education', ['school', 'degree', 'major']);
   const projects = normalizeRecords(input.projects, 'projects', ['name', 'role', 'description']);
   const skills = normalizeRecords(input.skills, 'skills', ['category']);
@@ -53,6 +54,12 @@ export function validateResumeData(input: unknown): ResumeData {
       showAge: basic.showAge === true,
       showExperienceYears: basic.showExperienceYears === true,
       summary: basic.summary === undefined ? undefined : sanitizeRichTextHtml(text(basic.summary, 'basic.summary')),
+      customContacts: customContacts.map((item) => ({
+        id: text(item.id, 'basic.customContacts.id', generateId()),
+        label: text(item.label, 'basic.customContacts.label'),
+        value: text(item.value, 'basic.customContacts.value'),
+        icon: text(item.icon, 'basic.customContacts.icon'),
+      })),
     },
     experiences: experiences.map((item) => ({
       id: text(item.id, 'experiences.id', generateId()), company: text(item.company, 'experiences.company'),
@@ -98,7 +105,7 @@ export function validateResumeData(input: unknown): ResumeData {
         order: typeof item.order === 'number' ? item.order : 0,
       };
     }),
-    templateId: ['modern', 'professional', 'creative', 'minimal', 'tech'].includes(templateId) ? templateId : 'modern',
+    templateId: ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'].includes(templateId) ? templateId : 'modern',
     theme: {
       color: text(theme.color, 'theme.color', '#2563eb'), fontFamily: text(theme.fontFamily, 'theme.fontFamily', 'sans-serif'),
       fontSize: typeof theme.fontSize === 'number' ? theme.fontSize : 14,

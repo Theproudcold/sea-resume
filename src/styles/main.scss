@@ -5,6 +5,7 @@
 @tailwind utilities;
 
 :root {
+  --resume-font-family: #{$font-family-base};
   --ui-primary: #{$primary-color};
   --ui-primary-hover: #{$primary-hover};
   --ui-text-main: #{$text-main};
@@ -46,6 +47,11 @@
   --ui-font-xl: 24px;
   --ui-line-height: 1.5;
   --ui-control-height: 40px;
+  --ui-dialog-width-sm: min(440px, calc(100vw - 32px));
+  --ui-dialog-width-md: min(760px, calc(100vw - 32px));
+  --ui-dialog-width-lg: min(980px, calc(100vw - 32px));
+  --ui-dialog-width-xl: min(1100px, calc(100vw - 32px));
+  --ui-dialog-max-height: calc(100dvh - 48px);
   --el-dialog-border-radius: var(--ui-radius-lg);
   --el-dialog-bg-color: var(--ui-bg-elevated);
   --el-dialog-box-shadow: var(--ui-shadow-md);
@@ -101,14 +107,30 @@ body {
 }
 
 /* Shared application component surfaces. Resume templates keep their own document styles. */
+.el-overlay-dialog.is-align-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
 .el-dialog:not(.is-fullscreen) {
+  display: flex;
+  max-height: var(--ui-dialog-max-height);
+  flex-direction: column;
+  margin: 0 auto !important;
   overflow: hidden;
   border-radius: var(--ui-radius-lg);
 }
 
-.el-dialog__header {
+.el-dialog:not(.is-fullscreen) .el-dialog__header {
+  flex: 0 0 auto;
   padding: var(--ui-space-6) var(--ui-space-6) var(--ui-space-2) !important;
 }
+
+.el-dialog:not(.is-fullscreen) .el-dialog__headerbtn { top: 18px; right: 20px; }
 
 .el-dialog__title {
   color: var(--ui-text-main);
@@ -116,13 +138,20 @@ body {
   font-weight: 650;
 }
 
-.el-dialog__body {
+.el-dialog:not(.is-fullscreen) .el-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--ui-space-4) var(--ui-space-6) !important;
   color: var(--ui-text-main);
   line-height: var(--ui-line-height);
 }
 
-.el-dialog__footer {
-  padding: var(--ui-space-2) var(--ui-space-6) var(--ui-space-6) !important;
+.el-dialog:not(.is-fullscreen) .el-dialog__footer {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding: var(--ui-space-3) var(--ui-space-6) var(--ui-space-6) !important;
+  border-top: 1px solid var(--ui-border);
 }
 
 .el-form-item__label {
@@ -160,12 +189,16 @@ body {
 .el-dropdown-menu__item.danger-menu-item {
   color: var(--ui-danger);
 }
+/* Dropdown items already show keyboard focus with their highlighted row style. */
+.el-dropdown-menu__item:focus-visible {
+  outline: none;
+}
 @media (max-width: 768px) {
-  .el-dialog__header {
+  .el-dialog:not(.is-fullscreen) .el-dialog__header {
     padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-2) !important;
   }
 
-  .el-dialog__footer {
+  .el-dialog:not(.is-fullscreen) .el-dialog__footer {
     padding: var(--ui-space-2) var(--ui-space-4) var(--ui-space-4) !important;
   }
 
@@ -196,6 +229,32 @@ body {
   gap: var(--ui-space-3);
   padding-bottom: var(--ui-space-2);
   border-bottom: 1px solid var(--ui-border);
+}
+
+.resume-entry-card.is-collapsed {
+  margin-top: 0 !important;
+  margin-bottom: var(--ui-space-2);
+  padding: 6px var(--ui-space-4);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-bg-subtle);
+  box-shadow: none;
+}
+
+.resume-entry-card.is-collapsed .resume-entry-card__header {
+  min-height: 40px;
+  padding: 0 4px;
+  border: 0;
+}
+
+.resume-entry-card.is-collapsed .resume-entry-card__header > span {
+  color: var(--ui-text-secondary);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.resume-entry-card.is-collapsed .resume-entry-card__header > div {
+  gap: var(--ui-space-2);
 }
 
 .item-card__delete {

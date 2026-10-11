@@ -5,7 +5,7 @@ export type ResumeAiOperation =
   | { type: 'update_education'; id: string; field: 'school' | 'degree' | 'major' | 'startDate' | 'endDate' | 'gpa'; value: string }
   | { type: 'update_skill'; id: string; field: 'category' | 'items'; value: string | string[] }
   | { type: 'update_custom_block'; id: string; field: 'title' | 'content'; value: string }
-  | { type: 'set_template'; templateId: 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' }
+  | { type: 'set_template'; templateId: 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' | 'ai-agent' }
   | { type: 'reorder_sections'; sectionOrder: string[] };
 
 export interface ResumeAiDraft {

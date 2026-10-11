@@ -12,6 +12,12 @@ describe('resume AI tools', () => {
     expect(() => parseResumeAiDraft({ operations: [{ type: 'set_basic', field: 'id', value: 'another' }] })).toThrow('不允许');
   });
 
+  it('allows the AI Agent template in AI template operations', () => {
+    const draft = parseResumeAiDraft({ operations: [{ type: 'set_template', templateId: 'ai-agent' }] });
+    const updated = applyResumeAiOperations(resume, draft.operations);
+    expect(updated.templateId).toBe('ai-agent');
+  });
+
   it('applies edits to a clone and rejects missing targets and unsafe links', () => {
     const originalSummary = resume.basic.summary;
     const updated = applyResumeAiOperations(resume, [{ type: 'set_basic', field: 'summary', value: '保持事实，不编造。' }]);

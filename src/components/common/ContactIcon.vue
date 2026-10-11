@@ -13,7 +13,7 @@ import { computed } from 'vue';
 import * as Icons from '@element-plus/icons-vue';
 
 const props = defineProps<{
-  type: 'email' | 'phone' | 'location' | 'website' | 'github';
+  type: 'email' | 'phone' | 'location' | 'website' | 'github' | 'custom';
   icon?: string; // Icon component name override
   size?: number | string;
 }>();
@@ -25,6 +25,7 @@ const defaultIcons = {
   location: 'Location',
   website: 'Monitor',
   github: 'Platform',
+  custom: 'Link',
 };
 
 const defaultEmojis = {
@@ -33,6 +34,7 @@ const defaultEmojis = {
   location: '📍',
   website: '🌐',
   github: '🔗',
+  custom: '🔗',
 };
 
 const DisplayIcon = computed(() => {

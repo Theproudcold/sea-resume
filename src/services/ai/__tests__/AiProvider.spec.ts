@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { requestResumeAiDraft } from '../AiProvider';
+import { listProviderModels, requestResumeAiDraft } from '../AiProvider';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -23,5 +23,22 @@ describe('AI provider privacy', () => {
     const userPayload = JSON.parse(payload.messages[1]?.content || '{}') as { selectedResume: { basic: Record<string, unknown> } };
     expect(userPayload.selectedResume.basic.birthDate).toBeUndefined();
     expect(resume.basic.birthDate).toBe('1990-01-02');
+  });
+  it('fetches and sorts models from an OpenAI-compatible models endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ id: 'model-z' }, { id: 'model-a' }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(listProviderModels('https://api.example.com/v1', 'test-key')).resolves.toEqual(['model-a', 'model-z']);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.example.com/v1/models');
+    expect(new Headers(init.headers).get('Authorization')).toBe('Bearer test-key');
+  });
+
+  it('explains that models may need to be entered manually when listing is blocked', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await expect(listProviderModels('https://api.example.com/v1', 'test-key')).rejects.toThrow('浏览器跨域限制');
   });
 });

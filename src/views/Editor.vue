@@ -12,42 +12,55 @@
         :title="privacyMode ? '匿名简历' : (data.title || '简历编辑')"
         subtitle="编辑与预览"
         show-back
+        back-label="简历工作台"
+        inline-toolbar
+        :editable-title="!privacyMode"
         @back="handleBack"
+        @update:title="handleResumeTitleUpdate"
       >
         <template #context>
           <div class="editor-status" aria-live="polite">
             <el-tag v-if="saveStatus === 'saving'" effect="plain">保存中…</el-tag>
             <el-tag v-else-if="saveStatus === 'error'" type="danger" effect="plain" :title="saveError || ''">保存失败</el-tag>
             <el-tag v-else type="success" effect="plain">已保存</el-tag>
-            <el-button v-if="saveStatus === 'error'" size="small" type="danger" plain @click="retrySave">重试保存</el-button>
             <el-tag v-if="privacyMode" type="warning" effect="plain">预览及打印已脱敏</el-tag>
+            <el-button v-if="saveStatus === 'error'" size="small" type="danger" plain @click="retrySave">重试</el-button>
           </div>
         </template>
-        <template #actions>
-          <el-button type="primary" plain :disabled="privacyMode" @click="showAiAssistant = true">AI 助手</el-button>
-          <el-button :type="privacyMode ? 'warning' : 'default'" plain @click="togglePrivacyMode">{{ privacyMode ? '关闭隐私打码' : '隐私打码' }}</el-button>
-          <el-button text :disabled="!canUndo" aria-label="撤销" title="撤销 (Ctrl/⌘+Z)" @click="undoEdit">撤销</el-button>
-          <el-button text :disabled="!canRedo" aria-label="重做" title="重做 (Ctrl/⌘+Shift+Z)" @click="redoEdit">重做</el-button>
-          <el-button plain @click="showQualityPanel = true">质量检查 {{ qualityIssues.length }}</el-button>
-          <el-button plain @click="showShortcutHelp = true">快捷键</el-button>
-          <el-button v-if="aiUndoSnapshot" text type="primary" @click="undoAiChanges">撤销 AI 修改</el-button>
-          <el-button @click="showFullscreen = true" :icon="FullScreen">全屏预览</el-button>
-          <el-button @click="goToTemplates" :icon="Grid">模板选择</el-button>
-          <el-dropdown @command="handleCommand">
-            <el-button type="primary">
-              导入与导出<el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="import"><el-icon><Upload /></el-icon>从 JSON 恢复为副本</el-dropdown-item>
-                <el-dropdown-item command="pdf"><el-icon><Document /></el-icon>导出为 PDF</el-dropdown-item>
-                <el-dropdown-item command="image"><el-icon><Picture /></el-icon>导出为图片</el-dropdown-item>
-                <el-dropdown-item command="json"><el-icon><Folder /></el-icon>导出为 JSON</el-dropdown-item>
-                <el-dropdown-item command="markdown"><el-icon><Document /></el-icon>导出为 Markdown</el-dropdown-item>
-                <el-dropdown-item command="reset" divided class="danger-menu-item"><el-icon><RefreshRight /></el-icon>重置当前简历</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+        <template #toolbar>
+          <div class="editor-toolbar">
+            <el-button link :disabled="!canUndo" aria-label="撤销" title="撤销 (Ctrl/⌘+Z)" @click="undoEdit">撤销</el-button>
+            <el-button link :disabled="!canRedo" aria-label="重做" title="重做 (Ctrl/⌘+Shift+Z)" @click="redoEdit">重做</el-button>
+            <el-button link :disabled="privacyMode" @click="showAiAssistant = true">AI 助手</el-button>
+            <el-dropdown @command="handleHeaderMenuCommand">
+              <el-button link>更多<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="privacy">{{ privacyMode ? '关闭隐私打码' : '隐私打码' }}</el-dropdown-item>
+                  <el-dropdown-item command="quality">质量检查 {{ qualityIssues.length }}</el-dropdown-item>
+                  <el-dropdown-item command="shortcuts">快捷键</el-dropdown-item>
+                  <el-dropdown-item command="fullscreen"><el-icon><FullScreen /></el-icon>全屏预览</el-dropdown-item>
+                  <el-dropdown-item command="templates"><el-icon><Grid /></el-icon>模板选择</el-dropdown-item>
+                  <el-dropdown-item v-if="aiUndoSnapshot" command="undo-ai">撤销 AI 修改</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-dropdown @command="handleCommand">
+              <el-button type="primary">导出<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="pdf"><el-icon><Document /></el-icon>导出为 PDF（与预览一致）</el-dropdown-item>
+                  <el-dropdown-item command="searchable-pdf"><el-icon><Document /></el-icon>导出可搜索 PDF（独立排版）</el-dropdown-item>
+                  <el-dropdown-item command="print"><el-icon><Document /></el-icon>打印预览…</el-dropdown-item>
+                  <el-dropdown-item command="image"><el-icon><Picture /></el-icon>导出为图片</el-dropdown-item>
+                  <el-dropdown-item command="json"><el-icon><Folder /></el-icon>导出为 JSON</el-dropdown-item>
+                  <el-dropdown-item command="markdown"><el-icon><Document /></el-icon>导出为 Markdown</el-dropdown-item>
+                  <el-dropdown-item command="import" divided><el-icon><Upload /></el-icon>导入 JSON 副本</el-dropdown-item>
+                  <el-dropdown-item command="reset" divided class="danger-menu-item"><el-icon><RefreshRight /></el-icon>重置当前简历</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </AppHeader>
 
@@ -61,7 +74,7 @@
       </div>
 
       <div class="editor-container">
-        <EditorPanel class="no-print" :class="{ 'mobile-hidden': activeTab === 'preview', 'privacy-hidden': privacyMode }" />
+        <EditorPanel :key="String(route.params.id)" :preview-navigation-key="previewNavigationKey" class="no-print" :class="{ 'mobile-hidden': activeTab === 'preview', 'privacy-hidden': privacyMode }" />
         <PreviewPanel :privacy-mode="privacyMode" :class="{ 'mobile-hidden': activeTab === 'edit' }" />
       </div>
 
@@ -86,9 +99,13 @@
         @update:visible="showAiAssistant = $event"
         @apply="applyAiChanges"
         @undo="undoAiChanges"
+        @configure="openAiSettings"
       />
+      <el-dialog v-model="showAiSettings" title="AI 模型配置" width="var(--ui-dialog-width-md)" align-center class="app-dialog ai-model-dialog">
+        <AiProviderSettingsPanel @saved="handleAiSettingsSaved" />
+      </el-dialog>
       <ResumeQualityPanel v-model="showQualityPanel" :issues="qualityIssues" @navigate="jumpToQualitySection" />
-      <el-dialog v-model="showShortcutHelp" title="编辑快捷键" width="min(420px, calc(100vw - 32px))">
+      <el-dialog v-model="showShortcutHelp" title="编辑快捷键" width="var(--ui-dialog-width-sm)" align-center>
         <ul class="shortcut-list">
           <li><kbd>Ctrl / ⌘ + S</kbd><span>立即保存</span></li>
           <li><kbd>Ctrl / ⌘ + Z</kbd><span>撤销</span></li>
@@ -109,6 +126,7 @@ import { useResumeStore } from '@/stores/resume';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { getTemplateComponent } from '@/components/preview/template-registry';
 import { exportToImage } from '@/utils/export-image';
+import { exportPreviewToPDF, exportToPDF } from '@/utils/export-pdf';
 import { exportToJSON, importFromJSON } from '@/utils/export-json';
 import { resumeToMarkdown, downloadMarkdown } from '@/utils/markdown/exportResumeMarkdown';
 import AppHeader from '@/components/common/AppHeader.vue';
@@ -119,6 +137,7 @@ import type { ResumeData } from '@/types/resume';
 import type { ResumeAiOperation } from '@/types/ai';
 import { applyResumeAiOperations } from '@/services/ai/resumeTools';
 import AiAssistantPanel from '@/components/editor/AiAssistantPanel.vue';
+import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
 import { createPrivacyMaskedResume } from '@/utils/privacyMask';
 import ResumeQualityPanel from '@/components/editor/ResumeQualityPanel.vue';
 import { checkResumeQuality } from '@/utils/resumeQuality';
@@ -133,11 +152,20 @@ const { data, saveStatus, saveError, canUndo, canRedo } = storeToRefs(resumeStor
 const loading = ref(true);
 const showFullscreen = ref(false);
 const activeTab = ref<'edit' | 'preview'>('edit');
+const previewNavigationKey = ref(0);
+
 const showAiAssistant = ref(false);
+const showAiSettings = ref(false);
 const aiUndoSnapshot = ref<ResumeData | null>(null);
 const privacyMode = ref(false);
 const showQualityPanel = ref(false);
 const showShortcutHelp = ref(false);
+
+const unsubscribePreviewNavigation = resumeStore.$onAction(({ name }) => {
+  if (name !== 'setActiveSection' || activeTab.value !== 'preview' || privacyMode.value) return;
+  previewNavigationKey.value += 1;
+  activeTab.value = 'edit';
+});
 
 const previewData = computed(() => privacyMode.value ? createPrivacyMaskedResume(data.value) : data.value);
 const qualityIssues = computed(() => checkResumeQuality(data.value));
@@ -148,6 +176,16 @@ const togglePrivacyMode = () => {
     showAiAssistant.value = false;
   }
 };
+
+function openAiSettings() {
+  showAiAssistant.value = false;
+  showAiSettings.value = true;
+}
+
+function handleAiSettingsSaved() {
+  showAiSettings.value = false;
+  showAiAssistant.value = true;
+}
 
 
 const currentTemplate = computed(() => {
@@ -195,6 +233,8 @@ const onEditorKeydown = (event: KeyboardEvent) => {
 };
 onMounted(() => window.addEventListener('keydown', onEditorKeydown));
 onUnmounted(() => window.removeEventListener('keydown', onEditorKeydown));
+onUnmounted(unsubscribePreviewNavigation);
+
 
 const handleBack = () => {
   router.push('/');
@@ -252,7 +292,30 @@ async function jumpToQualitySection(section: 'basic' | 'experience' | 'projects'
     ?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
 }
 
-const handleCommand = async (type: 'pdf' | 'image' | 'json' | 'markdown' | 'print' | 'import' | 'reset') => {
+const handleResumeTitleUpdate = async (title: string) => {
+  const nextTitle = title.trim();
+  const resumeId = typeof route.params.id === 'string' ? route.params.id : '';
+  if (!nextTitle || !resumeId || nextTitle === data.value.title) return;
+
+  resumeStore.updateTitle(nextTitle);
+  try {
+    await resumeStore.autoSave();
+    await workbenchStore.renameResume(resumeId, nextTitle);
+  } catch (error) {
+    ElMessage.error(`简历名称保存失败：${error instanceof Error ? error.message : '未知错误'}`);
+  }
+};
+
+const handleHeaderMenuCommand = (command: string) => {
+  if (command === 'privacy') togglePrivacyMode();
+  else if (command === 'quality') showQualityPanel.value = true;
+  else if (command === 'shortcuts') showShortcutHelp.value = true;
+  else if (command === 'fullscreen') showFullscreen.value = true;
+  else if (command === 'templates') goToTemplates();
+  else if (command === 'undo-ai') void undoAiChanges();
+};
+
+const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' | 'markdown' | 'print' | 'import' | 'reset') => {
   if (type === 'import') {
     try {
       const imported = await importFromJSON();
@@ -287,22 +350,45 @@ const handleCommand = async (type: 'pdf' | 'image' | 'json' | 'markdown' | 'prin
     return;
   }
 
-  if (type === 'pdf' || type === 'print') {
-    ElMessage.info('请在打印面板选择“存储为 PDF”，并确认纸张为 A4。');
+  if (type === 'print') {
+    ElMessage.info('请在打印面板确认 A4 纸张和页边距设置。');
     window.print();
     return;
   }
 
   const loadingInstance = ElLoading.service({
     lock: true,
-    text: '正在处理...',
+    text: type === 'pdf' || type === 'searchable-pdf' ? '正在生成 PDF…' : '正在处理...',
     background: 'rgba(0, 0, 0, 0.7)',
   });
 
-  const filename = data.value.title || data.value.basic.name || 'resume';
+  const filename = type === 'pdf' || type === 'searchable-pdf'
+    ? previewData.value.title || previewData.value.basic.name || 'resume'
+    : data.value.title || data.value.basic.name || 'resume';
 
   try {
     switch (type) {
+      case 'pdf': {
+        const restoreEditorTab = activeTab.value === 'edit';
+        if (restoreEditorTab) {
+          activeTab.value = 'preview';
+          await nextTick();
+        }
+        try {
+          const pageCount = await exportPreviewToPDF('.resume-canvas', filename);
+          ElMessage.success(`PDF 已生成，共 ${pageCount} 页，版式与预览一致`);
+        } finally {
+          if (restoreEditorTab) {
+            activeTab.value = 'edit';
+            await nextTick();
+          }
+        }
+        break;
+      }
+      case 'searchable-pdf':
+        await exportToPDF(previewData.value, filename);
+        ElMessage.success('可搜索 PDF 已生成并下载');
+        break;
       case 'image':
         await exportToImage('.resume-canvas', filename, 'png');
         ElMessage.success('图片导出成功！');
@@ -314,7 +400,7 @@ const handleCommand = async (type: 'pdf' | 'image' | 'json' | 'markdown' | 'prin
     }
   } catch (error) {
     console.error('操作失败:', error);
-    ElMessage.error('操作失败，请重试');
+    ElMessage.error(type === 'pdf' || type === 'searchable-pdf' ? `PDF 导出失败：${error instanceof Error ? error.message : '未知错误'}` : `操作失败：${error instanceof Error ? error.message : '未知错误'}`);
   } finally {
     loadingInstance.close();
   }
@@ -413,7 +499,25 @@ const handleCommand = async (type: 'pdf' | 'image' | 'json' | 'markdown' | 'prin
   padding: 0;
   height: calc(100dvh - 54px);
 }
-.editor-status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.editor-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.editor-toolbar :deep(.el-button) {
+  margin-left: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .editor-toolbar {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+}
 .shortcut-list { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .shortcut-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .shortcut-list kbd { padding: 3px 7px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); background: var(--ui-bg-subtle); font-size: var(--ui-font-sm); }

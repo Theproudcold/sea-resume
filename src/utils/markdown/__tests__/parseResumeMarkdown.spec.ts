@@ -5,16 +5,16 @@ import { markdownToSafeHtml, sanitizeMarkdownUrl } from '../markdownSafety';
 import { resumeToMarkdown } from '../exportResumeMarkdown';
 
 const source = `---
-title: 于海波 - AI Agent 工程师
-name: 于海波
+title: 李明 - AI Agent 工程师
+name: 李明
 position: AI Agent 工程师
-email: hai.bo@example.com
-phone: +86 138-0013-8000
+email: liming@example.com
+phone: +86 138-0000-0000
 location: 北京
 source: personal-notes
 ---
-# 于海波 | AI Agent 工程师
-[GitHub](https://github.com/hypoy) · [博客](https://example.com/blog)
+# 李明 | AI Agent 工程师
+[GitHub](https://github.com/example-user) · [博客](https://example.com/blog)
 
 ## 个人概况
 专注于 **AI Agent** 和 TypeScript 工程化。
@@ -52,12 +52,12 @@ source: personal-notes
 describe('parseResumeMarkdown', () => {
   it('maps common resume fields and keeps unknown content', () => {
     const result = parseResumeMarkdown(source, 'resume.md');
-    expect(result.sourceTitle).toBe('于海波 - AI Agent 工程师');
-    expect(result.resume.basic.name).toBe('于海波');
+    expect(result.sourceTitle).toBe('李明 - AI Agent 工程师');
+    expect(result.resume.basic.name).toBe('李明');
     expect(result.resume.basic.title).toBe('AI Agent 工程师');
-    expect(result.resume.basic.email).toBe('hai.bo@example.com');
-    expect(result.resume.basic.phone).toContain('138-0013-8000');
-    expect(result.resume.basic.website).toBe('https://github.com/hypoy');
+    expect(result.resume.basic.email).toBe('liming@example.com');
+    expect(result.resume.basic.phone).toContain('138-0000-0000');
+    expect(result.resume.basic.website).toBe('https://github.com/example-user');
     expect(result.resume.experiences[0]).toMatchObject({ company: 'Sea Labs', position: 'AI Agent 工程师', startDate: '2022-09', endDate: 'present' });
     expect(result.resume.experiences[0]?.highlights).toContain('构建可观测的 Agent 平台');
     expect(result.resume.education[0]).toMatchObject({ school: '北京大学', degree: '硕士', major: '计算机科学', startDate: '2018-09', endDate: '2022-07' });
@@ -90,7 +90,7 @@ describe('parseResumeMarkdown', () => {
     const imported = parseResumeMarkdown(source).resume;
     const normalized = resumeToMarkdown(imported);
     const roundtrip = parseResumeMarkdown(normalized).resume;
-    expect(normalized).toContain('[https://github.com/hypoy](https://github.com/hypoy)');
+    expect(normalized).toContain('[https://github.com/example-user](https://github.com/example-user)');
     expect(roundtrip.basic.name).toBe(imported.basic.name);
     expect(roundtrip.basic.email).toBe(imported.basic.email);
     expect(roundtrip.experiences[0]?.company).toBe(imported.experiences[0]?.company);

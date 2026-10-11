@@ -2,7 +2,7 @@ import type { ResumeData } from '@/types/resume';
 import type { ResumeAiDraft, ResumeAiOperation } from '@/types/ai';
 import { markdownToSafeHtml, sanitizeMarkdownUrl } from '@/utils/markdown/markdownSafety';
 
-const templates = new Set(['modern', 'professional', 'creative', 'minimal', 'tech']);
+const templates = new Set(['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent']);
 const textFields: Record<string, string[]> = {
   set_basic: ['name', 'title', 'email', 'phone', 'location', 'website', 'summary'],
   update_experience: ['company', 'position', 'startDate', 'endDate', 'description', 'highlights'],
@@ -41,7 +41,7 @@ export function parseResumeAiDraft(input: unknown): ResumeAiDraft {
     const type = operation.type;
     if (type === 'set_template') {
       if (typeof operation.templateId !== 'string' || !templates.has(operation.templateId)) throw new Error('AI 请求了不支持的模板。');
-      return { type: 'set_template', templateId: operation.templateId as 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' };
+      return { type: 'set_template', templateId: operation.templateId as 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' | 'ai-agent' };
     }
     if (type === 'reorder_sections') {
       if (!Array.isArray(operation.sectionOrder) || operation.sectionOrder.length > 30 || operation.sectionOrder.some((id) => typeof id !== 'string')) throw new Error('AI 请求的章节顺序无效。');

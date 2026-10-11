@@ -8,7 +8,7 @@
     '--line-height': data.theme?.lineHeight || 1.4,
     '--primary-color': data.theme?.color || '#1a1a1a',
     padding: (data.theme?.pageMargins !== undefined ? data.theme.pageMargins : 24) + 'px',
-    fontFamily: data.theme?.fontFamily || 'serif',
+    fontFamily: data.theme?.fontFamily || 'var(--resume-font-family)',
     fontSize: 'var(--font-size)',
     lineHeight: 'var(--line-height)',
     color: '#333'
@@ -41,19 +41,27 @@
               <ContactIcon v-if="data.theme.displayIcons !== false" type="website" :icon="data.basic.iconOverrides?.website" class="shrink-0" :size="14" style="color: var(--primary-color)" />
               <a :href="data.basic.website" target="_blank" class="break-all hover:text-blue-600 transition-colors">{{ data.basic.website }}</a>
             </div>
+            <div
+              v-for="contact in data.basic.customContacts?.filter((item) => item.label || item.value) || []"
+              :key="contact.id"
+              class="flex min-w-0 items-center gap-2"
+            >
+              <ContactIcon v-if="data.theme.displayIcons !== false" type="custom" :icon="contact.icon" class="shrink-0" :size="14" style="color: var(--primary-color)" />
+              <span class="min-w-0 truncate"><span v-if="contact.label">{{ contact.label }}：</span>{{ contact.value }}</span>
+            </div>
             <ResumeSmartFields :data="data" />
           </div>
         </div>
 
         <!-- 技能 -->
         <div 
-          v-if="data.skills.length > 0" 
+          v-if="data.skills.some(skill => skill.visible !== false)"
           class="mb-8 cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-offset-2 rounded transition-all p-1"
           @click.stop="setActiveSection('skills')"
         >
           <h2 class="text-base font-bold text-gray-900 mb-3 border-b-2 pb-1" style="border-color: var(--primary-color)">专业技能</h2>
           <div class="space-y-3">
-            <div v-for="skill in data.skills" :key="skill.id">
+            <div v-for="skill in data.skills.filter(skill => skill.visible !== false)" :key="skill.id">
               <div class="font-medium text-gray-800 mb-1" style="font-size: var(--font-size)">{{ skill.category }}</div>
               <div class="text-gray-600 leading-relaxed" style="font-size: var(--font-size); line-height: var(--line-height)">
                 {{ skill.items.join('、') }}
@@ -64,13 +72,13 @@
 
          <!-- 教育背景 -->
         <div 
-          v-if="data.education.length > 0"
+          v-if="data.education.some(edu => edu.visible !== false)"
           class="cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-offset-2 rounded transition-all p-1"
           @click.stop="setActiveSection('education')"
         >
           <h2 class="text-base font-bold text-gray-900 mb-3 border-b-2 pb-1" style="border-color: var(--primary-color)">教育背景</h2>
           <div class="space-y-4">
-            <div v-for="edu in data.education" :key="edu.id">
+            <div v-for="edu in data.education.filter(edu => edu.visible !== false)" :key="edu.id">
               <div class="font-bold text-gray-800" style="font-size: var(--font-size)">{{ edu.school }}</div>
               <div class="text-gray-600 mb-1" style="font-size: var(--font-size)">{{ edu.degree }} · {{ edu.major }}</div>
               <div class="text-gray-500 text-xs">{{ formatDateRange(edu.startDate, edu.endDate) }}</div>
@@ -111,10 +119,10 @@
               @click.stop="setActiveSection(section)"
             >
               <!-- 工作经历 -->
-              <div v-if="section === 'experience' && data.experiences.length > 0">
+              <div v-if="section === 'experience' && data.experiences.some(exp => exp.visible !== false)">
                 <h2 class="text-lg font-bold text-gray-900 mb-3 border-b-2 pb-1" style="border-color: var(--primary-color)">工作经历</h2>
                 <div class="space-y-6" style="gap: var(--spacing); display: flex; flex-direction: column;">
-                  <div v-for="exp in data.experiences" :key="exp.id">
+                  <div v-for="exp in data.experiences.filter(exp => exp.visible !== false)" :key="exp.id">
                     <div class="flex justify-between items-baseline mb-1">
                       <h3 class="font-bold text-gray-800" style="font-size: calc(var(--font-size) + 2px)">{{ exp.company }}</h3>
                       <span class="text-sm text-gray-500">{{ formatDateRange(exp.startDate, exp.endDate) }}</span>
@@ -126,10 +134,10 @@
               </div>
 
               <!-- 项目经验 -->
-              <div v-else-if="section === 'projects' && data.projects.length > 0">
+              <div v-else-if="section === 'projects' && data.projects.some(project => project.visible !== false)">
                 <h2 class="text-lg font-bold text-gray-900 mb-3 border-b-2 pb-1" style="border-color: var(--primary-color)">项目经验</h2>
                 <div class="space-y-6" style="gap: var(--spacing); display: flex; flex-direction: column;">
-                  <div v-for="project in data.projects" :key="project.id">
+                  <div v-for="project in data.projects.filter(project => project.visible !== false)" :key="project.id">
                     <div class="flex justify-between items-baseline mb-1">
                       <h3 class="font-bold text-gray-800" style="font-size: calc(var(--font-size) + 2px)">{{ project.name }}</h3>
                       <span class="text-xs text-gray-600">{{ formatDateRange(project.startDate, project.endDate) }}</span>
@@ -241,7 +249,10 @@ const sortedMainSections = computed({
 });
 
 const isCustomBlock = (id: string) => {
-  return !['experience', 'projects', 'education', 'skills'].includes(id);
+  if (['experience', 'projects', 'education', 'skills'].includes(id)) return false;
+  const block = props.data.customBlocks.find(b => b.id === id);
+  if (!block) return false;
+  return !Array.isArray(block.content) || block.content.length === 0 || block.content.some(item => item.visible !== false);
 };
 
 const getSectionTitle = (id: string) => {
@@ -256,7 +267,7 @@ const getCustomContent = (id: string) => {
 
 const getCustomItems = (id: string): import('@/types/resume').CustomItem[] => {
   const content = getCustomContent(id);
-  return Array.isArray(content) ? content : [];
+  return Array.isArray(content) ? content.filter(item => item.visible !== false) : [];
 };
 
 const setActiveSection = (id: string) => {

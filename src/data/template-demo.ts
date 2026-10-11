@@ -1,4 +1,5 @@
 import type { ResumeData } from '@/types/resume';
+import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 
 export const templateDemoData: ResumeData = {
   id: 'demo-template-modern',
@@ -96,7 +97,7 @@ export const templateDemoData: ResumeData = {
   templateId: 'modern',
   theme: {
     color: '#2563eb',
-    fontFamily: 'sans-serif',
+    fontFamily: RECOMMENDED_FONT_FAMILY,
     fontSize: 14,
     lineHeight: 1.6,
     moduleMargins: { top: 0, bottom: 24, left: 0, right: 0 },

@@ -1,6 +1,6 @@
 # Template Gallery Enhancement Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For contributors:** Follow this historical implementation checklist task-by-task; steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a production-ready template gallery with live demo-data thumbnails, full preview dialogs, category/search/sort controls, explicit template-use flows, and recent-use sorting without polluting resume storage responsibilities.
 
@@ -8,14 +8,17 @@
 
 **Tech Stack:** Vue 3 SFCs, TypeScript, Pinia, Vue Router, Element Plus, Vitest, Vue Test Utils, jsdom
 
----
+## Current status (2026-10-10)
 
-## Preconditions
+- The template-gallery implementation is already present on `master`; the checklist below is the original execution recipe, not a live progress tracker. Its unchecked steps should not be read as proof that the feature is unfinished.
+- Verified with Node.js 22.19.0: `pnpm test` passes (26 test files, 71 tests) and `pnpm build` passes. Use the current full-suite commands rather than the historical focused command below, whose test paths no longer all exist.
+- Browser/manual route and mobile regression checks remain unverified. The built-in Browser could not become visible because this session was not in the foreground; rerun those checks from the foreground session before claiming visual acceptance.
 
-- Current workspace is **not** a clean baseline. `pnpm build` currently fails before any template-gallery work with a syntax error in `src/views/Workbench.vue:257-264`.
-- There are unrelated local modifications in several files that this feature may also touch (`src/components/common/AppHeader.vue`, `src/views/Editor.vue`, `src/types/resume.ts`, multiple template components, etc.). Do **not** revert or overwrite them. Read current diffs and integrate carefully.
-- Prefer executing this plan in a dedicated worktree or isolated branch. If execution must happen in the current workspace, stop and ask the user before editing any file whose local diff is unrelated to template-gallery behavior.
-- Do not commit `.superpowers/` artifacts.
+## Historical preconditions (when this plan was written)
+
+- The original plan recorded a baseline syntax error in `src/views/Workbench.vue:257-264`; it is no longer present, and the current build passes under the supported Node.js version.
+- At the time this plan was written, the tracked worktree was clean; local generated files were kept separate from source changes.
+- Keep transient local brainstorming files out of commits.
 
 ## File Map
 
@@ -823,7 +826,7 @@ git commit -m "feat: wire route-aware template gallery flows"
 ## Task 6: Final Verification and Safe Handoff
 
 **Files:**
-- Modify: `docs/superpowers/plans/2026-03-30-template-gallery-implementation.md` (checkboxes only)
+- Modify: `docs/template-gallery/implementation-plan.md` (checkboxes only)
 
 - [ ] **Step 1: Run the focused automated test suite**
 

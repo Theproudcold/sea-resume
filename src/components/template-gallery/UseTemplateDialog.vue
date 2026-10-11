@@ -2,7 +2,8 @@
   <el-dialog
     :model-value="visible"
     title="使用模板"
-    width="min(420px, calc(100vw - 32px))"
+    width="var(--ui-dialog-width-sm)"
+    align-center
     class="use-template-dialog-shell"
     @update:model-value="emit('update:visible', $event)"
   >

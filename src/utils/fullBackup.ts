@@ -129,6 +129,16 @@ function validateResumeData(value: unknown, index: number): asserts value is Res
     const overrides = requireRecord(basic.iconOverrides, `${path}.basic.iconOverrides`);
     for (const [key, entry] of Object.entries(overrides)) requireString(entry, `${path}.basic.iconOverrides.${key}`);
   }
+  if (basic.customContacts !== undefined) {
+    if (!Array.isArray(basic.customContacts) || basic.customContacts.length > 100) {
+      throw new Error(`Full backup field "${path}.basic.customContacts" must be an array with at most 100 items.`);
+    }
+    basic.customContacts.forEach((entry, index) => {
+      const itemPath = `${path}.basic.customContacts[${index}]`;
+      const contact = requireRecord(entry, itemPath);
+      for (const field of ['id', 'label', 'value', 'icon']) requireString(contact[field], `${itemPath}.${field}`);
+    });
+  }
 
   const experienceFields = ['id', 'company', 'position', 'startDate', 'endDate', 'description'];
   const educationFields = ['id', 'school', 'degree', 'major', 'startDate', 'endDate'];

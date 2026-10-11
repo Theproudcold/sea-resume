@@ -2,7 +2,8 @@
   <el-dialog
     :model-value="modelValue"
     title="全量备份与恢复"
-    width="min(860px, calc(100vw - 32px))"
+    width="var(--ui-dialog-width-lg)"
+    align-center
     destroy-on-close
     @update:model-value="emit('update:modelValue', $event)"
   >

@@ -19,7 +19,7 @@
             v-for="template in displayTemplates"
             :key="template.id"
             :template="template"
-            :demo-data="previewData"
+            :demo-data="demoResumeData"
             @preview="openPreview(template.id)"
           />
         </div>
@@ -195,7 +195,7 @@ const handleBack = () => {
 }
 
 .template-gallery__inner {
-  max-width: 1200px;
+  max-width: var(--ui-content-max-width);
   margin: 0 auto;
   display: flex;
   flex-direction: column;

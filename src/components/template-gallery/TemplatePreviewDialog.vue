@@ -2,9 +2,8 @@
   <el-dialog
     :model-value="visible"
     :title="template?.name || '模板预览'"
-    width="min(1100px, calc(100vw - 32px))"
-    top="2vh"
-    class="preview-template-dialog"
+    width="var(--ui-dialog-width-xl)"
+    align-center
     @close="$emit('update:visible', false)"
   >
     <div v-if="template" class="preview-dialog">

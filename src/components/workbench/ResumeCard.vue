@@ -11,9 +11,10 @@
       @keyup.space="$emit('click')"
     >
       <!-- 缩略图 -->
-      <div class="thumbnail">
-        <div class="placeholder">
-          <el-icon :size="48"><Document /></el-icon>
+      <div class="thumbnail" aria-hidden="true">
+        <ResumeCoverPreview v-if="resumeData" :data="resumeData" />
+        <div v-else class="placeholder">
+          {{ previewLoading ? '正在加载简历预览…' : '暂时无法显示预览' }}
         </div>
       </div>
 
@@ -57,9 +58,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
-import { Document, MoreFilled, Edit, EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
-import type { ResumeMeta } from '@/types/resume';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { MoreFilled, Edit, EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
+import type { ResumeData, ResumeMeta } from '@/types/resume';
+import { storageManager } from '@/services/storage/StorageManager';
+import ResumeCoverPreview from './ResumeCoverPreview.vue';
 import { formatDate } from '@/utils/helpers';
 
 const props = defineProps<{
@@ -74,6 +77,29 @@ const emit = defineEmits<{
   duplicate: [];
   delete: [];
 }>();
+
+const resumeData = ref<ResumeData | null>(null);
+const previewLoading = ref(false);
+let previewReadGeneration = 0;
+
+watch(() => [props.resume.id, props.resume.updatedAt] as const, async ([resumeId]) => {
+  const generation = ++previewReadGeneration;
+  resumeData.value = null;
+  previewLoading.value = true;
+
+  try {
+    const loadedResume = await storageManager.read(resumeId);
+    if (generation === previewReadGeneration) resumeData.value = loadedResume;
+  } catch {
+    if (generation === previewReadGeneration) resumeData.value = null;
+  } finally {
+    if (generation === previewReadGeneration) previewLoading.value = false;
+  }
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  previewReadGeneration++;
+});
 
 const templateName = computed(() => {
   const names: Record<string, string> = {
@@ -150,18 +176,23 @@ const handleCommand = (command: string) => {
 }
 
 .thumbnail {
+  position: relative;
   width: 100%;
   aspect-ratio: 210 / 297;
   background: var(--ui-bg-subtle);
   border-radius: var(--ui-radius-md);
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .placeholder {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ui-space-4);
   color: var(--ui-text-secondary);
+  font-size: var(--ui-font-sm);
+  text-align: center;
 }
 
 .info {

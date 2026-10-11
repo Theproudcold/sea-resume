@@ -202,6 +202,59 @@
         />
       </el-form-item>
 
+      <el-form-item label="自定义联系方式">
+        <div class="custom-contact-list">
+          <div v-for="contact in localBasic.customContacts || []" :key="contact.id" class="custom-contact-card">
+            <div class="custom-contact-row">
+              <el-input
+                v-model="contact.label"
+                maxlength="30"
+                placeholder="名称，如：微信"
+                @input="handleUpdate"
+              />
+              <el-popover placement="bottom" :width="220" trigger="click">
+                <template #reference>
+                  <el-button
+                    link
+                    size="small"
+                    :icon="Icons[(contact.icon || 'Link') as keyof typeof Icons]"
+                    :aria-label="`${contact.label || '自定义联系方式'}图标`"
+                  />
+                </template>
+                <div class="grid grid-cols-5 gap-2">
+                  <button
+                    v-for="icon in customContactIcons"
+                    :key="icon"
+                    type="button"
+                    class="icon-option-button"
+                    :class="{ 'is-active': contact.icon === icon }"
+                    :aria-label="`联系方式图标 ${icon}`"
+                    :aria-pressed="contact.icon === icon"
+                    @click="updateCustomContactIcon(contact, icon)"
+                  >
+                    <el-icon><component :is="Icons[icon as keyof typeof Icons]" /></el-icon>
+                  </button>
+                </div>
+              </el-popover>
+              <el-button
+                text
+                type="danger"
+                :icon="Delete"
+                :aria-label="`删除${contact.label || '自定义联系方式'}`"
+                @click="removeCustomContact(contact.id)"
+              />
+            </div>
+            <el-input
+              v-model="contact.value"
+              maxlength="200"
+              placeholder="填写联系方式内容"
+              @input="handleUpdate"
+            />
+          </div>
+          <el-button text type="primary" :icon="Plus" @click="addCustomContact">添加联系方式</el-button>
+        </div>
+      </el-form-item>
+
       <el-form-item label="个人简介">
         <RichTextEditor
           :model-value="localBasic.summary || ''"
@@ -216,20 +269,27 @@
 import { ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
-import { Plus, Edit } from '@element-plus/icons-vue';
+import { Plus, Edit, Delete } from '@element-plus/icons-vue';
 import * as Icons from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
-import type { BasicInfo } from '@/types/resume';
+import type { BasicInfo, CustomContact } from '@/types/resume';
+import { generateId } from '@/utils/helpers';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const localBasic = ref<BasicInfo>({ ...data.value.basic });
+const copyBasicInfo = (basic: BasicInfo): BasicInfo => ({
+  ...basic,
+  iconOverrides: basic.iconOverrides ? { ...basic.iconOverrides } : undefined,
+  customContacts: basic.customContacts?.map((contact) => ({ ...contact })),
+});
+
+const localBasic = ref<BasicInfo>(copyBasicInfo(data.value.basic));
 
 // 监听 store 变化更新本地数据
 watch(() => data.value.basic, (newVal) => {
-  localBasic.value = { ...newVal };
+  localBasic.value = copyBasicInfo(newVal);
 }, { deep: true });
 
 const handleUpdate = () => {
@@ -271,11 +331,45 @@ const updateIcon = (field: 'email' | 'phone' | 'location' | 'website', icon: str
   localBasic.value.iconOverrides[field] = icon;
   handleUpdate();
 };
+
+const customContactIcons = ['Link', 'Message', 'ChatDotRound', 'ChatLineRound', 'Position', 'Promotion', 'Connection', 'User', 'Star', 'Monitor'];
+
+const addCustomContact = () => {
+  if (!localBasic.value.customContacts) localBasic.value.customContacts = [];
+  localBasic.value.customContacts.push({ id: generateId(), label: '', value: '', icon: 'Link' });
+  handleUpdate();
+};
+
+const removeCustomContact = (id: string) => {
+  localBasic.value.customContacts = (localBasic.value.customContacts || []).filter((contact) => contact.id !== id);
+  handleUpdate();
+};
+
+const updateCustomContactIcon = (contact: CustomContact, icon: string) => {
+  contact.icon = icon;
+  handleUpdate();
+};
 </script>
 
 <style scoped>
 .basic-info-editor {
   width: 100%;
+}
+.custom-contact-list {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 10px;
+}
+.custom-contact-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.custom-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .privacy-note {
   margin: 6px 0 0;

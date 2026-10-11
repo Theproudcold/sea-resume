@@ -1,8 +1,8 @@
 <template>
   <div :id="id" class="editor-section">
-    <div class="section-header" @click="toggleOpen">
+    <div class="section-header" :class="{ 'is-static': !collapsible }" @click="collapsible ? toggleOpen() : undefined">
       <div class="section-heading">
-        <el-icon class="drag-handle" title="拖动排序" @click.stop><Rank /></el-icon>
+        <el-icon v-if="showDragHandle" class="drag-handle" title="拖动排序" @click.stop><Rank /></el-icon>
         <el-icon v-if="icon" class="section-icon"><component :is="icon" /></el-icon>
         <div class="section-title-wrap" @click.stop>
           <div v-if="isEditingTitle" class="section-title-input">
@@ -23,8 +23,10 @@
         </div>
       </div>
 
-      <div class="section-actions" @click.stop>
+      <div v-if="showVisibility || removable || collapsible || $slots['header-actions']" class="section-actions" @click.stop>
+        <slot name="header-actions" />
         <el-button
+          v-if="showVisibility"
           link
           :type="visible ? '' : 'info'"
           :icon="visible ? View : Hide"
@@ -42,6 +44,7 @@
           @click="$emit('remove')"
         />
         <button
+          v-if="collapsible"
           type="button"
           class="section-toggle"
           :aria-expanded="isOpen"
@@ -64,14 +67,22 @@
 import { ref, nextTick, watch } from 'vue';
 import { Rank, ArrowDown, EditPen, Hide, View, Delete } from '@element-plus/icons-vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   id: string;
   title: string;
   isOpen: boolean;
   visible?: boolean;
   icon?: any;
   removable?: boolean;
-}>();
+  showDragHandle?: boolean;
+  showVisibility?: boolean;
+  collapsible?: boolean;
+}>(), {
+  removable: false,
+  showDragHandle: true,
+  showVisibility: true,
+  collapsible: true,
+});
 
 const emit = defineEmits<{
   'update:isOpen': [value: boolean];
@@ -137,6 +148,10 @@ const saveTitle = () => {
   background: var(--ui-bg-subtle);
   cursor: pointer;
   user-select: none;
+}
+
+.section-header.is-static {
+  cursor: default;
 }
 
 .section-heading,

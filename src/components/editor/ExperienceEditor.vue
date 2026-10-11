@@ -1,31 +1,37 @@
 <template>
   <div class="experience-editor space-y-4">
-    <div class="mb-4">
-      <el-button type="primary" size="small" @click="addNew" :icon="Plus">
-        添加工作经历
-      </el-button>
-    </div>
 
     <div v-if="experiences.length === 0" class="resume-editor-empty">
       <el-icon :size="48"><Briefcase /></el-icon>
       <p class="mt-2">暂无工作经历，点击上方按钮添加</p>
     </div>
 
-    <div v-for="(exp, index) in experiences" :key="exp.id" class="experience-item resume-entry-card">
+    <div v-for="(exp, index) in experiences" :key="exp.id" class="experience-item resume-entry-card" :class="{ 'is-collapsed': isCollapsed(exp.id) }">
       <div class="resume-entry-card__header">
         <span class="text-sm text-gray-600">工作经历 {{ index + 1 }}</span>
-        <el-button
-          type="danger"
-          size="small"
-          text
-          @click="removeItem(exp.id)"
-          :icon="Delete"
-        >
-          删除
-        </el-button>
+        <div class="flex items-center gap-2">
+          <el-button
+            link
+            :type="exp.visible === false ? 'info' : ''"
+            :icon="exp.visible === false ? Hide : View"
+            :aria-label="exp.visible === false ? '显示此工作经历' : '隐藏此工作经历'"
+            :title="exp.visible === false ? '显示此工作经历' : '隐藏此工作经历'"
+            @click="handleUpdate(exp.id, { visible: exp.visible === false })"
+          />
+          <el-button
+            link
+            :icon="isCollapsed(exp.id) ? ArrowDown : ArrowUp"
+            :aria-expanded="!isCollapsed(exp.id)"
+            :aria-label="isCollapsed(exp.id) ? '展开此工作经历' : '折叠此工作经历'"
+            :title="isCollapsed(exp.id) ? '展开此工作经历' : '折叠此工作经历'"
+            @click="toggleCollapsed(exp.id)"
+          />
+          <el-button type="danger" size="small" text @click="removeItem(exp.id)" :icon="Delete">删除</el-button>
+        </div>
       </div>
 
-      <el-form label-position="top">
+      <div v-show="!isCollapsed(exp.id)" class="experience-item__body">
+        <el-form label-position="top">
         <el-form-item label="公司名称" required>
           <el-input
             v-model="exp.company"
@@ -86,7 +92,8 @@
         </el-form-item>
       </el-form>
 
-      <el-divider v-if="index < experiences.length - 1" />
+        <el-divider v-if="index < experiences.length - 1" />
+      </div>
     </div>
   </div>
 </template>
@@ -95,7 +102,7 @@
 import { ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
-import { Plus, Delete, Briefcase } from '@element-plus/icons-vue';
+import { Delete, Briefcase, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import type { Experience } from '@/types/resume';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 
@@ -103,6 +110,15 @@ const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
 const experiences = ref<Experience[]>(JSON.parse(JSON.stringify(data.value.experiences)));
+const collapsedIds = ref<string[]>([]);
+
+const isCollapsed = (id: string) => collapsedIds.value.includes(id);
+
+const toggleCollapsed = (id: string) => {
+  collapsedIds.value = isCollapsed(id)
+    ? collapsedIds.value.filter(itemId => itemId !== id)
+    : [...collapsedIds.value, id];
+};
 
 watch(() => data.value.experiences, (newVal) => {
   experiences.value = JSON.parse(JSON.stringify(newVal));
@@ -125,4 +141,5 @@ const removeItem = (id: string) => {
 const handleUpdate = (id: string, updates: Partial<Experience>) => {
   resumeStore.updateExperience(id, updates);
 };
+defineExpose({ addNew });
 </script>

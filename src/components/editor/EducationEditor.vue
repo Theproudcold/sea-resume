@@ -1,31 +1,37 @@
 <template>
   <div class="education-editor space-y-4">
-    <div class="mb-4">
-      <el-button type="primary" size="small" @click="addNew" :icon="Plus">
-        添加教育背景
-      </el-button>
-    </div>
 
     <div v-if="education.length === 0" class="resume-editor-empty">
       <el-icon :size="48"><School /></el-icon>
       <p class="mt-2">暂无教育背景，点击上方按钮添加</p>
     </div>
 
-    <div v-for="(edu, index) in education" :key="edu.id" class="education-item resume-entry-card">
+    <div v-for="(edu, index) in education" :key="edu.id" class="education-item resume-entry-card" :class="{ 'is-collapsed': isCollapsed(edu.id) }">
       <div class="resume-entry-card__header">
         <span class="text-sm text-gray-600">教育背景 {{ index + 1 }}</span>
-        <el-button
-          type="danger"
-          size="small"
-          text
-          @click="removeItem(edu.id)"
-          :icon="Delete"
-        >
-          删除
-        </el-button>
+        <div class="flex items-center gap-2">
+          <el-button
+            link
+            :type="edu.visible === false ? 'info' : ''"
+            :icon="edu.visible === false ? Hide : View"
+            :aria-label="edu.visible === false ? '显示此教育经历' : '隐藏此教育经历'"
+            :title="edu.visible === false ? '显示此教育经历' : '隐藏此教育经历'"
+            @click="handleUpdate(edu.id, { visible: edu.visible === false })"
+          />
+          <el-button
+            link
+            :icon="isCollapsed(edu.id) ? ArrowDown : ArrowUp"
+            :aria-expanded="!isCollapsed(edu.id)"
+            :aria-label="isCollapsed(edu.id) ? '展开此教育经历' : '折叠此教育经历'"
+            :title="isCollapsed(edu.id) ? '展开此教育经历' : '折叠此教育经历'"
+            @click="toggleCollapsed(edu.id)"
+          />
+          <el-button type="danger" size="small" text @click="removeItem(edu.id)" :icon="Delete">删除</el-button>
+        </div>
       </div>
 
-      <el-form label-position="top">
+      <div v-show="!isCollapsed(edu.id)" class="education-item__body">
+        <el-form label-position="top">
         <el-form-item label="学校名称" required>
           <el-input
             v-model="edu.school"
@@ -96,7 +102,8 @@
         </el-form-item>
       </el-form>
 
-      <el-divider v-if="index < education.length - 1" />
+        <el-divider v-if="index < education.length - 1" />
+      </div>
     </div>
   </div>
 </template>
@@ -105,13 +112,22 @@
 import { ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
-import { Plus, Delete, School } from '@element-plus/icons-vue';
+import { Delete, School, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import type { Education } from '@/types/resume';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
 const education = ref<Education[]>(JSON.parse(JSON.stringify(data.value.education)));
+const collapsedIds = ref<string[]>([]);
+
+const isCollapsed = (id: string) => collapsedIds.value.includes(id);
+
+const toggleCollapsed = (id: string) => {
+  collapsedIds.value = isCollapsed(id)
+    ? collapsedIds.value.filter(itemId => itemId !== id)
+    : [...collapsedIds.value, id];
+};
 
 watch(() => data.value.education, (newVal) => {
   education.value = JSON.parse(JSON.stringify(newVal));
@@ -134,4 +150,5 @@ const removeItem = (id: string) => {
 const handleUpdate = (id: string, updates: Partial<Education>) => {
   resumeStore.updateEducation(id, updates);
 };
+defineExpose({ addNew });
 </script>

@@ -112,7 +112,8 @@
     <div class="form-item">
       <label class="block text-sm font-medium text-gray-700 mb-2">字体系列</label>
       <el-select v-model="data.theme.fontFamily" @change="handleUpdate" class="w-full">
-        <el-option label="默认 (Sans Serif)" value="sans-serif" />
+        <el-option label="推荐：Noto Sans SC + Inter" :value="RECOMMENDED_FONT_FAMILY" />
+        <el-option label="系统无衬线" value="sans-serif" />
         <el-option label="衬线体 (Serif)" value="serif" />
         <el-option label="等宽体 (Monospace)" value="monospace" />
       </el-select>
@@ -134,6 +135,7 @@ import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
+import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 import type { ThemeConfig } from '@/types/resume';
 import { estimateA4PageCount, getCompactThemeSettings } from '@/utils/pageFit';
 

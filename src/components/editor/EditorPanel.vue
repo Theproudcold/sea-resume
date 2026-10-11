@@ -1,109 +1,168 @@
 <template>
   <div class="editor-panel">
-    <el-scrollbar height="100%">
-      <div class="editor-content p-6">
-        <SectionQuickNav :sections="quickNavSections" :active-id="resumeStore.activeSection" @navigate="jumpToSection" />
-        <!-- 基础信息 (固定) -->
-        <el-collapse v-model="fixedActiveNames" class="space-y-4 mb-4">
-          <el-collapse-item name="theme">
-            <template #title>
-              <div class="flex items-center gap-2">
-                <el-icon><Brush /></el-icon>
-                <span class="font-semibold">主题设置</span>
-              </div>
-            </template>
-            <ThemeEditor />
-          </el-collapse-item>
+    <aside class="editor-sidebar" aria-label="简历模块导航">
+      <div class="sidebar-brand">
+        <span class="sidebar-eyebrow">编辑工作区</span>
+        <span class="sidebar-title">简历内容</span>
+      </div>
 
-          <el-collapse-item id="editor-section-basic" name="basic">
-            <template #title>
-              <div class="flex items-center gap-2">
-                <el-icon><User /></el-icon>
-                <span class="font-semibold">基础信息</span>
-              </div>
-            </template>
-            <BasicInfoEditor />
-          </el-collapse-item>
-        </el-collapse>
+      <nav class="sidebar-fixed" aria-label="固定编辑设置">
+        <button
+          type="button"
+          class="sidebar-fixed-item"
+          :class="{ 'is-active': selectedSectionId === 'theme' }"
+          @click="selectSection('theme')"
+        >
+          <el-icon><Brush /></el-icon>
+          <span>主题设置</span>
+        </button>
+        <button
+          type="button"
+          class="sidebar-fixed-item"
+          :class="{ 'is-active': selectedSectionId === 'basic' }"
+          @click="selectSection('basic')"
+        >
+          <el-icon><User /></el-icon>
+          <span>基础信息</span>
+        </button>
+      </nav>
 
-        <el-divider content-position="center">模块排序与内容</el-divider>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-section-heading">
+        <span>简历模块</span>
+        <span class="sidebar-count">{{ sectionsList.length }}</span>
+      </div>
 
-        <!-- 可排序模块 -->
-        <p v-if="isDraggingSections" class="reorder-status" role="status">正在调整顺序，松开后会自动保存。</p>
+      <div class="sidebar-list-scroll">
         <draggable
           v-model="sectionsList"
           item-key="id"
           handle=".drag-handle"
-          :animation="200"
+          :animation="180"
           group="sections"
-          class="space-y-4"
-          aria-label="拖动章节手柄调整顺序"
+          class="sidebar-section-list"
+          aria-label="拖动模块调整顺序"
           :class="{ 'is-reordering': isDraggingSections }"
           @start="isDraggingSections = true"
           @end="isDraggingSections = false"
         >
           <template #item="{ element }">
-            <EditorSection
-              :id="`editor-section-${element.id}`"
-              :title="getSectionTitle(element.id)"
-              :is-open="isSectionOpen(element.id)"
-              :visible="!isSectionHidden(element.id)"
-              :icon="element.icon"
-              :removable="true"
-              @update:is-open="(val) => setSectionOpen(element.id, val)"
-              @update:title="(val) => updateTitle(element.id, val)"
-              @toggle-visibility="toggleVisibility(element.id)"
-              @remove="removeBlock(element.id)"
-            >
-              <!-- 动态加载组件 -->
-              <component 
-                :is="element.component" 
-                v-if="!isCustomBlock(element.id)"
-              />
-              <CustomBlockEditor
-                v-else
-                :id="element.id"
-                :model-value="getCustomContent(element.id)"
-                @update:model-value="(val) => updateCustomContent(element.id, val)"
-                @delete="deleteBlock(element.id)"
-              />
-            </EditorSection>
+            <div class="sidebar-section-item" :class="{ 'is-active': selectedSectionId === element.id }">
+              <el-icon class="drag-handle" title="拖动排序"><Rank /></el-icon>
+              <button type="button" class="sidebar-section-button" @click="selectSection(element.id)">
+                <el-icon><component :is="element.icon" /></el-icon>
+                <span>{{ getSectionTitle(element.id) }}</span>
+              </button>
+              <div class="sidebar-section-actions">
+                <el-button
+                  link
+                  :type="isSectionHidden(element.id) ? 'info' : ''"
+                  :icon="isSectionHidden(element.id) ? Hide : View"
+                  :aria-label="isSectionHidden(element.id) ? '显示模块' : '隐藏模块'"
+                  :title="isSectionHidden(element.id) ? '显示模块' : '隐藏模块'"
+                  @click.stop="toggleVisibility(element.id)"
+                />
+                <el-button
+                  link
+                  type="danger"
+                  :icon="Delete"
+                  aria-label="移除模块"
+                  title="移除模块"
+                  @click.stop="removeBlock(element.id)"
+                />
+              </div>
+            </div>
           </template>
         </draggable>
-
-        <!-- 添加模块按钮 -->
-        <div class="mt-6 text-center">
-          <el-dropdown trigger="click" class="w-full" @command="(cmd: string) => cmd === 'create_new' ? createCustomBlock() : addExistingSection(cmd)">
-            <el-button :icon="Plus" dashed class="w-full">
-              添加模块
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <!-- 可用的模块 (标准 + 隐藏的自定义) -->
-                <el-dropdown-item 
-                  v-for="section in availableSections" 
-                  :key="section.id" 
-                  :command="section.id"
-                >
-                  <div class="flex items-center justify-between w-full gap-2">
-                    <span>添加 {{ section.name }}</span>
-                    <el-tag v-if="section.isCustom" size="small" type="info" effect="plain">自定义</el-tag>
-                  </div>
-                </el-dropdown-item>
-                
-                <el-dropdown-item v-if="availableSections.length > 0" divided disabled />
-                
-                <!-- 创建新模块 -->
-                <el-dropdown-item command="create_new">
-                  <el-icon><Plus /></el-icon> 创建新模块
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-        </div>
-        
       </div>
-    </el-scrollbar>
+
+      <div class="sidebar-footer">
+        <el-dropdown trigger="click" class="sidebar-add-dropdown" @command="(cmd: string) => cmd === 'create_new' ? createCustomBlock() : addExistingSection(cmd)">
+          <el-button class="sidebar-add-button" :icon="Plus">添加模块</el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item v-for="section in availableSections" :key="section.id" :command="section.id">
+                <div class="flex items-center justify-between w-full gap-2">
+                  <span>添加 {{ section.name }}</span>
+                  <el-tag v-if="section.isCustom" size="small" type="info" effect="plain">自定义</el-tag>
+                </div>
+              </el-dropdown-item>
+              <el-dropdown-item v-if="availableSections.length > 0" divided disabled />
+              <el-dropdown-item command="create_new"><el-icon><Plus /></el-icon>创建新模块</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+      </div>
+    </aside>
+
+    <main class="editor-main">
+      <el-scrollbar ref="editorScrollbar" height="100%">
+        <div class="editor-content">
+          <div class="editor-section-transition-shell">
+            <Transition name="editor-section-switch">
+              <div :key="selectedSectionId" class="editor-section-stage">
+                <section v-if="selectedSectionId === 'theme'" id="editor-section-theme" class="editor-settings-panel">
+                  <div class="editor-detail-heading">
+                    <div>
+                      <span class="editor-detail-eyebrow">外观</span>
+                      <h2>主题设置</h2>
+                    </div>
+                  </div>
+                  <ThemeEditor />
+                </section>
+
+                <section v-else-if="selectedSectionId === 'basic'" id="editor-section-basic" class="editor-settings-panel">
+                  <div class="editor-detail-heading">
+                    <div>
+                      <span class="editor-detail-eyebrow">简历内容</span>
+                      <h2>基础信息</h2>
+                    </div>
+                  </div>
+                  <BasicInfoEditor />
+                </section>
+
+                <EditorSection
+                  v-else-if="selectedSection"
+                  :id="`editor-section-${selectedSection.id}`"
+                  :title="getSectionTitle(selectedSection.id)"
+                  :is-open="true"
+                  :visible="!isSectionHidden(selectedSection.id)"
+                  :icon="selectedSection.icon"
+                  :show-drag-handle="false"
+                  :show-visibility="false"
+                  :removable="false"
+                  :collapsible="false"
+                  @update:title="(val) => updateTitle(selectedSection.id, val)"
+                >
+                  <template #header-actions>
+                    <el-button
+                      v-if="addActionLabel"
+                      type="primary"
+                      size="small"
+                      :icon="Plus"
+                      @click.stop="addSelectedEntry"
+                    >
+                      {{ addActionLabel }}
+                    </el-button>
+                  </template>
+                  <component :is="selectedSection.component" ref="selectedEditorRef" v-if="!isCustomBlock(selectedSection.id)" />
+                  <CustomBlockEditor
+                    v-else
+                    ref="selectedEditorRef"
+                    :id="selectedSection.id"
+                    :model-value="getCustomContent(selectedSection.id)"
+                    @update:model-value="(val) => updateCustomContent(selectedSection.id, val)"
+                    @delete="deleteBlock(selectedSection.id)"
+                  />
+                </EditorSection>
+
+                <el-empty v-else description="请选择或添加一个简历模块" />
+              </div>
+            </Transition>
+          </div>
+        </div>
+      </el-scrollbar>
+    </main>
   </div>
 </template>
 
@@ -111,7 +170,7 @@
 import { ref, computed, markRaw, watch, nextTick } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
-import { User, Briefcase, School, Star, Folder, Rank, Brush, Plus, Tickets } from '@element-plus/icons-vue';
+import { User, Briefcase, School, Star, Folder, Rank, Brush, Plus, Tickets, Hide, View, Delete } from '@element-plus/icons-vue';
 import draggable from 'vuedraggable';
 import BasicInfoEditor from './BasicInfoEditor.vue';
 import ThemeEditor from './ThemeEditor.vue';
@@ -121,74 +180,61 @@ import SkillEditor from './SkillEditor.vue';
 import ProjectEditor from './ProjectEditor.vue';
 import EditorSection from './EditorSection.vue';
 import CustomBlockEditor from './CustomBlockEditor.vue';
-import SectionQuickNav from './SectionQuickNav.vue';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-// 固定折叠面板状态
-const fixedActiveNames = ref(['basic']);
+const props = withDefaults(defineProps<{ previewNavigationKey?: number }>(), { previewNavigationKey: 0 });
+type EditorScrollbar = { scrollTo: (options: ScrollToOptions) => void };
+const editorScrollbar = ref<EditorScrollbar | null>(null);
 
-// 独立管理每个模块的展开状态
-const openSections = ref<Set<string>>(new Set(['experience']));
+const selectedSectionId = ref<string>(resumeStore.activeSection || data.value.sectionOrder[0] || 'basic');
 const isDraggingSections = ref(false);
 
-const isSectionOpen = (id: string) => openSections.value.has(id);
-const setSectionOpen = (id: string, isOpen: boolean) => {
-  const newSet = new Set(openSections.value);
-  if (isOpen) {
-    newSet.add(id);
-    resumeStore.setActiveSection(id); // 同步选中状态
-  } else {
-    newSet.delete(id);
-    if (resumeStore.activeSection === id) {
-      resumeStore.setActiveSection(null);
-    }
-  }
-  openSections.value = newSet;
+const selectSection = (id: string) => {
+  selectedSectionId.value = id;
+  resumeStore.setActiveSection(id);
 };
 
-// 监听 store 中的 activeSection 变化，自动展开对应模块
-watch(() => resumeStore.activeSection, (newId) => {
-  if (newId) {
-    // 如果是基础信息，展开 BasicInfo
-    if (newId === 'basic') {
-      fixedActiveNames.value = ['basic'];
-      return;
-    }
-    if (['experience', 'projects', 'education', 'skills'].includes(newId)
+watch(
+  [() => resumeStore.activeSection, () => props.previewNavigationKey],
+  async ([newId]) => {
+    if (!newId) return;
+    selectedSectionId.value = newId;
+    if (newId !== 'theme' && newId !== 'basic'
+      && ['experience', 'projects', 'education', 'skills'].includes(newId)
       && !data.value.sectionOrder.includes(newId)) {
       resumeStore.updateSectionOrder([...data.value.sectionOrder, newId]);
     }
-    const newSet = new Set(openSections.value);
-    newSet.add(newId);
-    openSections.value = newSet;
-    
-    // 滚动到对应位置 (可选优化)
-    setTimeout(() => {
-      const el = document.getElementById(`editor-section-${newId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 100);
-  }
-});
+    await nextTick();
+    const behavior = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+    editorScrollbar.value?.scrollTo({ top: 0, behavior });
+  },
+);
 
-const jumpToSection = async (id: string) => {
-  resumeStore.setActiveSection(id);
-  await nextTick();
-  window.setTimeout(() => {
-    document.getElementById(id === 'basic' ? 'editor-section-basic' : `editor-section-${id}`)
-      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, 120);
-};
 
 // 模块配置映射 (标准模块)
 const sectionConfig: Record<string, any> = {
-  experience: { defaultTitle: '工作经历', icon: markRaw(Briefcase), component: markRaw(ExperienceEditor) },
-  projects: { defaultTitle: '项目经验', icon: markRaw(Folder), component: markRaw(ProjectEditor) },
-  education: { defaultTitle: '教育背景', icon: markRaw(School), component: markRaw(EducationEditor) },
-  skills: { defaultTitle: '技能证书', icon: markRaw(Star), component: markRaw(SkillEditor) },
+  experience: { defaultTitle: '工作经历', addLabel: '添加工作经历', icon: markRaw(Briefcase), component: markRaw(ExperienceEditor) },
+  projects: { defaultTitle: '项目经验', addLabel: '添加项目经验', icon: markRaw(Folder), component: markRaw(ProjectEditor) },
+  education: { defaultTitle: '教育背景', addLabel: '添加教育背景', icon: markRaw(School), component: markRaw(EducationEditor) },
+  skills: { defaultTitle: '技能证书', addLabel: '添加技能分类', icon: markRaw(Star), component: markRaw(SkillEditor) },
+};
+const selectedEditorRef = ref<any>(null);
+
+const addActionLabel = computed(() => {
+  const standardSection = sectionConfig[selectedSectionId.value];
+  if (standardSection) return standardSection.addLabel;
+  return Array.isArray(getCustomContent(selectedSectionId.value)) ? '添加条目' : '';
+});
+
+const addSelectedEntry = () => {
+  const editor = selectedEditorRef.value;
+  if (sectionConfig[selectedSectionId.value]) {
+    editor?.addNew?.();
+    return;
+  }
+  editor?.addItem?.();
 };
 
 // 判断是否为自定义模块
@@ -240,8 +286,12 @@ const toggleVisibility = (id: string) => {
 
 // 移除模块 (仅从排序中移除，相当于隐藏)
 const removeBlock = (id: string) => {
-  const newOrder = data.value.sectionOrder.filter(lid => lid !== id);
+  const newOrder = data.value.sectionOrder.filter(sectionId => sectionId !== id);
   resumeStore.updateSectionOrder(newOrder);
+  if (selectedSectionId.value === id) {
+    const fallbackId = newOrder[0] || 'basic';
+    selectSection(fallbackId);
+  }
 };
 
 // 永久删除自定义模块
@@ -275,16 +325,9 @@ const availableSections = computed(() => {
   return [...standard, ...custom];
 });
 
-// 添加模块 (标准或已存在的自定义)
 const addExistingSection = (id: string) => {
-  const newOrder = [...data.value.sectionOrder, id];
-  resumeStore.updateSectionOrder(newOrder);
-  
-  // 自动展开
-  const newSet = new Set(openSections.value);
-  newSet.add(id);
-  openSections.value = newSet;
-  resumeStore.setActiveSection(id);
+  resumeStore.updateSectionOrder([...data.value.sectionOrder, id]);
+  selectSection(id);
 };
 
 // 创建新的自定义模块
@@ -319,62 +362,338 @@ const sectionsList = computed({
     resumeStore.updateSectionOrder(newOrder);
   }
 });
-const quickNavSections = computed(() => [
-  { id: 'basic', title: '基础信息' },
-  ...sectionsList.value.map((section) => ({ id: section.id, title: getSectionTitle(section.id) })),
-]);
+const selectedSection = computed(() => sectionsList.value.find(section => section.id === selectedSectionId.value));
 </script>
 
-<style scoped lang="scss">
-@use '@/styles/variables' as *;
-@use '@/styles/mixins' as *;
-
+<style scoped>
 .editor-panel {
-  width: 400px;
-  min-width: 0;
+  display: grid;
+  grid-template-columns: clamp(200px, 18vw, 272px) minmax(0, 1fr);
+  width: min(62vw, 1080px);
+  min-width: 620px;
+  max-width: 1080px;
   height: 100%;
-  flex: 0 0 400px;
-  background: $bg-white;
-  border-right: 1px solid $border-color;
+  flex: 0 1 62%;
   overflow: hidden;
+  border-right: 1px solid var(--ui-border);
+  background: var(--ui-bg-surface);
+}
 
-  @media (max-width: 1024px) {
-    width: 100%;
-    height: 100%;
-    flex: 1 1 auto;
-    border-right: none;
-    border-bottom: 1px solid $border-color;
-  }
+.editor-sidebar {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--ui-border);
+  background: var(--ui-bg-subtle);
+}
+
+.sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 20px 18px 14px;
+}
+
+.sidebar-eyebrow,
+.editor-detail-eyebrow {
+  color: var(--ui-text-muted);
+  font-size: var(--ui-font-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.sidebar-title {
+  color: var(--ui-text-main);
+  font-size: var(--ui-font-lg);
+  font-weight: 650;
+}
+
+.sidebar-fixed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 10px;
+}
+
+.sidebar-fixed-item {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-md);
+  background: transparent;
+  color: var(--ui-text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-fixed-item:hover,
+.sidebar-fixed-item.is-active {
+  border-color: color-mix(in srgb, var(--ui-primary) 20%, var(--ui-border));
+  background: var(--ui-bg-surface);
+  color: var(--ui-primary);
+}
+
+.sidebar-divider {
+  height: 1px;
+  margin: 14px 18px 10px;
+  background: var(--ui-border);
+}
+
+.sidebar-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px 8px;
+  color: var(--ui-text-muted);
+  font-size: var(--ui-font-xs);
+  font-weight: 600;
+}
+
+.sidebar-count {
+  color: var(--ui-text-faint);
+  font-weight: 500;
+}
+
+.sidebar-list-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 0 8px 12px;
+}
+
+.sidebar-section-list {
+  display: flex;
+  min-height: 8px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-section-item {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-md);
+  color: var(--ui-text-secondary);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sidebar-section-item:hover,
+.sidebar-section-item.is-active {
+  border-color: color-mix(in srgb, var(--ui-primary) 20%, var(--ui-border));
+  background: var(--ui-bg-surface);
+}
+
+.sidebar-section-item.is-active {
+  color: var(--ui-primary);
+}
+
+.sidebar-section-item .drag-handle {
+  flex: 0 0 20px;
+  justify-content: center;
+  color: var(--ui-text-faint);
+  cursor: grab;
+}
+
+.sidebar-section-button {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-section-button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-section-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.sidebar-section-actions :deep(.el-button) {
+  width: 28px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid var(--ui-border);
+}
+
+.sidebar-add-dropdown,
+.sidebar-add-button {
+  width: 100%;
+}
+
+.sidebar-add-button {
+  border-style: dashed;
+}
+
+.editor-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ui-bg-page);
 }
 
 .editor-content {
-  max-width: 100%;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 24px;
 }
 
-:deep(.el-collapse) {
-  border: none;
+.editor-section-transition-shell {
+  position: relative;
 }
 
-:deep(.el-collapse-item__header) {
-  height: auto;
-  padding: $spacing-sm $spacing-md;
-  background: var(--ui-bg-subtle);
-  border-radius: $border-radius-md;
-  border: none;
-  margin-bottom: $spacing-sm;
+.editor-section-switch-enter-active,
+.editor-section-switch-leave-active {
+  transition: opacity 160ms ease, transform 160ms ease;
 }
 
-:deep(.el-collapse-item__wrap) {
-  border: none;
+.editor-section-switch-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
-:deep(.el-collapse-item__content) {
-  padding: $spacing-md;
-  background: $bg-white;
-  border-radius: $border-radius-md;
-  border: 1px solid $border-color;
-  margin-bottom: $spacing-md;
+.editor-section-switch-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  pointer-events: none;
 }
-.reorder-status { margin: 0 0 10px; color: var(--ui-primary); font-size: var(--ui-font-sm); }
-.is-reordering { outline: 2px dashed var(--ui-primary); outline-offset: 4px; }
+
+.editor-section-switch-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+
+.editor-settings-panel {
+  padding: 24px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-bg-surface);
+}
+
+.editor-detail-heading {
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.editor-detail-heading h2 {
+  margin: 4px 0 0;
+  color: var(--ui-text-main);
+  font-size: var(--ui-font-lg);
+  font-weight: 650;
+}
+
+.editor-main :deep(.editor-section) {
+  margin-bottom: 0;
+}
+
+.is-reordering {
+  outline: 2px dashed var(--ui-primary);
+  outline-offset: 3px;
+}
+
+@media (max-width: 1024px) {
+  .editor-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--ui-border);
+  }
+}
+
+@media (max-width: 700px) {
+  .editor-panel {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .editor-sidebar {
+    max-height: 176px;
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--ui-border);
+  }
+
+  .sidebar-brand,
+  .sidebar-divider,
+  .sidebar-section-heading {
+    display: none;
+  }
+
+  .sidebar-fixed {
+    flex-direction: row;
+    padding: 8px 8px 4px;
+  }
+
+  .sidebar-fixed-item {
+    min-height: 36px;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .sidebar-list-scroll {
+    flex: 0 0 48px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 8px 6px;
+  }
+
+  .sidebar-section-list {
+    width: max-content;
+    min-height: 40px;
+    flex-direction: row;
+  }
+
+  .sidebar-section-item {
+    width: 156px;
+    min-height: 38px;
+    flex: 0 0 auto;
+  }
+
+  .sidebar-footer {
+    padding: 6px 10px 10px;
+    border-top: 0;
+  }
+
+  .editor-content {
+    padding: 14px;
+  }
+
+  .editor-settings-panel {
+    padding: 16px;
+  }
+}
 </style>

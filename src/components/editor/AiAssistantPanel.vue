@@ -10,32 +10,20 @@
     <div class="assistant-panel">
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>隐私说明</template>
-        <p>AI 服务由你配置。只有点击生成后，本简历的数据和你的指令才会发送到下方服务地址；出生日期不会随请求发送。API Key 仅保存在当前页面内存中，不会写入浏览器存储。</p>
+        <p>只有点击生成并确认后，当前简历内容和你的指令才会发送到配置的 AI 服务；出生日期不会随请求发送。API Key 只保存在本次页面会话。</p>
       </el-alert>
 
       <template v-if="!pendingDraft">
+        <div class="current-resume provider-summary">
+          <div class="provider-summary__details">
+            <span class="eyebrow">当前模型服务</span>
+            <strong>{{ providerLabel }}</strong>
+            <span>{{ modelSettings?.model || '尚未选择模型' }}</span>
+            <span class="provider-key-status" :class="{ 'is-ready': sessionKeyAvailable }">{{ sessionKeyAvailable ? 'API Key 已配置' : '需要配置 API Key' }}</span>
+          </div>
+          <el-button text type="primary" @click="emit('configure')">配置模型</el-button>
+        </div>
         <el-form label-position="top" class="provider-form">
-          <el-form-item label="服务商预设">
-            <el-select v-model="presetId" class="w-full" @change="applyProviderPreset">
-              <el-option v-for="preset in AI_PROVIDER_PRESETS" :key="preset.id" :label="preset.label" :value="preset.id" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="OpenAI-compatible 服务地址">
-            <el-input v-model="baseUrl" @input="presetId = 'custom'" placeholder="https://api.openai.com/v1" />
-          </el-form-item>
-          <el-form-item label="模型名称">
-            <el-input v-model="model" placeholder="gpt-4o-mini" />
-          </el-form-item>
-          <el-form-item label="配置记忆">
-            <div class="settings-actions">
-              <el-button size="small" @click="rememberProviderSettings">记住服务地址和模型</el-button>
-              <el-button size="small" text @click="forgetProviderSettings">清除已记住配置</el-button>
-            </div>
-            <p class="settings-note">只保存预设、服务地址和模型名称；API Key 不会保存。</p>
-          </el-form-item>
-          <el-form-item label="API Key（仅当前会话）">
-            <el-input v-model="apiKey" type="password" show-password autocomplete="off" placeholder="输入服务商 API Key" />
-          </el-form-item>
           <el-form-item label="希望 AI 如何修改？">
             <el-input v-model="instruction" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="例如：把个人简介调整得更精炼，保留原有事实；不要编造数据。" />
           </el-form-item>
@@ -80,11 +68,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
+import { computed, ref, watch } from 'vue';
 import type { ResumeData } from '@/types/resume';
 import type { ResumeAiDraft, ResumeAiOperation } from '@/types/ai';
-import { AI_PROVIDER_PRESETS, clearAiModelSettings, loadAiModelSettings, saveAiModelSettings, type AiModelSettings, type AiProviderPresetId } from '@/services/ai/AiSettings';
+import { AI_PROVIDER_PRESETS, getAiSessionApiKey, hasAiSessionApiKey, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import { requestResumeAiDraft } from '@/services/ai/AiProvider';
 
 const props = defineProps<{ visible: boolean; resume: ResumeData; undoAvailable: boolean }>();
@@ -92,77 +79,42 @@ const emit = defineEmits<{
   'update:visible': [visible: boolean];
   apply: [operations: ResumeAiOperation[]];
   undo: [];
+  configure: [];
 }>();
-const defaultPreset = AI_PROVIDER_PRESETS.find((preset) => preset.id === 'openai')!;
-const presetId = ref<AiProviderPresetId>(defaultPreset.id);
-const baseUrl = ref(defaultPreset.baseUrl);
-const apiKey = ref('');
-const model = ref(defaultPreset.model);
+const modelSettings = ref<AiModelSettings | null>(loadAiModelSettings());
+const sessionKeyAvailable = ref(hasAiSessionApiKey());
 const instruction = ref('');
 const consent = ref(false);
 const directApply = ref(false);
 const loading = ref(false);
 const errorMessage = ref('');
 const pendingDraft = ref<ResumeAiDraft | null>(null);
-const canRequest = computed(() => !!baseUrl.value.trim() && !!apiKey.value.trim() && !!model.value.trim() && !!instruction.value.trim() && consent.value && !loading.value);
-
-onMounted(() => {
-  const settings = loadAiModelSettings();
-  if (!settings) return;
-  presetId.value = settings.presetId;
-  baseUrl.value = settings.baseUrl;
-  model.value = settings.model;
-});
-
-function applyProviderPreset(id: AiProviderPresetId) {
-  presetId.value = id;
-  if (id === 'custom') {
-    baseUrl.value = '';
-    model.value = '';
-    return;
-  }
-  const preset = AI_PROVIDER_PRESETS.find((item) => item.id === id);
-  if (preset) {
-    baseUrl.value = preset.baseUrl;
-    model.value = preset.model;
-  }
-}
-
-function rememberProviderSettings() {
-  try {
-    const settings: AiModelSettings = { presetId: presetId.value, baseUrl: baseUrl.value.trim(), model: model.value.trim() };
-    saveAiModelSettings(settings);
-    ElMessage.success('已记住服务地址和模型（不含 API Key）');
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存 AI 配置失败。');
-  }
-}
-
-function forgetProviderSettings() {
-  clearAiModelSettings();
-  applyProviderPreset('openai');
-  ElMessage.success('已清除本地记忆的 AI 配置');
-}
-
+const providerLabel = computed(() => modelSettings.value?.profileName || AI_PROVIDER_PRESETS.find((preset) => preset.id === modelSettings.value?.presetId)?.label || '未配置');
+const canRequest = computed(() => !!modelSettings.value?.baseUrl.trim() && !!modelSettings.value?.model.trim() && sessionKeyAvailable.value && !!instruction.value.trim() && consent.value && !loading.value);
 
 watch(() => props.visible, (visible) => {
-  if (!visible) {
-    apiKey.value = '';
-    instruction.value = '';
-    consent.value = false;
-    directApply.value = false;
-    pendingDraft.value = null;
-    errorMessage.value = '';
+  if (visible) {
+    modelSettings.value = loadAiModelSettings();
+    sessionKeyAvailable.value = hasAiSessionApiKey();
+    return;
   }
-});
-onUnmounted(() => { apiKey.value = ''; });
+  instruction.value = '';
+  consent.value = false;
+  directApply.value = false;
+  pendingDraft.value = null;
+  errorMessage.value = '';
+}, { immediate: true });
 
 async function requestChanges() {
-  if (!canRequest.value) return;
+  if (!canRequest.value || !modelSettings.value) return;
   loading.value = true;
   errorMessage.value = '';
   try {
-    pendingDraft.value = await requestResumeAiDraft({ baseUrl: baseUrl.value, apiKey: apiKey.value, model: model.value }, props.resume, instruction.value);
+    pendingDraft.value = await requestResumeAiDraft({
+      baseUrl: modelSettings.value.baseUrl,
+      apiKey: getAiSessionApiKey(modelSettings.value.profileId),
+      model: modelSettings.value.model,
+    }, props.resume, instruction.value);
     if (directApply.value && pendingDraft.value) confirmApply();
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : 'AI 请求失败。';
@@ -170,7 +122,6 @@ async function requestChanges() {
     loading.value = false;
   }
 }
-
 function confirmApply() {
   if (!pendingDraft.value) return;
   emit('apply', pendingDraft.value.operations);
@@ -241,6 +192,24 @@ function describeOperation(operation: ResumeAiOperation): string {
   font-size: var(--ui-font-sm);
   overflow-wrap: anywhere;
 }
+
+.provider-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+}
+
+.provider-summary__details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.provider-summary__details strong { color: var(--ui-text-main); }
+.provider-key-status { color: var(--ui-warning); font-size: var(--ui-font-xs); }
+.provider-key-status.is-ready { color: var(--ui-success); }
 
 .request-button {
   width: 100%;
