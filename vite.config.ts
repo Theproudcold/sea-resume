@@ -3,7 +3,16 @@ import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
 // https://vite.dev/config/
+const repositoryName = process.env.GITHUB_REPOSITORY?.split('/').pop()
+const defaultBase =
+  process.env.GITHUB_ACTIONS === 'true' &&
+  repositoryName &&
+  !repositoryName.endsWith('.github.io')
+    ? `/${repositoryName}/`
+    : '/'
+
 export default defineConfig({
+  base: process.env.VITE_BASE_PATH || defaultBase,
   plugins: [vue()],
   test: {
     environment: 'jsdom',
