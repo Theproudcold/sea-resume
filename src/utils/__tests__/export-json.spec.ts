@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateResumeData } from '@/utils/export-json';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
+import { MAX_JSON_IMPORT_FILE_SIZE, validateJsonImportFileSize } from '@/utils/importLimits';
 
 describe('validateResumeData', () => {
   it('keeps valid resume data and fills compatible theme defaults', () => {
@@ -47,5 +48,11 @@ describe('validateResumeData', () => {
     expect(validated.basic.summary).not.toContain('<img');
     expect(validated.experiences[0]?.description).not.toContain('<iframe');
     expect(() => validateResumeData({ basic: {}, experiences: [null] })).toThrow();
+  });
+
+  it('enforces a shared JSON import size limit before reading files', () => {
+    expect(() => validateJsonImportFileSize(MAX_JSON_IMPORT_FILE_SIZE)).not.toThrow();
+    expect(() => validateJsonImportFileSize(MAX_JSON_IMPORT_FILE_SIZE + 1)).toThrow('不能超过 20 MB');
+    expect(() => validateJsonImportFileSize(Number.NaN)).toThrow('大小无效');
   });
 });

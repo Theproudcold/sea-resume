@@ -34,34 +34,35 @@ export class LocalStorageAdapter implements IStorageAdapter {
    * 获取所有简历的元数据列表
    */
   async list(): Promise<ResumeMeta[]> {
+    const indexJson = localStorage.getItem(INDEX_KEY);
+    if (indexJson === null) return [];
+
+    let value: unknown;
     try {
-      const indexJson = localStorage.getItem(INDEX_KEY);
-      if (!indexJson) {
-        return [];
-      }
-      const index: ResumeMeta[] = JSON.parse(indexJson);
-      // 按更新时间倒序排列
-      return index.sort((a, b) => b.updatedAt - a.updatedAt);
-    } catch (error) {
-      console.error('读取简历索引失败:', error);
-      return [];
+      value = JSON.parse(indexJson);
+    } catch {
+      throw new Error('读取简历索引失败：JSON 格式无效，数据未修改。');
     }
+    if (!Array.isArray(value) || value.some((item) =>
+      !item || typeof item !== 'object' || typeof item.id !== 'string' || !item.id
+      || typeof item.title !== 'string' || typeof item.templateId !== 'string'
+      || !Number.isFinite(item.updatedAt),
+    )) {
+      throw new Error('读取简历索引失败：索引格式无效，数据未修改。');
+    }
+    return (value as ResumeMeta[]).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   /**
    * 读取指定简历的完整数据
    */
   async read(id: string): Promise<ResumeData | null> {
+    const dataJson = localStorage.getItem(`${RESUME_KEY_PREFIX}${id}`);
+    if (dataJson === null) return null;
     try {
-      const key = `${RESUME_KEY_PREFIX}${id}`;
-      const dataJson = localStorage.getItem(key);
-      if (!dataJson) {
-        return null;
-      }
       return JSON.parse(dataJson) as ResumeData;
-    } catch (error) {
-      console.error(`读取简历 ${id} 失败:`, error);
-      return null;
+    } catch {
+      throw new Error(`读取简历 ${id} 失败：JSON 格式无效。`);
     }
   }
 
@@ -69,32 +70,36 @@ export class LocalStorageAdapter implements IStorageAdapter {
    * 保存简历数据和元数据
    */
   async save(data: ResumeData, meta: ResumeMeta): Promise<void> {
+    if (data.id !== meta.id) throw new Error('简历数据与元数据 ID 不一致。');
+    const key = `${RESUME_KEY_PREFIX}${data.id}`;
+    const previousData = localStorage.getItem(key);
     try {
-      // 1. 保存详情数据
-      const key = `${RESUME_KEY_PREFIX}${data.id}`;
-      localStorage.setItem(key, JSON.stringify(data));
-
-      // 2. 更新索引
       const index = await this.list();
       const existingIndex = index.findIndex((item) => item.id === data.id);
+      if (existingIndex >= 0) index[existingIndex] = meta;
+      else index.push(meta);
 
-      if (existingIndex >= 0) {
-        // 更新现有索引
-        index[existingIndex] = meta;
-      } else {
-        // 添加新索引
-        index.push(meta);
+      let detailWritten = false;
+      try {
+        localStorage.setItem(key, JSON.stringify(data));
+        detailWritten = true;
+        localStorage.setItem(INDEX_KEY, JSON.stringify(index));
+      } catch (error) {
+        if (detailWritten) {
+          try {
+            if (previousData === null) localStorage.removeItem(key);
+            else localStorage.setItem(key, previousData);
+          } catch (rollbackError) {
+            throw new Error(`保存失败且详情回滚未完成：${rollbackError instanceof Error ? rollbackError.message : '未知错误'}`);
+          }
+        }
+        throw error;
       }
-
-      localStorage.setItem(INDEX_KEY, JSON.stringify(index));
     } catch (error) {
       console.error(`保存简历 ${data.id} 失败:`, error);
-
-      // 检查是否是存储空间不足
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
         throw new Error('存储空间不足，请考虑切换到本地文件系统存储');
       }
-
       throw error;
     }
   }
@@ -104,19 +109,29 @@ export class LocalStorageAdapter implements IStorageAdapter {
    */
   async delete(id: string): Promise<void> {
     try {
-      // 1. 删除详情数据
-      const key = `${RESUME_KEY_PREFIX}${id}`;
-      localStorage.removeItem(key);
-
-      // 2. 从索引中移除
       const index = await this.list();
+      const key = `${RESUME_KEY_PREFIX}${id}`;
+      const previousData = localStorage.getItem(key);
       const newIndex = index.filter((item) => item.id !== id);
-      localStorage.setItem(INDEX_KEY, JSON.stringify(newIndex));
+      try {
+        localStorage.removeItem(key);
+        localStorage.setItem(INDEX_KEY, JSON.stringify(newIndex));
+      } catch (error) {
+        if (previousData !== null) {
+          try {
+            localStorage.setItem(key, previousData);
+          } catch (rollbackError) {
+            throw new Error(`删除失败且详情回滚未完成：${rollbackError instanceof Error ? rollbackError.message : '未知错误'}`);
+          }
+        }
+        throw error;
+      }
     } catch (error) {
       console.error(`删除简历 ${id} 失败:`, error);
       throw error;
     }
   }
+
 
   /**
    * 导出简历为 JSON Blob

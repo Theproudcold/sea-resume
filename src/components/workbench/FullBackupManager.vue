@@ -52,7 +52,7 @@ import { computed, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
-import { validateResumeData } from '@/utils/export-json';
+import { validateJsonImportFileSize, validateResumeData } from '@/utils/export-json';
 import { useWorkbenchStore } from '@/stores/workbench';
 import {
   parseFullBackup,
@@ -135,6 +135,7 @@ async function handleFileChange(event: Event) {
   backup.value = null;
   fileName.value = file.name;
   try {
+    validateJsonImportFileSize(file.size, '备份文件');
     const validated = parseFullBackup(await readTextFile(file));
     const existing = await readAllResumes();
     const conflictPreview = previewFullBackup(validated, existing);

@@ -1,6 +1,10 @@
 import type { ResumeData } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
+import { validateJsonImportFileSize } from '@/utils/importLimits';
 import { sanitizeRichTextHtml, sanitizeMarkdownUrl } from '@/utils/markdown/markdownSafety';
+
+export { MAX_JSON_IMPORT_FILE_SIZE, validateJsonImportFileSize } from '@/utils/importLimits';
+
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -169,6 +173,12 @@ export function importFromJSON(): Promise<ResumeData> {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) {
         reject(new Error('未选择文件'));
+        return;
+      }
+      try {
+        validateJsonImportFileSize(file.size);
+      } catch (error) {
+        reject(error instanceof Error ? error : new Error('JSON 文件大小无效。'));
         return;
       }
 

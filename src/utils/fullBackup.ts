@@ -1,5 +1,8 @@
 import type { ResumeData } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
+import { MAX_JSON_IMPORT_FILE_SIZE } from '@/utils/importLimits';
+
+import { sanitizeResumeDataContent } from '@/utils/sanitizeResumeData';
 
 export const FULL_BACKUP_FORMAT = 'sea-resume-full-backup' as const;
 export const FULL_BACKUP_VERSION = 1 as const;
@@ -59,6 +62,11 @@ export interface FullBackupReminderStatus {
   lastSuccessfulBackupAt: string | null;
 }
 
+const MAX_BACKUP_RESUMES = 500;
+const MAX_BACKUP_ARRAY_ITEMS = 500;
+const MAX_BACKUP_STRING_LENGTH = 100_000;
+const MAX_BACKUP_AVATAR_LENGTH = 16 * 1024 * 1024;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
   && (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null);
@@ -82,17 +90,20 @@ const assertJsonSafe = (value: unknown, ancestors = new Set<object>()): void => 
   ancestors.delete(value);
 };
 
-const requireString = (value: unknown, path: string): void => {
+const requireString = (value: unknown, path: string, maxLength = MAX_BACKUP_STRING_LENGTH): void => {
   if (typeof value !== 'string') throw new Error(`Full backup field "${path}" must be a string.`);
+  if (value.length > maxLength) throw new Error(`Full backup field "${path}" exceeds the size limit.`);
 };
 
 const requireStringArray = (value: unknown, path: string): void => {
-  if (!Array.isArray(value)) throw new Error(`Full backup field "${path}" must be an array.`);
+  if (!Array.isArray(value) || value.length > MAX_BACKUP_ARRAY_ITEMS) {
+    throw new Error(`Full backup field "${path}" must be an array with at most ${MAX_BACKUP_ARRAY_ITEMS} items.`);
+  }
   value.forEach((entry, index) => requireString(entry, `${path}[${index}]`));
 };
 
-const requireOptionalString = (record: Record<string, unknown>, key: string, path: string): void => {
-  if (record[key] !== undefined) requireString(record[key], path);
+const requireOptionalString = (record: Record<string, unknown>, key: string, path: string, maxLength = MAX_BACKUP_STRING_LENGTH): void => {
+  if (record[key] !== undefined) requireString(record[key], path, maxLength);
 };
 
 const requireRecord = (value: unknown, path: string): Record<string, unknown> => {
@@ -118,7 +129,7 @@ function validateResumeData(value: unknown, index: number): asserts value is Res
   const basic = requireRecord(resume.basic, `${path}.basic`);
   for (const field of ['name', 'title', 'email', 'phone']) requireString(basic[field], `${path}.basic.${field}`);
   for (const field of ['location', 'website', 'avatar', 'birthDate', 'summary']) {
-    requireOptionalString(basic, field, `${path}.basic.${field}`);
+    requireOptionalString(basic, field, `${path}.basic.${field}`, field === 'avatar' ? MAX_BACKUP_AVATAR_LENGTH : MAX_BACKUP_STRING_LENGTH);
   }
   for (const field of ['showAge', 'showExperienceYears']) {
     if (basic[field] !== undefined && typeof basic[field] !== 'boolean') {
@@ -145,7 +156,9 @@ function validateResumeData(value: unknown, index: number): asserts value is Res
   const projectFields = ['id', 'name', 'role', 'startDate', 'endDate', 'description'];
   const validateRecords = (field: string, requiredFields: string[], optionalArrays: string[] = []): void => {
     const entries = resume[field];
-    if (!Array.isArray(entries)) throw new Error(`Full backup field "${path}.${field}" must be an array.`);
+    if (!Array.isArray(entries) || entries.length > MAX_BACKUP_ARRAY_ITEMS) {
+      throw new Error(`Full backup field "${path}.${field}" must be an array with at most ${MAX_BACKUP_ARRAY_ITEMS} items.`);
+    }
     entries.forEach((entry, entryIndex) => {
       const itemPath = `${path}.${field}[${entryIndex}]`;
       const item = requireRecord(entry, itemPath);
@@ -158,7 +171,7 @@ function validateResumeData(value: unknown, index: number): asserts value is Res
   validateRecords('experiences', experienceFields, ['highlights']);
   validateRecords('education', educationFields);
   validateRecords('projects', projectFields, ['techStack']);
-  if (!Array.isArray(resume.skills)) throw new Error(`Full backup field "${path}.skills" must be an array.`);
+  if (!Array.isArray(resume.skills) || resume.skills.length > MAX_BACKUP_ARRAY_ITEMS) throw new Error(`Full backup field "${path}.skills" must be an array with at most ${MAX_BACKUP_ARRAY_ITEMS} items.`);
   resume.skills.forEach((entry, index) => {
     const itemPath = `${path}.skills[${index}]`;
     const item = requireRecord(entry, itemPath);
@@ -170,7 +183,7 @@ function validateResumeData(value: unknown, index: number): asserts value is Res
     }
   });
 
-  if (!Array.isArray(resume.customBlocks)) throw new Error(`Full backup field "${path}.customBlocks" must be an array.`);
+  if (!Array.isArray(resume.customBlocks) || resume.customBlocks.length > MAX_BACKUP_ARRAY_ITEMS) throw new Error(`Full backup field "${path}.customBlocks" must be an array with at most ${MAX_BACKUP_ARRAY_ITEMS} items.`);
   resume.customBlocks.forEach((entry, index) => {
     const itemPath = `${path}.customBlocks[${index}]`;
     const block = requireRecord(entry, itemPath);
@@ -181,7 +194,7 @@ function validateResumeData(value: unknown, index: number): asserts value is Res
       throw new Error(`Full backup field "${itemPath}.order" must be a finite number.`);
     }
     if (typeof block.content === 'string') return;
-    if (!Array.isArray(block.content)) throw new Error(`Full backup field "${itemPath}.content" is invalid.`);
+    if (!Array.isArray(block.content) || block.content.length > MAX_BACKUP_ARRAY_ITEMS) throw new Error(`Full backup field "${itemPath}.content" must be an array with at most ${MAX_BACKUP_ARRAY_ITEMS} items.`);
     block.content.forEach((entryValue, contentIndex) => {
       const contentPath = `${itemPath}.content[${contentIndex}]`;
       const item = requireRecord(entryValue, contentPath);
@@ -219,8 +232,8 @@ function validateResumeData(value: unknown, index: number): asserts value is Res
   }
 }
 
-function validateResumeArray(value: unknown): asserts value is ResumeData[] {
-  if (!Array.isArray(value)) throw new Error('Full backup resumes must be an array.');
+function validateResumeArray(value: unknown, maxCount = MAX_BACKUP_RESUMES): asserts value is ResumeData[] {
+  if (!Array.isArray(value) || value.length > maxCount) throw new Error(`Full backup resumes must contain at most ${maxCount} items.`);
   assertJsonSafe(value);
   value.forEach((resume, index) => validateResumeData(resume, index));
 }
@@ -230,14 +243,16 @@ export function validateFullBackupEnvelope(value: unknown): FullBackupEnvelope {
   if (!isRecord(value)) throw new Error('Full backup must be a JSON object.');
   if (value.format !== FULL_BACKUP_FORMAT) throw new Error('File is not a supported full backup format.');
   if (value.version !== FULL_BACKUP_VERSION) throw new Error(`Unsupported full backup version: ${String(value.version)}.`);
-  validateResumeArray(value.resumes);
-  return value as unknown as FullBackupEnvelope;
+  const resumes = value.resumes;
+  validateResumeArray(resumes);
+  return { format: FULL_BACKUP_FORMAT, version: FULL_BACKUP_VERSION, resumes: resumes.map(sanitizeResumeDataContent) };
 }
 
 /** Build a versioned envelope after validating every resume as complete data. */
 export function createFullBackup(resumes: readonly ResumeData[]): FullBackupEnvelope {
-  validateResumeArray(resumes);
-  return { format: FULL_BACKUP_FORMAT, version: FULL_BACKUP_VERSION, resumes: [...resumes] };
+  const validatedResumes = [...resumes];
+  validateResumeArray(validatedResumes);
+  return { format: FULL_BACKUP_FORMAT, version: FULL_BACKUP_VERSION, resumes: validatedResumes.map(sanitizeResumeDataContent) };
 }
 
 const canonicalize = (value: unknown): unknown => {
@@ -257,6 +272,7 @@ export function serializeFullBackup(resumes: readonly ResumeData[]): string {
 
 /** Parse and validate before returning anything to a restore caller. */
 export function parseFullBackup(serialized: string): FullBackupEnvelope {
+  if (serialized.length > MAX_JSON_IMPORT_FILE_SIZE) throw new Error('Full backup exceeds the 20 MB size limit.');
   let parsed: unknown;
   try {
     parsed = JSON.parse(serialized) as unknown;
@@ -299,7 +315,7 @@ function inspectConflicts(resumes: readonly ResumeData[], existing: readonly Res
 /** Preview incoming resumes against current records; conflicts include duplicate incoming entries. */
 export function previewFullBackup(backup: FullBackupEnvelope, existing: readonly ResumeData[]): FullBackupPreview {
   const validatedBackup = validateFullBackupEnvelope(backup);
-  validateResumeArray(existing);
+  validateResumeArray(existing, Number.MAX_SAFE_INTEGER);
   const { items, counts } = inspectConflicts(validatedBackup.resumes, existing);
   return { items, counts };
 }
@@ -311,7 +327,7 @@ export function planFullBackupRestore(
   options: FullBackupRestoreOptions = {},
 ): FullBackupRestorePlan {
   const validatedBackup = validateFullBackupEnvelope(backup);
-  validateResumeArray(existing);
+  validateResumeArray(existing, Number.MAX_SAFE_INTEGER);
   const inspected = inspectConflicts(validatedBackup.resumes, existing);
   const protectedIds = new Set([
     ...inspected.existingIds,

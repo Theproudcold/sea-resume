@@ -3,6 +3,8 @@ import { templateDemoData } from '@/data/template-demo';
 import type { ResumeData } from '@/types/resume';
 import { validateResumeData } from '@/utils/export-json';
 import {
+  FULL_BACKUP_FORMAT,
+  FULL_BACKUP_VERSION,
   FULL_BACKUP_REMINDER_INTERVAL_MS,
   FULL_BACKUP_REMINDER_STORAGE_KEY,
   createFullBackup,
@@ -77,6 +79,47 @@ describe('full backup data layer', () => {
     expect(normalized.theme.moduleMargins).toEqual({ top: 0, bottom: 24, left: 0, right: 0 });
     expect(normalized.customBlocks[0]?.type).toBe('text');
     expect(() => createFullBackup([normalized])).not.toThrow();
+  });
+
+  it('sanitizes untrusted backup content without dropping resume visibility fields', () => {
+    const unsafe = JSON.parse(JSON.stringify(makeResume('unsafe', 'Unsafe resume'))) as ResumeData;
+    unsafe.basic.summary = '<p>Safe <strong>summary</strong></p><img src=x onerror=alert(1)><script>alert(2)</script><a href="javascript:alert(3)">bad link</a>';
+    unsafe.basic.website = 'javascript:alert(1)';
+    unsafe.basic.avatar = 'https://tracker.example/pixel.png';
+    unsafe.experiences = [{ id: 'exp-1', company: 'Acme', position: 'Dev', startDate: '', endDate: '', description: '<img src=x onerror=alert(1)><p>Work</p>', visible: false }];
+    unsafe.projects = [{ id: 'project-1', name: 'Project', role: 'Dev', startDate: '', endDate: '', description: '<p>Project</p>', link: 'javascript:alert(1)' }];
+    unsafe.customBlocks = [{
+      id: 'block-1', title: 'Awards', type: 'list', order: 0,
+      content: [{ id: 'item-1', title: 'Award', description: '<svg onload=alert(1)></svg><p>Custom text</p>', visible: false }],
+    }];
+
+    const parsed = parseFullBackup(JSON.stringify({
+      format: FULL_BACKUP_FORMAT, version: FULL_BACKUP_VERSION, resumes: [unsafe],
+    }));
+    const safe = parsed.resumes[0]!;
+    expect(safe.basic.summary).toContain('<strong>summary</strong>');
+    expect(safe.basic.summary).not.toMatch(/<script|<img|onerror|javascript:/i);
+    expect(safe.basic.website).toBeUndefined();
+    expect(safe.basic.avatar).toBeUndefined();
+    expect(safe.experiences[0]?.description).not.toMatch(/<img|onerror/i);
+    expect(safe.experiences[0]?.visible).toBe(false);
+    expect(safe.projects[0]?.link).toBeUndefined();
+    const customItems = safe.customBlocks[0]?.content;
+    expect(Array.isArray(customItems)).toBe(true);
+    if (Array.isArray(customItems)) {
+      expect(customItems[0]?.description).not.toMatch(/<svg|onload/i);
+      expect(customItems[0]?.visible).toBe(false);
+    }
+  });
+
+  it('rejects oversized backup strings and record arrays', () => {
+    const oversizedText = JSON.parse(JSON.stringify(makeResume('large-text', 'Large'))) as ResumeData;
+    oversizedText.title = 'x'.repeat(100_001);
+    expect(() => createFullBackup([oversizedText])).toThrow(/size limit/i);
+
+    const oversizedArray = JSON.parse(JSON.stringify(makeResume('large-array', 'Large'))) as ResumeData;
+    oversizedArray.skills = Array.from({ length: 501 }, (_, index) => ({ id: `skill-${index}`, category: 'Skills', items: [] }));
+    expect(() => createFullBackup([oversizedArray])).toThrow(/array with at most/i);
   });
 
   it('previews ID and case-insensitive title conflicts and reports counts', () => {
