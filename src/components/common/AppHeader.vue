@@ -53,6 +53,18 @@
         <div v-if="inlineToolbar && $slots.toolbar" class="header-inline-toolbar">
           <slot name="toolbar" />
         </div>
+        <a
+          class="repository-link"
+          href="https://github.com/Theproudcold/sea-resume"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="查看 Sea Resume GitHub 仓库"
+          title="GitHub 仓库"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2.1c-3.2.7-3.9-.8-3.9-.8-.5-1.4-1.3-1.8-1.3-1.8-1.1-.8.1-.8.1-.8 1.2.1 1.8 1.3 1.8 1.3 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.6-.3-5.4-1.3-5.4-5.7 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.6.3 2.9.1 3.2.8.9 1.2 1.9 1.2 3.2 0 4.4-2.8 5.4-5.4 5.7.4.3.8 1 .8 2v3c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z" />
+          </svg>
+        </a>
       </div>
     </div>
     <div v-if="$slots.toolbar && !inlineToolbar" class="header-toolbar">
@@ -263,6 +275,32 @@ const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`
   min-width: 0;
   justify-content: flex-end;
   gap: var(--ui-space-4);
+}
+
+.repository-link {
+  display: inline-flex;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--ui-text-secondary);
+  transition: color 0.15s ease;
+}
+
+.repository-link svg {
+  width: 20px;
+  height: 20px;
+}
+
+.repository-link:hover {
+  color: var(--ui-primary);
+}
+
+.repository-link:focus-visible {
+  outline: 2px solid var(--ui-primary);
+  outline-offset: 2px;
 }
 
 .header-inline-toolbar {
