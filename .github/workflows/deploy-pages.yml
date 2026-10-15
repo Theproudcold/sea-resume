@@ -37,8 +37,6 @@ jobs:
 
       - name: Build
         run: pnpm build
-        env:
-          VITE_BASE_PATH: /
 
       - name: Add SPA route fallback
         run: cp dist/index.html dist/404.html
