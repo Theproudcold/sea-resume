@@ -1,18 +1,19 @@
 <template>
-  <div class="rich-text-editor">
+  <div class="rich-text-editor" @compositionstart.capture="startComposition" @compositionend.capture="finishComposition">
     <QuillEditor
       ref="editorRef"
       theme="snow"
       :toolbar="toolbarOptions"
-      v-model:content="content"
+      :content="content"
       contentType="html"
       @update:content="updateContent"
+      @ready="syncEditor"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import { QuillEditor } from '@vueup/vue-quill';
 import '@vueup/vue-quill/dist/vue-quill.snow.css';
 
@@ -25,16 +26,57 @@ const emit = defineEmits(['update:modelValue']);
 const content = ref(props.modelValue);
 const editorRef = ref();
 
-// Update local content if prop changes from outside
-watch(() => props.modelValue, (newVal) => {
-  if (newVal !== content.value) {
-    content.value = newVal;
+let composing = false;
+let applyingExternal = false;
+let pendingExternal: string | undefined;
+
+// This Quill wrapper does not watch its content prop. Apply actual external
+// changes silently, never rewriting the DOM for a user's own store echo.
+const syncEditor = () => {
+  const quill = editorRef.value?.getQuill?.();
+  if (!quill || quill.root.innerHTML === content.value) return;
+  applyingExternal = true;
+  try {
+    const selection = quill.getSelection();
+    quill.setContents(quill.clipboard.convert(content.value), 'silent');
+    if (selection) {
+      const index = Math.min(selection.index, Math.max(0, quill.getLength() - 1));
+      quill.setSelection(index, Math.min(selection.length, quill.getLength() - 1 - index), 'silent');
+    }
+  } finally {
+    applyingExternal = false;
   }
+};
+
+watch(() => props.modelValue, (value) => {
+  if (value === content.value) {
+    pendingExternal = undefined;
+    return;
+  }
+  if (composing) {
+    pendingExternal = value;
+    return;
+  }
+  content.value = value;
+  syncEditor();
 });
 
+const startComposition = () => { composing = true; };
+
+const finishComposition = () => {
+  composing = false;
+  nextTick(() => {
+    if (pendingExternal === undefined || composing) return;
+    content.value = pendingExternal;
+    pendingExternal = undefined;
+    syncEditor();
+  });
+};
+
 const updateContent = (newContent: string) => {
-  content.value = newContent; // Ensure local ref is updated (though v-model might do it too, being explicit is safer if we drop v-model)
-  emit('update:modelValue', newContent);
+  if (applyingExternal || pendingExternal !== undefined || newContent === content.value) return;
+  content.value = newContent;
+  if (newContent !== props.modelValue) emit('update:modelValue', newContent);
 };
 
 const toolbarOptions = [

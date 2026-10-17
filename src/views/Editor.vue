@@ -32,12 +32,14 @@
             <el-button link :disabled="!canUndo" aria-label="撤销" title="撤销 (Ctrl/⌘+Z)" @click="undoEdit">撤销</el-button>
             <el-button link :disabled="!canRedo" aria-label="重做" title="重做 (Ctrl/⌘+Shift+Z)" @click="redoEdit">重做</el-button>
             <el-button link :disabled="privacyMode" @click="showAiAssistant = true">AI 助手</el-button>
+            <el-button link :disabled="privacyMode" @click="router.push({ path: '/interview/new', query: { resumeId: data.id } })">模拟面试</el-button>
             <el-dropdown @command="handleHeaderMenuCommand">
               <el-button link>更多<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="privacy">{{ privacyMode ? '关闭隐私打码' : '隐私打码' }}</el-dropdown-item>
                   <el-dropdown-item command="quality">质量检查 {{ qualityIssues.length }}</el-dropdown-item>
+                  <el-dropdown-item command="external-ai" :disabled="privacyMode">外部 AI · Codex / Claude Code</el-dropdown-item>
                   <el-dropdown-item command="shortcuts">快捷键</el-dropdown-item>
                   <el-dropdown-item command="fullscreen"><el-icon><FullScreen /></el-icon>全屏预览</el-dropdown-item>
                   <el-dropdown-item command="templates"><el-icon><Grid /></el-icon>模板选择</el-dropdown-item>
@@ -74,8 +76,8 @@
       </div>
 
       <div class="editor-container">
-        <EditorPanel :key="String(route.params.id)" :preview-navigation-key="previewNavigationKey" class="no-print" :class="{ 'mobile-hidden': activeTab === 'preview', 'privacy-hidden': privacyMode }" />
-        <PreviewPanel :privacy-mode="privacyMode" :class="{ 'mobile-hidden': activeTab === 'edit' }" />
+        <EditorPanel :key="String(route.params.id)" :preview-navigation-key="previewNavigationKey" class="no-print" :class="{ 'mobile-hidden': activeTab === 'preview', 'mobile-active': activeTab === 'edit', 'privacy-hidden': privacyMode }" />
+        <PreviewPanel :privacy-mode="privacyMode" :class="{ 'mobile-hidden': activeTab === 'edit', 'mobile-active': activeTab === 'preview' }" />
       </div>
 
       <!-- 全屏预览对话框 -->
@@ -93,6 +95,8 @@
         </div>
       </el-dialog>
       <AiAssistantPanel
+        ref="aiAssistantRef"
+        v-if="showAiAssistant"
         :visible="showAiAssistant"
         :resume="data"
         :undo-available="!!aiUndoSnapshot"
@@ -100,7 +104,9 @@
         @apply="applyAiChanges"
         @undo="undoAiChanges"
         @configure="openAiSettings"
+        @applied="router.push(`/editor/${$event}`)"
       />
+      <ExternalAiPanel v-if="showExternalAi" :visible="showExternalAi" @update:visible="showExternalAi = $event" />
       <el-dialog v-model="showAiSettings" title="AI 模型配置" width="var(--ui-dialog-width-md)" align-center class="app-dialog ai-model-dialog">
         <AiProviderSettingsPanel @saved="handleAiSettingsSaved" />
       </el-dialog>
@@ -117,9 +123,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, nextTick, watch, defineAsyncComponent } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import { ElMessage, ElLoading, ElMessageBox } from 'element-plus';
 import { Loading, FullScreen, Grid, ArrowDown, Document, Folder, Picture, Upload, RefreshRight } from '@element-plus/icons-vue';
 import { useResumeStore } from '@/stores/resume';
@@ -134,10 +140,11 @@ import EditorPanel from '@/components/editor/EditorPanel.vue';
 import PreviewPanel from '@/components/preview/PreviewPanel.vue';
 import ResumeCanvas from '@/components/preview/ResumeCanvas.vue';
 import type { ResumeData } from '@/types/resume';
-import type { ResumeAiOperation } from '@/types/ai';
-import { applyResumeAiOperations } from '@/services/ai/resumeTools';
-import AiAssistantPanel from '@/components/editor/AiAssistantPanel.vue';
-import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
+import type { ResumeChangeProposal } from '@/services/ai/changeProposal';
+import { lazyFeature } from '@/utils/lazyFeature';
+const AiAssistantPanel = defineAsyncComponent(() => import('@/components/editor/AiAssistantPanel.vue'));
+const AiProviderSettingsPanel = lazyFeature(() => import('@/components/workbench/AiProviderSettingsPanel.vue'));
+const ExternalAiPanel = defineAsyncComponent(() => import('@/components/ai/ExternalAiPanel.vue'));
 import { createPrivacyMaskedResume } from '@/utils/privacyMask';
 import ResumeQualityPanel from '@/components/editor/ResumeQualityPanel.vue';
 import { checkResumeQuality } from '@/utils/resumeQuality';
@@ -155,6 +162,8 @@ const activeTab = ref<'edit' | 'preview'>('edit');
 const previewNavigationKey = ref(0);
 
 const showAiAssistant = ref(false);
+const showExternalAi = ref(false);
+const aiAssistantRef = ref<{ beforeClose: () => Promise<boolean> }>();
 const showAiSettings = ref(false);
 const aiUndoSnapshot = ref<ResumeData | null>(null);
 const privacyMode = ref(false);
@@ -174,6 +183,7 @@ const togglePrivacyMode = () => {
   if (privacyMode.value) {
     activeTab.value = 'preview';
     showAiAssistant.value = false;
+    showExternalAi.value = false;
   }
 };
 
@@ -199,6 +209,7 @@ watch(() => route.params.id, async (routeId) => {
   loading.value = true;
   showFullscreen.value = false;
   showAiAssistant.value = false;
+  showExternalAi.value = false;
   aiUndoSnapshot.value = null;
   showQualityPanel.value = false;
   privacyMode.value = false;
@@ -235,6 +246,44 @@ onMounted(() => window.addEventListener('keydown', onEditorKeydown));
 onUnmounted(() => window.removeEventListener('keydown', onEditorKeydown));
 onUnmounted(unsubscribePreviewNavigation);
 
+const flushBeforeNavigation = async () => {
+  if (showAiAssistant.value && await aiAssistantRef.value?.beforeClose() === false) return false;
+  try {
+    await resumeStore.flushSave();
+    return true;
+  } catch (error) {
+    ElMessage.error(`保存失败，已留在编辑页：${error instanceof Error ? error.message : '未知错误'}`);
+    return false;
+  }
+};
+onBeforeRouteLeave(flushBeforeNavigation);
+onBeforeRouteUpdate(async (to, from) => to.params.id === from.params.id || await flushBeforeNavigation());
+const saveWhenHidden = () => {
+  if (document.visibilityState === 'hidden') void resumeStore.flushSave().catch(() => undefined);
+};
+const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+  if (saveStatus.value === 'saved') return;
+  void resumeStore.flushSave().catch(() => undefined);
+  event.preventDefault();
+  event.returnValue = '';
+};
+onMounted(() => {
+  document.addEventListener('visibilitychange', saveWhenHidden);
+  window.addEventListener('beforeunload', warnBeforeUnload);
+});
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', saveWhenHidden);
+  window.removeEventListener('beforeunload', warnBeforeUnload);
+});
+
+async function settlePreview() {
+  await nextTick();
+  const animations = document.querySelector('.editor-container')?.getAnimations?.({ subtree: true }) ?? [];
+  await Promise.all(animations.filter((animation) =>
+    Number.isFinite(Number(animation.effect?.getComputedTiming().endTime)),
+  ).map((animation) => animation.finished.catch(() => undefined)));
+}
+
 
 const handleBack = () => {
   router.push('/');
@@ -244,15 +293,16 @@ const goToTemplates = () => {
   router.push({ path: '/templates', query: { resumeId: String(route.params.id) } });
 };
 
-const applyAiChanges = async (operations: ResumeAiOperation[]) => {
+const applyAiChanges = async (proposal: ResumeChangeProposal, done: (saved: boolean) => void) => {
   const previous = resumeStore.exportData();
   try {
-    const updated = applyResumeAiOperations(previous, operations);
-    await resumeStore.importData(updated);
+    await resumeStore.applyChangeProposal(proposal);
     aiUndoSnapshot.value = previous;
     ElMessage.success('AI 修改已应用；可从助手面板撤销。');
+    done(true);
   } catch (error) {
     ElMessage.error('AI 修改未保存: ' + (error instanceof Error ? error.message : '未知错误'));
+    done(false);
   }
 };
 
@@ -299,8 +349,8 @@ const handleResumeTitleUpdate = async (title: string) => {
 
   resumeStore.updateTitle(nextTitle);
   try {
-    await resumeStore.autoSave();
-    await workbenchStore.renameResume(resumeId, nextTitle);
+    await resumeStore.flushSave();
+    await workbenchStore.refresh();
   } catch (error) {
     ElMessage.error(`简历名称保存失败：${error instanceof Error ? error.message : '未知错误'}`);
   }
@@ -309,6 +359,7 @@ const handleResumeTitleUpdate = async (title: string) => {
 const handleHeaderMenuCommand = (command: string) => {
   if (command === 'privacy') togglePrivacyMode();
   else if (command === 'quality') showQualityPanel.value = true;
+  else if (command === 'external-ai' && !privacyMode.value) showExternalAi.value = true;
   else if (command === 'shortcuts') showShortcutHelp.value = true;
   else if (command === 'fullscreen') showFullscreen.value = true;
   else if (command === 'templates') goToTemplates();
@@ -344,6 +395,12 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
     }
     return;
   }
+  try {
+    await resumeStore.flushSave();
+  } catch (error) {
+    ElMessage.error(`保存失败，未开始导出：${error instanceof Error ? error.message : '未知错误'}`);
+    return;
+  }
   if (type === 'markdown') {
     downloadMarkdown(resumeToMarkdown(data.value), data.value.title || data.value.basic.name || 'resume');
     ElMessage.success('Markdown 已导出');
@@ -352,6 +409,7 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
 
   if (type === 'print') {
     ElMessage.info('请在打印面板确认 A4 纸张和页边距设置。');
+    await settlePreview();
     window.print();
     return;
   }
@@ -375,7 +433,8 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
           await nextTick();
         }
         try {
-          const pageCount = await exportPreviewToPDF('.resume-canvas', filename);
+          await settlePreview();
+          const pageCount = await exportPreviewToPDF('.preview-panel .resume-canvas', filename);
           ElMessage.success(`PDF 已生成，共 ${pageCount} 页，版式与预览一致`);
         } finally {
           if (restoreEditorTab) {
@@ -389,10 +448,18 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
         await exportToPDF(previewData.value, filename);
         ElMessage.success('可搜索 PDF 已生成并下载');
         break;
-      case 'image':
-        await exportToImage('.resume-canvas', filename, 'png');
-        ElMessage.success('图片导出成功！');
+      case 'image': {
+        const restoreEditorTab = activeTab.value === 'edit';
+        activeTab.value = 'preview';
+        try {
+          await settlePreview();
+          await exportToImage('.preview-panel .resume-canvas', filename, 'png');
+          ElMessage.success('图片导出成功！');
+        } finally {
+          if (restoreEditorTab) activeTab.value = 'edit';
+        }
         break;
+      }
       case 'json':
         exportToJSON(data.value, filename);
         ElMessage.success('JSON 导出成功！');
@@ -456,6 +523,7 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
   width: 100%;
 }
 
+@keyframes mobile-panel-enter { from { opacity: 0; } to { opacity: 1; } }
 @media (max-width: 1024px) {
   .mobile-tabs {
     display: block;
@@ -463,6 +531,10 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
 
   .editor-container {
     flex-direction: column;
+  }
+
+  .mobile-active {
+    animation: mobile-panel-enter var(--ui-duration-normal, 180ms) ease-out;
   }
 
   .mobile-hidden {

@@ -18,6 +18,16 @@ const router = createRouter({
       name: 'templates',
       component: () => import('@/views/TemplateGallery.vue'),
     },
+    {
+      path: '/interviews',
+      name: 'interview-history',
+      component: () => import('@/views/InterviewHistory.vue'),
+    },
+    {
+      path: '/interview/:sessionId',
+      name: 'interview',
+      component: () => import('@/views/Interview.vue'),
+    },
   ],
 });
 

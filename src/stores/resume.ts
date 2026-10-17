@@ -3,6 +3,9 @@ import type { ResumeData, BasicInfo, Experience, Education, Skill, CustomBlock, 
 import { storageManager } from '@/services/storage/StorageManager';
 import { generateId } from '@/utils/helpers';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
+import { assertProposalBaseline, parseChangeProposal, previewProposal } from '@/services/ai/changeProposal';
+
+const applyingProposals = new WeakSet<object>();
 
 // 默认简历数据
 const getDefaultResumeData = (): ResumeData => ({
@@ -47,8 +50,10 @@ const getDefaultResumeData = (): ResumeData => ({
   updatedAt: new Date().toISOString(),
 });
 
-const pendingSaveTimers = new WeakMap<object, ReturnType<typeof setTimeout>>();
+type SaveTimers = { debounce: ReturnType<typeof setTimeout>; maxWait: ReturnType<typeof setTimeout> };
+const pendingSaveTimers = new WeakMap<object, SaveTimers>();
 const saveQueues = new WeakMap<object, Promise<void>>();
+const latestBackgroundSave = new WeakMap<object, object>();
 const loadRequests = new WeakMap<object, number>();
 
 export const useResumeStore = defineStore('resume', {
@@ -62,6 +67,7 @@ export const useResumeStore = defineStore('resume', {
     saveGeneration: 0,
     isLoading: false,
     activeSection: null as string | null, // 当前选中的模块 ID
+    appliedProposalIds: [] as string[],
   }),
   getters: {
     canUndo: (state) => state.historyPast.length > 0,
@@ -70,6 +76,46 @@ export const useResumeStore = defineStore('resume', {
 
 
   actions: {
+    /** Only UI approval calls this action; external tools can never save directly. */
+    async applyChangeProposal(input: unknown, assertAuthorized: () => void = () => undefined): Promise<void> {
+      const proposal = parseChangeProposal(input);
+      if (this.appliedProposalIds.includes(proposal.proposalId)) throw new Error('此草稿已应用，不能重复保存。');
+      if (applyingProposals.has(this) || this.isLoading) throw new Error('正在处理简历，请稍后重试。');
+      applyingProposals.add(this);
+      try {
+        assertAuthorized();
+        const previous = this.exportData();
+        const generation = this.saveGeneration;
+        await assertProposalBaseline(previous, proposal);
+        assertAuthorized();
+        if (this.isLoading || this.saveGeneration !== generation || this.data.id !== previous.id || JSON.stringify({ ...this.data, updatedAt: '' }) !== JSON.stringify({ ...previous, updatedAt: '' })) {
+          throw new Error('简历已发生变化，请重新检查草稿。');
+        }
+        const next = previewProposal(previous, proposal);
+        const past = [...this.historyPast];
+        const future = [...this.historyFuture];
+        this.historyLastAt = 0;
+        this.rememberChange();
+        this.data = next;
+        const applied = this.data;
+        const save = this.autoSave();
+        const saveGeneration = this.saveGeneration;
+        try {
+          await save;
+          this.appliedProposalIds.push(proposal.proposalId);
+          if (this.appliedProposalIds.length > 200) this.appliedProposalIds.shift();
+        } catch (error) {
+          if (this.data === applied && this.saveGeneration === saveGeneration) {
+            this.data = previous;
+            this.historyPast = past;
+            this.historyFuture = future;
+            this.historyLastAt = 0;
+          }
+          throw error;
+        }
+      } finally { applyingProposals.delete(this); }
+    },
+
     rememberChange() {
       const now = Date.now();
       if (!this.historyLastAt || now - this.historyLastAt > 700) {
@@ -85,7 +131,7 @@ export const useResumeStore = defineStore('resume', {
     },
 
     saveImmediately() {
-      void this.autoSave().catch(() => undefined);
+      void this.autoSave(true).catch(() => undefined);
     },
 
     async undo() {
@@ -95,12 +141,18 @@ export const useResumeStore = defineStore('resume', {
       this.historyFuture.push(current);
       this.historyLastAt = 0;
       this.data = JSON.parse(JSON.stringify(previous)) as ResumeData;
+      const applied = this.data;
+      const save = this.autoSave();
+      const generation = this.saveGeneration;
       try {
-        await this.autoSave();
+        await save;
       } catch (error) {
-        this.data = current;
-        this.historyFuture.pop();
-        this.historyPast.push(previous);
+        // A failed old write must not roll back edits made while it was pending.
+        if (this.data === applied && this.saveGeneration === generation) {
+          this.data = current;
+          this.historyFuture.pop();
+          this.historyPast.push(previous);
+        }
         throw error;
       }
     },
@@ -112,12 +164,17 @@ export const useResumeStore = defineStore('resume', {
       this.historyPast.push(current);
       this.historyLastAt = 0;
       this.data = JSON.parse(JSON.stringify(next)) as ResumeData;
+      const applied = this.data;
+      const save = this.autoSave();
+      const generation = this.saveGeneration;
       try {
-        await this.autoSave();
+        await save;
       } catch (error) {
-        this.data = current;
-        this.historyPast.pop();
-        this.historyFuture.push(next);
+        if (this.data === applied && this.saveGeneration === generation) {
+          this.data = current;
+          this.historyPast.pop();
+          this.historyFuture.push(next);
+        }
         throw error;
       }
     },
@@ -150,8 +207,9 @@ export const useResumeStore = defineStore('resume', {
       loadRequests.set(this, requestId);
       this.isLoading = true;
       try {
-        const hadPendingSave = this.cancelScheduledSave();
-        if (hadPendingSave) await this.autoSave();
+        if (pendingSaveTimers.has(this) || saveQueues.has(this) || this.saveStatus === 'error') {
+          await this.flushSave();
+        }
         if (loadRequests.get(this) !== requestId) return;
 
         const resume = await storageManager.read(id);
@@ -223,7 +281,8 @@ export const useResumeStore = defineStore('resume', {
       if (index !== -1) {
         this.rememberChange();
         this.data.experiences[index] = { ...this.data.experiences[index], ...updates } as Experience;
-        this.saveImmediately();
+        if ('visible' in updates) this.saveImmediately();
+        else this.scheduleSave();
       }
     },
 
@@ -255,7 +314,8 @@ export const useResumeStore = defineStore('resume', {
       if (index !== -1) {
         this.rememberChange();
         this.data.education[index] = { ...this.data.education[index], ...updates } as Education;
-        this.saveImmediately();
+        if ('visible' in updates) this.saveImmediately();
+        else this.scheduleSave();
       }
     },
 
@@ -280,7 +340,8 @@ export const useResumeStore = defineStore('resume', {
       const index = this.data.skills.findIndex((s) => s.id === id);
       if (index !== -1) {
         this.data.skills[index] = { ...this.data.skills[index], ...updates } as Skill;
-        this.saveImmediately();
+        if ('visible' in updates) this.saveImmediately();
+        else this.scheduleSave();
       }
     },
 
@@ -305,7 +366,8 @@ export const useResumeStore = defineStore('resume', {
       if (index !== -1) {
         this.rememberChange();
         this.data.projects[index] = { ...this.data.projects[index], ...updates } as Project;
-        this.saveImmediately();
+        if ('visible' in updates) this.saveImmediately();
+        else this.scheduleSave();
       }
     },
 
@@ -332,7 +394,8 @@ export const useResumeStore = defineStore('resume', {
       if (index !== -1) {
         this.rememberChange();
         this.data.customBlocks[index] = { ...this.data.customBlocks[index], ...updates } as CustomBlock;
-        this.saveImmediately();
+        if ('type' in updates) this.saveImmediately();
+        else this.scheduleSave();
       }
     },
 
@@ -367,7 +430,8 @@ export const useResumeStore = defineStore('resume', {
         if (itemIndex !== -1) {
           this.rememberChange();
           block.content[itemIndex] = { ...block.content[itemIndex], ...updates } as CustomItem;
-          this.saveImmediately();
+          if ('visible' in updates) this.saveImmediately();
+          else this.scheduleSave();
         }
       }
     },
@@ -420,7 +484,7 @@ export const useResumeStore = defineStore('resume', {
     updateTitle(title: string) {
       this.rememberChange();
       this.data.title = title;
-      this.saveImmediately();
+      this.scheduleSave();
     },
 
     // 导出数据
@@ -444,10 +508,13 @@ export const useResumeStore = defineStore('resume', {
         sectionTitles: { ...defaults.sectionTitles, ...(data.sectionTitles || {}) },
         sectionOrder: data.sectionOrder?.length ? [...data.sectionOrder] : ['experience', 'projects', 'education', 'skills'],
       };
+      const applied = this.data;
+      const save = this.autoSave();
+      const generation = this.saveGeneration;
       try {
-        await this.autoSave();
+        await save;
       } catch (error) {
-        this.data = previous;
+        if (this.data === applied && this.saveGeneration === generation) this.data = previous;
         throw error;
       }
     },
@@ -466,33 +533,43 @@ export const useResumeStore = defineStore('resume', {
       this.saveImmediately();
     },
 
-    // 立即保存
-    async autoSave() {
-      const snapshot = this.exportData();
-
-      const updatedAt = new Date().toISOString();
-      snapshot.updatedAt = updatedAt;
-      if (this.data.id === snapshot.id) this.data.updatedAt = updatedAt;
-
-      const meta: ResumeMeta = {
-        id: snapshot.id,
-        title: snapshot.title,
-        templateId: snapshot.templateId,
-        createdAt: new Date(snapshot.createdAt).getTime(),
-        updatedAt: Date.now(),
-      };
+    // Explicit saves are FIFO barriers. Background saves may supersede queued work,
+    // but never cancel a write that has already started.
+    async autoSave(background = false) {
+      this.cancelScheduledSave();
+      const source = this.data;
+      const snapshot = background ? null : this.exportData();
+      const token = {};
+      if (background) latestBackgroundSave.set(this, token);
+      else latestBackgroundSave.delete(this);
       const generation = ++this.saveGeneration;
-
       this.saveStatus = 'saving';
       this.saveError = null;
       const previousSave = saveQueues.get(this) ?? Promise.resolve();
-      const currentSave = previousSave.catch(() => undefined).then(() => storageManager.save(snapshot, meta));
+      const currentSave = previousSave.catch(() => undefined).then(async () => {
+        if (background && latestBackgroundSave.get(this) !== token) return;
+        // Clone only when a background write actually runs, not on each keystroke.
+        const saved = snapshot ?? JSON.parse(JSON.stringify(source)) as ResumeData;
+        const updatedAt = new Date().toISOString();
+        saved.updatedAt = updatedAt;
+        const meta: ResumeMeta = {
+          id: saved.id,
+          title: saved.title,
+          templateId: saved.templateId,
+          createdAt: Date.parse(saved.createdAt),
+          updatedAt: Date.parse(updatedAt),
+        };
+        await storageManager.save(saved, meta);
+        if (generation === this.saveGeneration && this.data.id === saved.id) {
+          this.data.updatedAt = updatedAt;
+          this.saveStatus = 'saved';
+        }
+      });
       saveQueues.set(this, currentSave);
       try {
         await currentSave;
-        if (generation === this.saveGeneration && this.data.id === snapshot.id) this.saveStatus = 'saved';
       } catch (error) {
-        if (generation === this.saveGeneration && this.data.id === snapshot.id) {
+        if (generation === this.saveGeneration && this.data.id === source.id) {
           this.saveStatus = 'error';
           this.saveError = error instanceof Error ? error.message : '未知错误';
         }
@@ -500,32 +577,48 @@ export const useResumeStore = defineStore('resume', {
         throw error;
       } finally {
         if (saveQueues.get(this) === currentSave) saveQueues.delete(this);
+        if (latestBackgroundSave.get(this) === token) latestBackgroundSave.delete(this);
       }
     },
 
     async retrySave() {
-      this.cancelScheduledSave();
       await this.autoSave();
     },
 
+    async flushSave(): Promise<void> {
+      if (pendingSaveTimers.has(this) || this.saveStatus === 'error') {
+        await this.autoSave();
+      } else {
+        await saveQueues.get(this);
+      }
+      // An input may arrive while a slow file-system write is pending.
+      if (pendingSaveTimers.has(this) || saveQueues.has(this)) await this.flushSave();
+    },
+
     cancelScheduledSave(): boolean {
-      const timer = pendingSaveTimers.get(this);
-      if (timer === undefined) return false;
-      clearTimeout(timer);
+      const timers = pendingSaveTimers.get(this);
+      if (!timers) return false;
+      clearTimeout(timers.debounce);
+      clearTimeout(timers.maxWait);
       pendingSaveTimers.delete(this);
       return true;
     },
 
     scheduleSave() {
+      this.saveGeneration += 1;
       this.saveStatus = 'saving';
       this.saveError = null;
-      this.cancelScheduledSave();
+      const existing = pendingSaveTimers.get(this);
+      if (existing) clearTimeout(existing.debounce);
       const resumeId = this.data.id;
-      const timer = setTimeout(() => {
-        pendingSaveTimers.delete(this);
+      const run = () => {
         if (this.data.id === resumeId) this.saveImmediately();
-      }, 500);
-      pendingSaveTimers.set(this, timer);
+        else this.cancelScheduledSave();
+      };
+      pendingSaveTimers.set(this, {
+        debounce: setTimeout(run, 500),
+        maxWait: existing?.maxWait ?? setTimeout(run, 2000),
+      });
     },
 
 

@@ -30,21 +30,21 @@
         </div>
       </div>
 
-      <div v-show="!isCollapsed(exp.id)" class="experience-item__body">
+      <SmoothCollapse><div v-show="!isCollapsed(exp.id)" class="experience-item__body">
         <el-form label-position="top">
         <el-form-item label="公司名称" required>
           <el-input
-            v-model="exp.company"
+            :model-value="exp.company"
             placeholder="公司名称"
-            @input="handleUpdate(exp.id, { company: exp.company })"
+            @update:model-value="(value: string) => handleUpdate(exp.id, { company: value })"
           />
         </el-form-item>
 
         <el-form-item label="职位" required>
           <el-input
-            v-model="exp.position"
+            :model-value="exp.position"
             placeholder="职位名称"
-            @input="handleUpdate(exp.id, { position: exp.position })"
+            @update:model-value="(value: string) => handleUpdate(exp.id, { position: value })"
           />
         </el-form-item>
 
@@ -52,12 +52,12 @@
           <el-col :span="12">
             <el-form-item label="开始时间">
               <el-date-picker
-                v-model="exp.startDate"
+                :model-value="exp.startDate"
                 type="month"
                 placeholder="选择月份"
                 format="YYYY-MM"
                 value-format="YYYY-MM"
-                @change="handleUpdate(exp.id, { startDate: exp.startDate })"
+                @update:model-value="(value: string | null) => handleUpdate(exp.id, { startDate: value || '' })"
               />
             </el-form-item>
           </el-col>
@@ -65,20 +65,20 @@
             <el-form-item label="结束时间">
               <el-select
                 v-if="exp.endDate === 'present'"
-                v-model="exp.endDate"
-                @change="handleUpdate(exp.id, { endDate: exp.endDate })"
+                :model-value="exp.endDate"
+                @update:model-value="(value: string) => handleUpdate(exp.id, { endDate: value })"
               >
                 <el-option label="至今" value="present" />
                 <el-option label="选择日期" value="" />
               </el-select>
               <el-date-picker
                 v-else
-                v-model="exp.endDate"
+                :model-value="exp.endDate"
                 type="month"
                 placeholder="选择月份"
                 format="YYYY-MM"
                 value-format="YYYY-MM"
-                @change="handleUpdate(exp.id, { endDate: exp.endDate })"
+                @update:model-value="(value: string | null) => handleUpdate(exp.id, { endDate: value || '' })"
               />
             </el-form-item>
           </el-col>
@@ -86,30 +86,31 @@
 
         <el-form-item label="工作描述">
           <RichTextEditor
-            v-model="exp.description"
+            :model-value="exp.description"
             @update:modelValue="(val) => handleUpdate(exp.id, { description: val })"
           />
         </el-form-item>
       </el-form>
 
         <el-divider v-if="index < experiences.length - 1" />
-      </div>
+      </div></SmoothCollapse>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { Delete, Briefcase, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import type { Experience } from '@/types/resume';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
+import SmoothCollapse from '@/components/common/SmoothCollapse.vue';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const experiences = ref<Experience[]>(JSON.parse(JSON.stringify(data.value.experiences)));
+const experiences = computed(() => data.value.experiences);
 const collapsedIds = ref<string[]>([]);
 
 const isCollapsed = (id: string) => collapsedIds.value.includes(id);
@@ -120,9 +121,6 @@ const toggleCollapsed = (id: string) => {
     : [...collapsedIds.value, id];
 };
 
-watch(() => data.value.experiences, (newVal) => {
-  experiences.value = JSON.parse(JSON.stringify(newVal));
-}, { deep: true });
 
 const addNew = () => {
   resumeStore.addExperience({

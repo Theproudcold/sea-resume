@@ -47,6 +47,10 @@
   --ui-font-xl: 24px;
   --ui-line-height: 1.5;
   --ui-control-height: 40px;
+  --ui-duration-fast: 120ms;
+  --ui-duration-normal: 180ms;
+  --ui-duration-collapse: 200ms;
+  --ui-easing-standard: cubic-bezier(0.2, 0, 0, 1);
   --ui-dialog-width-sm: min(440px, calc(100vw - 32px));
   --ui-dialog-width-md: min(760px, calc(100vw - 32px));
   --ui-dialog-width-lg: min(980px, calc(100vw - 32px));
@@ -220,6 +224,10 @@ body {
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius-md);
   background: var(--ui-bg-subtle);
+  transition: padding var(--ui-duration-collapse) var(--ui-easing-standard),
+    margin var(--ui-duration-collapse) var(--ui-easing-standard),
+    border-color var(--ui-duration-normal) var(--ui-easing-standard),
+    background-color var(--ui-duration-normal) var(--ui-easing-standard);
 }
 
 .resume-entry-card__header {
@@ -229,6 +237,10 @@ body {
   gap: var(--ui-space-3);
   padding-bottom: var(--ui-space-2);
   border-bottom: 1px solid var(--ui-border);
+  min-height: 0;
+  transition: padding var(--ui-duration-collapse) var(--ui-easing-standard),
+    min-height var(--ui-duration-collapse) var(--ui-easing-standard),
+    border-color var(--ui-duration-collapse) var(--ui-easing-standard);
 }
 
 .resume-entry-card.is-collapsed {
@@ -244,7 +256,13 @@ body {
 .resume-entry-card.is-collapsed .resume-entry-card__header {
   min-height: 40px;
   padding: 0 4px;
-  border: 0;
+  border-bottom-color: transparent;
+}
+
+.resume-entry-card__header > span {
+  transition: color var(--ui-duration-fast) var(--ui-easing-standard),
+    font-size var(--ui-duration-collapse) var(--ui-easing-standard),
+    font-weight var(--ui-duration-collapse) var(--ui-easing-standard);
 }
 
 .resume-entry-card.is-collapsed .resume-entry-card__header > span {
@@ -357,6 +375,13 @@ body {
 
 /* Print Styles: keep the resume document, hide application chrome. */
 @media print {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
   @page {
     margin: 0;
     size: A4 portrait;

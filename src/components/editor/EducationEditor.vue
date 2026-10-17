@@ -30,13 +30,13 @@
         </div>
       </div>
 
-      <div v-show="!isCollapsed(edu.id)" class="education-item__body">
+      <SmoothCollapse><div v-show="!isCollapsed(edu.id)" class="education-item__body">
         <el-form label-position="top">
         <el-form-item label="学校名称" required>
           <el-input
-            v-model="edu.school"
+            :model-value="edu.school"
             placeholder="学校名称"
-            @input="handleUpdate(edu.id, { school: edu.school })"
+            @update:model-value="(value: string) => handleUpdate(edu.id, { school: value })"
           />
         </el-form-item>
 
@@ -44,9 +44,9 @@
           <el-col :span="12">
             <el-form-item label="学历" required>
               <el-select
-                v-model="edu.degree"
+                :model-value="edu.degree"
                 placeholder="请选择"
-                @change="handleUpdate(edu.id, { degree: edu.degree })"
+                @update:model-value="(value: string) => handleUpdate(edu.id, { degree: value })"
               >
                 <el-option label="专科" value="专科" />
                 <el-option label="本科" value="本科" />
@@ -58,9 +58,9 @@
           <el-col :span="12">
             <el-form-item label="专业" required>
               <el-input
-                v-model="edu.major"
+                :model-value="edu.major"
                 placeholder="专业名称"
-                @input="handleUpdate(edu.id, { major: edu.major })"
+                @update:model-value="(value: string) => handleUpdate(edu.id, { major: value })"
               />
             </el-form-item>
           </el-col>
@@ -70,24 +70,24 @@
           <el-col :span="12">
             <el-form-item label="入学时间">
               <el-date-picker
-                v-model="edu.startDate"
+                :model-value="edu.startDate"
                 type="month"
                 placeholder="选择月份"
                 format="YYYY-MM"
                 value-format="YYYY-MM"
-                @change="handleUpdate(edu.id, { startDate: edu.startDate })"
+                @update:model-value="(value: string | null) => handleUpdate(edu.id, { startDate: value || '' })"
               />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="毕业时间">
               <el-date-picker
-                v-model="edu.endDate"
+                :model-value="edu.endDate"
                 type="month"
                 placeholder="选择月份"
                 format="YYYY-MM"
                 value-format="YYYY-MM"
-                @change="handleUpdate(edu.id, { endDate: edu.endDate })"
+                @update:model-value="(value: string | null) => handleUpdate(edu.id, { endDate: value || '' })"
               />
             </el-form-item>
           </el-col>
@@ -95,30 +95,31 @@
 
         <el-form-item label="GPA / 绩点（选填）">
           <el-input
-            v-model="edu.gpa"
+            :model-value="edu.gpa"
             placeholder="例如：3.8/4.0"
-            @input="handleUpdate(edu.id, { gpa: edu.gpa })"
+            @update:model-value="(value: string) => handleUpdate(edu.id, { gpa: value })"
           />
         </el-form-item>
       </el-form>
 
         <el-divider v-if="index < education.length - 1" />
-      </div>
+      </div></SmoothCollapse>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { Delete, School, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import type { Education } from '@/types/resume';
+import SmoothCollapse from '@/components/common/SmoothCollapse.vue';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const education = ref<Education[]>(JSON.parse(JSON.stringify(data.value.education)));
+const education = computed(() => data.value.education);
 const collapsedIds = ref<string[]>([]);
 
 const isCollapsed = (id: string) => collapsedIds.value.includes(id);
@@ -129,9 +130,6 @@ const toggleCollapsed = (id: string) => {
     : [...collapsedIds.value, id];
 };
 
-watch(() => data.value.education, (newVal) => {
-  education.value = JSON.parse(JSON.stringify(newVal));
-}, { deep: true });
 
 const addNew = () => {
   resumeStore.addEducation({

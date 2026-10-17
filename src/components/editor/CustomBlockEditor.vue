@@ -4,6 +4,7 @@ import { computed, ref } from 'vue';
 import { useResumeStore } from '@/stores/resume';
 import { Delete, Calendar, Edit, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
+import SmoothCollapse from '@/components/common/SmoothCollapse.vue';
 import type { CustomItem } from '@/types/resume';
 
 const props = defineProps<{
@@ -11,12 +12,13 @@ const props = defineProps<{
   modelValue: string | CustomItem[];
 }>();
 
-const emit = defineEmits<{
+defineEmits<{
   'update:modelValue': [value: string | CustomItem[]];
   'delete': [];
 }>();
 
 const resumeStore = useResumeStore();
+const blockContent = computed(() => resumeStore.data.customBlocks.find(block => block.id === props.id)?.content ?? props.modelValue);
 const collapsedItemIds = ref<string[]>([]);
 
 const isItemCollapsed = (id: string) => collapsedItemIds.value.includes(id);
@@ -28,13 +30,13 @@ const toggleItemCollapsed = (id: string) => {
 };
 
 // 判断是否为列表模式 (如果是数组，或者为空，或者用户选择了列表模式)
-const isListMode = computed(() => Array.isArray(props.modelValue));
+const isListMode = computed(() => Array.isArray(blockContent.value));
 
 // 转换为列表模式
 const switchToListMode = () => {
   if (!isListMode.value) {
     // 如果之前有文本内容，将其作为一个条目保留
-    const initialContent = typeof props.modelValue === 'string' && props.modelValue ? props.modelValue : '';
+    const initialContent = typeof blockContent.value === 'string' ? blockContent.value : '';
     const initialItem = initialContent ? [{ 
       id: Date.now().toString(), 
       title: '默认条目', 
@@ -43,15 +45,12 @@ const switchToListMode = () => {
       description: initialContent 
     }] : [];
     
-    emit('update:modelValue', initialItem);
-    // 同时更新 store 中的 type
-    const block = resumeStore.data.customBlocks.find(b => b.id === props.id);
-    if (block) block.type = 'list';
+    resumeStore.updateCustomBlock(props.id, { type: 'list', content: initialItem });
   }
 };
 
 const items = computed(() => {
-  return Array.isArray(props.modelValue) ? props.modelValue : [];
+  return Array.isArray(blockContent.value) ? blockContent.value : [];
 });
 
 const addItem = () => {
@@ -78,8 +77,8 @@ defineExpose({ addItem });
     <!-- 文本模式 (兼容旧数据) -->
     <div v-if="!isListMode" class="space-y-4">
       <RichTextEditor
-        :model-value="modelValue as string"
-        @update:modelValue="(val) => $emit('update:modelValue', val)"
+        :model-value="blockContent as string"
+        @update:modelValue="(content) => resumeStore.updateCustomBlock(id, { content })"
         placeholder="请输入内容..."
       />
       <div class="text-center">
@@ -126,14 +125,14 @@ defineExpose({ addItem });
           </div>
         </div>
 
-        <div v-show="!isItemCollapsed(item.id)" class="item-card__body">
+        <SmoothCollapse><div v-show="!isItemCollapsed(item.id)" class="item-card__body">
           <div class="space-y-3">
           <!-- 标题行 -->
           <div class="item-heading-fields grid grid-cols-2 gap-3">
             <el-input 
-              v-model="item.title" 
-              placeholder="标题 (如: 奖项名称)" 
-              @change="updateItem(item.id, { title: item.title })"
+              :model-value="item.title"
+              placeholder="标题 (如: 奖项名称)"
+              @update:model-value="(value: string) => updateItem(item.id, { title: value })"
             >
               <template #prefix>
                 <el-icon class="text-gray-400"><Edit /></el-icon>
@@ -141,18 +140,18 @@ defineExpose({ addItem });
             </el-input>
             
             <el-input 
-              v-model="item.subtitle" 
-              placeholder="副标题 (如: 颁发机构/地点)" 
-              @change="updateItem(item.id, { subtitle: item.subtitle })"
+              :model-value="item.subtitle"
+              placeholder="副标题 (如: 颁发机构/地点)"
+              @update:model-value="(value: string) => updateItem(item.id, { subtitle: value })"
             />
           </div>
 
           <!-- 时间行 -->
           <div>
             <el-input 
-              v-model="item.date" 
-              placeholder="时间范围 (如: 2023.01 - 2024.01)" 
-              @change="updateItem(item.id, { date: item.date })"
+              :model-value="item.date"
+              placeholder="时间范围 (如: 2023.01 - 2024.01)"
+              @update:model-value="(value: string) => updateItem(item.id, { date: value })"
             >
               <template #prefix>
                 <el-icon class="text-gray-400"><Calendar /></el-icon>
@@ -170,7 +169,7 @@ defineExpose({ addItem });
             />
           </div>
           </div>
-        </div>
+        </div></SmoothCollapse>
       </div>
 
     </div>

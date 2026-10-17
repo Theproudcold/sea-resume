@@ -30,31 +30,31 @@
         </div>
       </div>
 
-      <div v-show="!isCollapsed(skill.id)" class="skill-item__body">
+      <SmoothCollapse><div v-show="!isCollapsed(skill.id)" class="skill-item__body">
         <el-form label-position="top">
         <el-form-item label="分类名称" required>
           <el-input
-            v-model="skill.category"
+            :model-value="skill.category"
             placeholder="例如：编程语言、前端框架"
-            @input="handleUpdate(skill.id, { category: skill.category })"
+            @update:model-value="(value: string) => handleUpdate(skill.id, { category: value })"
           />
         </el-form-item>
 
         <el-form-item label="具体技能" required>
           <el-input
-            :model-value="skill.items.join(', ')"
+            :model-value="itemDrafts[skill.id] ?? skill.items.join(', ')"
             type="textarea"
             :rows="2"
             placeholder="多个技能请用逗号分隔，例如：JavaScript, TypeScript, Vue.js"
-            @input="(val: string) => handleItemsUpdate(skill.id, val)"
+            @update:model-value="(val: string) => handleItemsUpdate(skill.id, val)"
           />
         </el-form-item>
 
         <el-form-item label="熟练程度（选填）">
           <el-select
-            v-model="skill.level"
+            :model-value="skill.level"
             placeholder="选择熟练程度"
-            @change="handleUpdate(skill.id, { level: skill.level })"
+            @update:model-value="(value: Skill['level']) => handleUpdate(skill.id, { level: value })"
           >
             <el-option label="入门" value="beginner" />
             <el-option label="中级" value="intermediate" />
@@ -65,22 +65,23 @@
       </el-form>
 
         <el-divider v-if="index < skills.length - 1" />
-      </div>
+      </div></SmoothCollapse>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { Delete, Star, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import type { Skill } from '@/types/resume';
+import SmoothCollapse from '@/components/common/SmoothCollapse.vue';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const skills = ref<Skill[]>(JSON.parse(JSON.stringify(data.value.skills)));
+const skills = computed(() => data.value.skills);
 const collapsedIds = ref<string[]>([]);
 
 const isCollapsed = (id: string) => collapsedIds.value.includes(id);
@@ -91,9 +92,25 @@ const toggleCollapsed = (id: string) => {
     : [...collapsedIds.value, id];
 };
 
-watch(() => data.value.skills, (newVal) => {
-  skills.value = JSON.parse(JSON.stringify(newVal));
-}, { deep: true });
+// Only separator text is local. Synchronous action echoes must not normalize typing.
+const itemDrafts = ref<Record<string, string>>({});
+let editingItemsId: string | undefined;
+watch(() => ({
+  root: data.value,
+  entries: skills.value.map(skill => ({ id: skill.id, items: skill.items, text: skill.items.join(', ') })),
+}), (next, previous) => {
+  const oldEntries = new Map(previous?.entries.map(entry => [entry.id, entry]));
+  const ids = new Set(next.entries.map(entry => entry.id));
+  for (const id of Object.keys(itemDrafts.value)) {
+    if (!ids.has(id)) delete itemDrafts.value[id];
+  }
+  for (const entry of next.entries) {
+    const old = oldEntries.get(entry.id);
+    if (entry.id !== editingItemsId && (!old || previous?.root !== next.root || old.items !== entry.items || old.text !== entry.text)) {
+      itemDrafts.value[entry.id] = entry.text;
+    }
+  }
+}, { immediate: true, flush: 'sync' });
 
 const addNew = () => {
   resumeStore.addSkill({
@@ -111,8 +128,14 @@ const handleUpdate = (id: string, updates: Partial<Skill>) => {
 };
 
 const handleItemsUpdate = (id: string, value: string) => {
-  const items = value.split(',').map(item => item.trim()).filter(item => item);
-  handleUpdate(id, { items });
+  itemDrafts.value[id] = value;
+  const items = value.split(',').map(item => item.trim()).filter(Boolean);
+  editingItemsId = id;
+  try {
+    handleUpdate(id, { items });
+  } finally {
+    editingItemsId = undefined;
+  }
 };
 defineExpose({ addNew });
 </script>

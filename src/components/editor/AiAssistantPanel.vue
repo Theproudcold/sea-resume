@@ -5,9 +5,18 @@
     direction="rtl"
     size="min(560px, calc(100vw - 24px))"
     destroy-on-close
+    :before-close="closeDrawer"
     @update:model-value="emit('update:visible', $event)"
   >
     <div class="assistant-panel">
+      <el-radio-group :model-value="mode" aria-label="AI 工作模式" @update:model-value="changeMode">
+        <el-radio-button value="optimize">简历优化</el-radio-button>
+        <el-radio-button value="quick">快捷修改</el-radio-button>
+        <el-radio-button value="greeting">打招呼语</el-radio-button>
+      </el-radio-group>
+      <ResumeOptimizationPanel v-if="visible && mode === 'optimize'" ref="optimizationPanel" :resume="resume" @configure="configureModel" @applied="handleOptimized" />
+      <GreetingPanel v-if="visible && mode === 'greeting'" :resume="resume" @configure="configureModel" />
+      <template v-if="mode === 'quick'">
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>隐私说明</template>
         <p>只有点击生成并确认后，当前简历内容和你的指令才会发送到配置的 AI 服务；出生日期不会随请求发送。API Key 只保存在本次页面会话。</p>
@@ -19,7 +28,7 @@
             <span class="eyebrow">当前模型服务</span>
             <strong>{{ providerLabel }}</strong>
             <span>{{ modelSettings?.model || '尚未选择模型' }}</span>
-            <span class="provider-key-status" :class="{ 'is-ready': sessionKeyAvailable }">{{ sessionKeyAvailable ? 'API Key 已配置' : '需要配置 API Key' }}</span>
+            <span class="provider-key-status" :class="{ 'is-ready': sessionKeyAvailable }">{{ modelSettings?.authMode === 'none' ? '本机服务 · 无需 API Key' : (sessionKeyAvailable ? 'API Key 已配置' : '需要配置 API Key') }}</span>
           </div>
           <el-button text type="primary" @click="emit('configure')">配置模型</el-button>
         </div>
@@ -54,8 +63,8 @@
         </ol>
         <el-alert type="info" :closable="false" title="AI 不能删除简历条目、执行脚本或写入其他简历。拒绝或关闭不会更改数据。" />
         <div class="app-dialog-actions draft-actions">
-          <el-button @click="pendingDraft = null">拒绝修改</el-button>
-          <el-button type="primary" @click="confirmApply">确认并应用</el-button>
+          <el-button :disabled="applying" @click="pendingDraft = null">拒绝修改</el-button>
+          <el-button type="primary" :loading="applying" @click="confirmApply">确认并应用</el-button>
         </div>
       </template>
 
@@ -63,41 +72,61 @@
         <el-button text type="primary" @click="emit('undo')">撤销上一批 AI 修改</el-button>
       </el-alert>
       <el-alert v-if="errorMessage" class="error-callout" type="error" :closable="false" show-icon :title="errorMessage" />
+      </template>
     </div>
   </el-drawer>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import type { ResumeData } from '@/types/resume';
-import type { ResumeAiDraft, ResumeAiOperation } from '@/types/ai';
-import { AI_PROVIDER_PRESETS, getAiSessionApiKey, hasAiSessionApiKey, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
+import type { ResumeAiOperation } from '@/types/ai';
+import { createChangeProposal, type ResumeChangeProposal } from '@/services/ai/changeProposal';
+import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import { requestResumeAiDraft } from '@/services/ai/AiProvider';
+import ResumeOptimizationPanel from '@/components/ai/ResumeOptimizationPanel.vue';
+import GreetingPanel from '@/components/ai/GreetingPanel.vue';
 
 const props = defineProps<{ visible: boolean; resume: ResumeData; undoAvailable: boolean }>();
 const emit = defineEmits<{
   'update:visible': [visible: boolean];
-  apply: [operations: ResumeAiOperation[]];
+  apply: [proposal: ResumeChangeProposal, done: (saved: boolean) => void];
   undo: [];
   configure: [];
+  applied: [resumeId: string];
 }>();
 const modelSettings = ref<AiModelSettings | null>(loadAiModelSettings());
-const sessionKeyAvailable = ref(hasAiSessionApiKey());
+const sessionKeyAvailable = ref(isAiProviderReady(modelSettings.value));
 const instruction = ref('');
 const consent = ref(false);
 const directApply = ref(false);
 const loading = ref(false);
 const errorMessage = ref('');
-const pendingDraft = ref<ResumeAiDraft | null>(null);
+const pendingDraft = ref<ResumeChangeProposal | null>(null);
+const applying = ref(false);
+const mode = ref<'quick' | 'optimize' | 'greeting'>('optimize');
+const optimizationPanel = ref<InstanceType<typeof ResumeOptimizationPanel>>();
+async function beforeClose(): Promise<boolean> { return !applying.value && (mode.value !== 'optimize' || await optimizationPanel.value?.beforeClose() !== false); }
+async function closeDrawer(done: () => void) { if (await beforeClose()) done(); }
+async function changeMode(value: string | number | boolean | undefined) { if ((value === 'quick' || value === 'optimize' || value === 'greeting') && await beforeClose()) mode.value = value; }
+async function configureModel() { if (await beforeClose()) emit('configure'); }
+defineExpose({ beforeClose });
+let controller: AbortController | undefined;
+let requestGeneration = 0;
+function cancelQuickRequest() { requestGeneration++; controller?.abort(); loading.value = false; }
+onBeforeUnmount(cancelQuickRequest);
+watch(mode, cancelQuickRequest);
+function handleOptimized(id: string) { emit('applied', id); emit('update:visible', false); }
 const providerLabel = computed(() => modelSettings.value?.profileName || AI_PROVIDER_PRESETS.find((preset) => preset.id === modelSettings.value?.presetId)?.label || '未配置');
 const canRequest = computed(() => !!modelSettings.value?.baseUrl.trim() && !!modelSettings.value?.model.trim() && sessionKeyAvailable.value && !!instruction.value.trim() && consent.value && !loading.value);
 
 watch(() => props.visible, (visible) => {
   if (visible) {
     modelSettings.value = loadAiModelSettings();
-    sessionKeyAvailable.value = hasAiSessionApiKey();
+    sessionKeyAvailable.value = isAiProviderReady(modelSettings.value);
     return;
   }
+  cancelQuickRequest();
   instruction.value = '';
   consent.value = false;
   directApply.value = false;
@@ -108,24 +137,30 @@ watch(() => props.visible, (visible) => {
 async function requestChanges() {
   if (!canRequest.value || !modelSettings.value) return;
   loading.value = true;
+  const generation = ++requestGeneration;
+  controller = new AbortController();
   errorMessage.value = '';
   try {
-    pendingDraft.value = await requestResumeAiDraft({
-      baseUrl: modelSettings.value.baseUrl,
-      apiKey: getAiSessionApiKey(modelSettings.value.profileId),
-      model: modelSettings.value.model,
-    }, props.resume, instruction.value);
+    const baseline = JSON.parse(JSON.stringify(props.resume)) as ResumeData;
+    const draft = await requestResumeAiDraft(toAiProviderConfig(modelSettings.value), baseline, instruction.value, { signal: controller.signal });
+    if (generation !== requestGeneration) return;
+    const proposal = await createChangeProposal(baseline, draft);
+    if (generation !== requestGeneration) return;
+    pendingDraft.value = proposal;
     if (directApply.value && pendingDraft.value) confirmApply();
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'AI 请求失败。';
+    if (generation === requestGeneration) errorMessage.value = error instanceof Error ? error.message : 'AI 请求失败。';
   } finally {
-    loading.value = false;
+    if (generation === requestGeneration) loading.value = false;
   }
 }
 function confirmApply() {
-  if (!pendingDraft.value) return;
-  emit('apply', pendingDraft.value.operations);
-  pendingDraft.value = null;
+  if (!pendingDraft.value || applying.value) return;
+  applying.value = true;
+  emit('apply', pendingDraft.value, saved => {
+    applying.value = false;
+    if (saved) pendingDraft.value = null;
+  });
 }
 
 function findItem(operation: ResumeAiOperation): Record<string, unknown> | undefined {

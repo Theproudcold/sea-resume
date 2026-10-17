@@ -41,4 +41,12 @@ describe('AI provider privacy', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
     await expect(listProviderModels('https://api.example.com/v1', 'test-key')).rejects.toThrow('浏览器跨域限制');
   });
+  it('lists local models without a key or Authorization header', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ id: 'llama3' }] })));
+    vi.stubGlobal('fetch', fetcher);
+    await expect(listProviderModels('http://localhost:11434/v1', '', { authMode: 'none' })).resolves.toEqual(['llama3']);
+    expect(new Headers(fetcher.mock.calls[0]![1].headers).has('Authorization')).toBe(false);
+    await expect(listProviderModels('https://example.com/v1', '', { authMode: 'none' })).rejects.toThrow('loopback');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
 });

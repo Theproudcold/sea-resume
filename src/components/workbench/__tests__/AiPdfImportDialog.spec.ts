@@ -155,6 +155,7 @@ describe('AiPdfImportDialog', () => {
       baseUrl: 'https://api.deepseek.com/v1',
       apiKey: 'test-api-key',
       model: 'deepseek-chat',
+      authMode: 'bearer', jsonMode: true, timeoutMs: 90000,
     }, 'candidate.pdf', 'Locally extracted resume text');
     expect(wrapper.text()).toContain('请检查项目日期。');
     await getField(wrapper, '姓名').setValue('Corrected Name');
@@ -205,5 +206,11 @@ describe('AiPdfImportDialog', () => {
 
     expect(wrapper.text()).toContain('简历 Markdown 解析失败');
     expect(wrapper.text()).not.toContain('确认并创建新简历');
+  });
+  it('parses with a local keyless provider and preserves its options', async () => {
+    clearAiSessionApiKey();
+    saveAiModelSettings({ presetId: 'ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3', authMode: 'none', jsonMode: false, timeoutMs: 180000 });
+    const wrapper = createWrapper(); await parseWithConsent(wrapper);
+    expect(mocks.requestAiPdfMarkdown).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: 'http://localhost:11434/v1', apiKey: '', authMode: 'none', jsonMode: false, timeoutMs: 180000 }), 'candidate.pdf', 'Locally extracted resume text');
   });
 });

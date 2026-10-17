@@ -1,6 +1,12 @@
-export type AiProviderPresetId = 'openai' | 'deepseek' | 'qwen' | 'custom';
+import type { AiProviderConfig } from '@/types/ai';
 
-export interface AiModelSettings {
+export type AiProviderPresetId = 'openai' | 'deepseek' | 'qwen' | 'ollama' | 'lmstudio' | 'custom';
+export interface AiProviderOptions {
+  authMode?: 'bearer' | 'none';
+  jsonMode?: boolean;
+  timeoutMs?: number;
+}
+export interface AiModelSettings extends AiProviderOptions {
   presetId: AiProviderPresetId;
   baseUrl: string;
   model: string;
@@ -15,7 +21,7 @@ export interface AiProviderProfile extends AiModelSettings {
   models: string[];
 }
 
-export interface AiProviderPreset {
+export interface AiProviderPreset extends AiProviderOptions {
   id: AiProviderPresetId;
   label: string;
   baseUrl: string;
@@ -26,6 +32,8 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
   { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
   { id: 'deepseek', label: 'DeepSeek（兼容接口）', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
   { id: 'qwen', label: '通义千问（兼容接口）', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
+  { id: 'ollama', label: 'Ollama', baseUrl: 'http://localhost:11434/v1', model: '', authMode: 'none' },
+  { id: 'lmstudio', label: 'LM Studio', baseUrl: 'http://localhost:1234/v1', model: '', authMode: 'none' },
   { id: 'custom', label: '自定义 OpenAI-compatible 接口', baseUrl: '', model: '' },
 ];
 
@@ -51,7 +59,7 @@ function parseLegacySettings(): AiModelSettings | null {
     const settings = value as Record<string, unknown>;
     if (!isPresetId(settings.presetId) || typeof settings.baseUrl !== 'string' || typeof settings.model !== 'string') return null;
     if (settings.baseUrl.length > 2048 || settings.model.length > 200) return null;
-    return { presetId: settings.presetId, baseUrl: settings.baseUrl, model: settings.model };
+    return { presetId: settings.presetId, baseUrl: settings.baseUrl, model: settings.model, ...normalizeAiProviderOptions(settings) };
   } catch {
     return null;
   }
@@ -81,6 +89,7 @@ export function loadAiProviderProfiles(): AiProviderProfile[] {
           baseUrl: profile.baseUrl,
           model: profile.model,
           enabled: profile.enabled !== false,
+          ...normalizeAiProviderOptions(profile),
           models,
         }];
       });
@@ -127,6 +136,7 @@ export function loadAiModelSettings(): AiModelSettings | null {
     presetId: active.presetId,
     baseUrl: active.baseUrl,
     model: active.model,
+    ...normalizeAiProviderOptions(active),
   };
 }
 
@@ -145,6 +155,7 @@ export function saveAiProviderProfiles(profiles: AiProviderProfile[], activeProv
       presetId: profile.presetId,
       baseUrl: profile.baseUrl.trim(),
       model: profile.model.trim(),
+      ...normalizeAiProviderOptions(profile),
       enabled: profile.enabled !== false,
       models: Array.isArray(profile.models)
         ? profile.models.filter((item): item is string => typeof item === 'string' && item.length <= 200).slice(0, MAX_MODELS_PER_PROFILE)
@@ -172,6 +183,7 @@ export function saveAiProviderProfiles(profiles: AiProviderProfile[], activeProv
     presetId: legacyMirror.presetId,
     baseUrl: legacyMirror.baseUrl,
     model: legacyMirror.model,
+    ...normalizeAiProviderOptions(legacyMirror),
   }));
 }
 
@@ -189,6 +201,7 @@ export function saveAiModelSettings(settings: AiModelSettings): void {
     presetId: settings.presetId,
     baseUrl: settings.baseUrl,
     model: settings.model,
+    ...normalizeAiProviderOptions({ ...existing, ...settings }),
     enabled: existing?.enabled ?? true,
     models: existing?.models ?? [],
   };
@@ -228,4 +241,50 @@ export function hasAiSessionApiKey(profileId?: string): boolean {
 export function clearAiSessionApiKey(profileId?: string): void {
   if (profileId) sessionApiKeys.delete(profileId);
   else sessionApiKeys.clear();
+}
+
+export const AI_TIMEOUT_MIN_MS = 1000;
+export const AI_TIMEOUT_MAX_MS = 600000;
+export const AI_TIMEOUT_DEFAULT_MS = 90000;
+
+export function normalizeAiProviderOptions(value: { authMode?: unknown; jsonMode?: unknown; timeoutMs?: unknown } = {}): Required<AiProviderOptions> {
+  return {
+    authMode: value.authMode === 'none' ? 'none' : 'bearer',
+    jsonMode: typeof value.jsonMode === 'boolean' ? value.jsonMode : true,
+    timeoutMs: typeof value.timeoutMs === 'number' && Number.isFinite(value.timeoutMs)
+      ? Math.min(AI_TIMEOUT_MAX_MS, Math.max(AI_TIMEOUT_MIN_MS, Math.round(value.timeoutMs))) : AI_TIMEOUT_DEFAULT_MS,
+  };
+}
+
+/** No DNS aliases, LAN hosts or remote keyless endpoints. */
+export function isAiLoopbackUrl(baseUrl: string): boolean {
+  try {
+    const url = new URL(baseUrl.trim());
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+      && (['localhost', '[::1]'].includes(url.hostname) || /^127(?:\.\d{1,3}){3}$/.test(url.hostname));
+  } catch { return false; }
+}
+
+export function aiAuthorizationHeaders(baseUrl: string, key = '', options: AiProviderOptions = {}): Record<string, string> {
+  const url = new URL(baseUrl.trim());
+  if (url.username || url.password || (url.protocol !== 'https:' && !isAiLoopbackUrl(baseUrl))) throw new Error('AI 服务地址无效；远程服务仅允许 HTTPS。');
+  if (normalizeAiProviderOptions(options).authMode === 'none') {
+    if (!isAiLoopbackUrl(baseUrl)) throw new Error('无鉴权仅允许本机 loopback 服务。');
+    return {};
+  }
+  if (!key.trim()) throw new Error('请配置本次会话 API Key。');
+  return { Authorization: `Bearer ${key.trim()}` };
+}
+
+type AiReadySettings = AiProviderOptions & { baseUrl: string; model: string; profileId?: string; enabled?: boolean };
+export function isAiProviderReady(settings: AiReadySettings | null | undefined, key?: string): boolean {
+  if (!settings || settings.enabled === false || !settings.model.trim() || !settings.baseUrl.trim()) return false;
+  try { aiAuthorizationHeaders(settings.baseUrl, key ?? getAiSessionApiKey(settings.profileId), settings); return true; }
+  catch { return false; }
+}
+
+export function toAiProviderConfig(settings: AiReadySettings | null | undefined, key?: string): AiProviderConfig {
+  if (!settings || !isAiProviderReady(settings, key)) throw new Error('请配置有效的模型服务及所需会话 API Key；无鉴权仅支持本机服务。');
+  const options = normalizeAiProviderOptions(settings);
+  return { baseUrl: settings.baseUrl.trim(), model: settings.model.trim(), apiKey: options.authMode === 'none' ? '' : (key ?? getAiSessionApiKey(settings.profileId)).trim(), ...options };
 }

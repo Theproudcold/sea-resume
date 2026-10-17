@@ -52,8 +52,9 @@ export function parseResumeAiDraft(input: unknown): ResumeAiDraft {
     if (typeof field !== 'string' || !textFields[type]?.includes(field)) throw new Error('AI 请求了不允许修改的字段。');
     const id = operation.id;
     if (type !== 'set_basic' && (typeof id !== 'string' || !id || id.length > 120)) throw new Error('AI 操作缺少有效条目 ID。');
-    const normalizedValue = Array.isArray(operation.value) ? safeStringList(operation.value, field) : safeString(operation.value, field);
-    return { ...operation, type, field, value: normalizedValue } as ResumeAiOperation;
+    const listField = (type === 'update_experience' && field === 'highlights') || (type === 'update_project' && field === 'techStack') || (type === 'update_skill' && field === 'items');
+    const normalizedValue = listField ? safeStringList(operation.value, field) : safeString(operation.value, field);
+    return { type, field, ...(type === 'set_basic' ? {} : { id }), value: normalizedValue } as ResumeAiOperation;
   });
   const explanation = typeof object.explanation === 'string' ? object.explanation.slice(0, 1000) : '请审阅以下修改建议。';
   return { explanation, operations };
@@ -62,7 +63,7 @@ export function parseResumeAiDraft(input: unknown): ResumeAiDraft {
 /** Apply validated operations to a copy; failures never partially mutate the live Pinia store. */
 export function applyResumeAiOperations(source: ResumeData, operations: ResumeAiOperation[]): ResumeData {
   const resume = JSON.parse(JSON.stringify(source)) as ResumeData;
-  for (const operation of operations) {
+  for (const operation of parseResumeAiDraft({ operations }).operations) {
     switch (operation.type) {
       case 'set_basic': {
         const value = safeString(operation.value, operation.field);

@@ -51,8 +51,7 @@ async function chooseBackup(wrapper: ReturnType<typeof createWrapper>, text: str
     value: [new File([text], name, { type: 'application/json' })],
   });
   await input.trigger('change');
-  await flushPromises();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await vi.waitFor(() => expect((wrapper.vm as any).$.setupState.reading).toBe(false));
 }
 
 beforeEach(() => {

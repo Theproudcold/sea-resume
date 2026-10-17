@@ -23,17 +23,17 @@
 
       <el-form-item label="姓名" required>
         <el-input
-          v-model="localBasic.name"
+          :model-value="localBasic.name"
           placeholder="请输入姓名"
-          @input="handleUpdate"
+          @update:model-value="(name: string) => handleUpdate({ name })"
         />
       </el-form-item>
 
       <el-form-item label="求职意向" required>
         <el-input
-          v-model="localBasic.title"
+          :model-value="localBasic.title"
           placeholder="例如：前端工程师"
-          @input="handleUpdate"
+          @update:model-value="(title: string) => handleUpdate({ title })"
         />
       </el-form-item>
 
@@ -66,10 +66,10 @@
               </div>
             </template>
             <el-input
-              v-model="localBasic.email"
+              :model-value="localBasic.email"
               placeholder="your@email.com"
               type="email"
-              @input="handleUpdate"
+              @update:model-value="(email: string) => handleUpdate({ email })"
             />
           </el-form-item>
         </el-col>
@@ -101,9 +101,9 @@
               </div>
             </template>
             <el-input
-              v-model="localBasic.phone"
+              :model-value="localBasic.phone"
               placeholder="手机号码"
-              @input="handleUpdate"
+              @update:model-value="(phone: string) => handleUpdate({ phone })"
             />
           </el-form-item>
         </el-col>
@@ -136,22 +136,22 @@
           </div>
         </template>
         <el-input
-          v-model="localBasic.location"
+          :model-value="localBasic.location"
           placeholder="例如：北京"
-          @input="handleUpdate"
+          @update:model-value="(location: string) => handleUpdate({ location })"
         />
       </el-form-item>
 
       <el-form-item label="出生日期（可选）">
         <el-date-picker
-          v-model="localBasic.birthDate"
+          :model-value="localBasic.birthDate"
           type="date"
           value-format="YYYY-MM-DD"
           format="YYYY 年 MM 月 DD 日"
           placeholder="仅本地保存，用于年龄计算"
           clearable
           class="w-full"
-          @change="handleUpdate"
+          @update:model-value="(birthDate: string | null) => handleUpdate({ birthDate: birthDate || '' })"
         />
         <p class="privacy-note">生日默认不会显示在简历；只有开启“显示年龄”后才会在预览/打印中显示。</p>
       </el-form-item>
@@ -159,12 +159,12 @@
       <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item label="显示年龄">
-            <el-switch v-model="localBasic.showAge" :disabled="!localBasic.birthDate" @change="handleUpdate" />
+            <el-switch :model-value="localBasic.showAge" :disabled="!localBasic.birthDate" @update:model-value="(showAge: unknown) => handleUpdate({ showAge: !!showAge })" />
           </el-form-item>
         </el-col>
         <el-col :span="12">
           <el-form-item label="显示工作经验时长">
-            <el-switch v-model="localBasic.showExperienceYears" @change="handleUpdate" />
+            <el-switch :model-value="localBasic.showExperienceYears" @update:model-value="(showExperienceYears: unknown) => handleUpdate({ showExperienceYears: !!showExperienceYears })" />
           </el-form-item>
         </el-col>
       </el-row>
@@ -196,9 +196,9 @@
           </div>
         </template>
         <el-input
-          v-model="localBasic.website"
+          :model-value="localBasic.website"
           placeholder="https://..."
-          @input="handleUpdate"
+          @update:model-value="(website: string) => handleUpdate({ website })"
         />
       </el-form-item>
 
@@ -207,10 +207,10 @@
           <div v-for="contact in localBasic.customContacts || []" :key="contact.id" class="custom-contact-card">
             <div class="custom-contact-row">
               <el-input
-                v-model="contact.label"
+                :model-value="contact.label"
                 maxlength="30"
                 placeholder="名称，如：微信"
-                @input="handleUpdate"
+                @update:model-value="(label: string) => updateCustomContact(contact.id, { label })"
               />
               <el-popover placement="bottom" :width="220" trigger="click">
                 <template #reference>
@@ -230,7 +230,7 @@
                     :class="{ 'is-active': contact.icon === icon }"
                     :aria-label="`联系方式图标 ${icon}`"
                     :aria-pressed="contact.icon === icon"
-                    @click="updateCustomContactIcon(contact, icon)"
+                    @click="updateCustomContact(contact.id, { icon })"
                   >
                     <el-icon><component :is="Icons[icon as keyof typeof Icons]" /></el-icon>
                   </button>
@@ -245,10 +245,10 @@
               />
             </div>
             <el-input
-              v-model="contact.value"
+              :model-value="contact.value"
               maxlength="200"
               placeholder="填写联系方式内容"
-              @input="handleUpdate"
+              @update:model-value="(value: string) => updateCustomContact(contact.id, { value })"
             />
           </div>
           <el-button text type="primary" :icon="Plus" @click="addCustomContact">添加联系方式</el-button>
@@ -258,7 +258,7 @@
       <el-form-item label="个人简介">
         <RichTextEditor
           :model-value="localBasic.summary || ''"
-          @update:modelValue="(val: string) => { localBasic.summary = val; handleUpdate(); }"
+          @update:modelValue="(summary: string) => handleUpdate({ summary })"
         />
       </el-form-item>
     </el-form>
@@ -266,7 +266,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, onBeforeUnmount } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { Plus, Edit, Delete } from '@element-plus/icons-vue';
@@ -279,22 +279,14 @@ import RichTextEditor from '@/components/common/RichTextEditor.vue';
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const copyBasicInfo = (basic: BasicInfo): BasicInfo => ({
-  ...basic,
-  iconOverrides: basic.iconOverrides ? { ...basic.iconOverrides } : undefined,
-  customContacts: basic.customContacts?.map((contact) => ({ ...contact })),
-});
+const localBasic = computed(() => data.value.basic);
 
-const localBasic = ref<BasicInfo>(copyBasicInfo(data.value.basic));
-
-// 监听 store 变化更新本地数据
-watch(() => data.value.basic, (newVal) => {
-  localBasic.value = copyBasicInfo(newVal);
-}, { deep: true });
-
-const handleUpdate = () => {
-  resumeStore.updateBasic(localBasic.value);
+const handleUpdate = (updates: Partial<BasicInfo>) => {
+  resumeStore.updateBasic(updates);
 };
+
+let avatarReadGeneration = 0;
+onBeforeUnmount(() => { avatarReadGeneration++; });
 
 const handleAvatarChange = (file: any) => {
   const isJPG = file.raw.type === 'image/jpeg' || file.raw.type === 'image/png';
@@ -309,12 +301,14 @@ const handleAvatarChange = (file: any) => {
     return;
   }
 
+  const generation = ++avatarReadGeneration;
+  const resumeId = data.value.id;
   const reader = new FileReader();
-  reader.readAsDataURL(file.raw);
   reader.onload = () => {
-    localBasic.value.avatar = reader.result as string;
-    handleUpdate();
+    if (generation !== avatarReadGeneration || data.value.id !== resumeId || resumeStore.isLoading) return;
+    handleUpdate({ avatar: reader.result as string });
   };
+  reader.readAsDataURL(file.raw);
 };
 
 const iconOptions = {
@@ -325,29 +319,21 @@ const iconOptions = {
 };
 
 const updateIcon = (field: 'email' | 'phone' | 'location' | 'website', icon: string) => {
-  if (!localBasic.value.iconOverrides) {
-    localBasic.value.iconOverrides = {};
-  }
-  localBasic.value.iconOverrides[field] = icon;
-  handleUpdate();
+  handleUpdate({ iconOverrides: { ...localBasic.value.iconOverrides, [field]: icon } });
 };
 
 const customContactIcons = ['Link', 'Message', 'ChatDotRound', 'ChatLineRound', 'Position', 'Promotion', 'Connection', 'User', 'Star', 'Monitor'];
 
 const addCustomContact = () => {
-  if (!localBasic.value.customContacts) localBasic.value.customContacts = [];
-  localBasic.value.customContacts.push({ id: generateId(), label: '', value: '', icon: 'Link' });
-  handleUpdate();
+  handleUpdate({ customContacts: [...(localBasic.value.customContacts || []), { id: generateId(), label: '', value: '', icon: 'Link' }] });
 };
 
 const removeCustomContact = (id: string) => {
-  localBasic.value.customContacts = (localBasic.value.customContacts || []).filter((contact) => contact.id !== id);
-  handleUpdate();
+  handleUpdate({ customContacts: (localBasic.value.customContacts || []).filter(contact => contact.id !== id) });
 };
 
-const updateCustomContactIcon = (contact: CustomContact, icon: string) => {
-  contact.icon = icon;
-  handleUpdate();
+const updateCustomContact = (id: string, updates: Partial<CustomContact>) => {
+  handleUpdate({ customContacts: (localBasic.value.customContacts || []).map(contact => contact.id === id ? { ...contact, ...updates } : contact) });
 };
 </script>
 

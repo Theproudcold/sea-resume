@@ -98,66 +98,31 @@
     <main class="editor-main">
       <el-scrollbar ref="editorScrollbar" height="100%">
         <div class="editor-content">
-          <div class="editor-section-transition-shell">
-            <Transition name="editor-section-switch">
-              <div :key="selectedSectionId" class="editor-section-stage">
-                <section v-if="selectedSectionId === 'theme'" id="editor-section-theme" class="editor-settings-panel">
-                  <div class="editor-detail-heading">
-                    <div>
-                      <span class="editor-detail-eyebrow">外观</span>
-                      <h2>主题设置</h2>
-                    </div>
-                  </div>
-                  <ThemeEditor />
-                </section>
-
-                <section v-else-if="selectedSectionId === 'basic'" id="editor-section-basic" class="editor-settings-panel">
-                  <div class="editor-detail-heading">
-                    <div>
-                      <span class="editor-detail-eyebrow">简历内容</span>
-                      <h2>基础信息</h2>
-                    </div>
-                  </div>
-                  <BasicInfoEditor />
-                </section>
-
-                <EditorSection
-                  v-else-if="selectedSection"
-                  :id="`editor-section-${selectedSection.id}`"
-                  :title="getSectionTitle(selectedSection.id)"
-                  :is-open="true"
-                  :visible="!isSectionHidden(selectedSection.id)"
-                  :icon="selectedSection.icon"
-                  :show-drag-handle="false"
-                  :show-visibility="false"
-                  :removable="false"
-                  :collapsible="false"
-                  @update:title="(val) => updateTitle(selectedSection.id, val)"
-                >
-                  <template #header-actions>
-                    <el-button
-                      v-if="addActionLabel"
-                      type="primary"
-                      size="small"
-                      :icon="Plus"
-                      @click.stop="addSelectedEntry"
-                    >
-                      {{ addActionLabel }}
-                    </el-button>
-                  </template>
-                  <component :is="selectedSection.component" ref="selectedEditorRef" v-if="!isCustomBlock(selectedSection.id)" />
-                  <CustomBlockEditor
-                    v-else
-                    ref="selectedEditorRef"
-                    :id="selectedSection.id"
-                    :model-value="getCustomContent(selectedSection.id)"
-                    @update:model-value="(val) => updateCustomContent(selectedSection.id, val)"
-                    @delete="deleteBlock(selectedSection.id)"
-                  />
-                </EditorSection>
-
-                <el-empty v-else description="请选择或添加一个简历模块" />
-              </div>
+          <div ref="transitionShell" class="editor-section-transition-shell" :style="{ minHeight: transitionMinHeight }">
+            <Transition
+              name="editor-section-switch"
+              @before-leave="prepareLeave"
+              @before-enter="prepareEnter"
+              @after-enter="finishEnter"
+            >
+              <KeepAlive :key="data.id" :max="6" :include="cacheableHostNames">
+                <component
+                  :is="selectedContentHost"
+                  :key="JSON.stringify([data.id, selectedSectionId])"
+                  ref="selectedEditorRef"
+                  :section-id="selectedSectionId"
+                  :section="selectedSection"
+                  :title="getSectionTitle(selectedSectionId)"
+                  :visible="!isSectionHidden(selectedSectionId)"
+                  :custom="isCustomBlock(selectedSectionId)"
+                  :content="getCustomContent(selectedSectionId)"
+                  :add-action-label="addActionLabel"
+                  @update-title="updateTitle"
+                  @update-content="updateCustomContent"
+                  @delete="deleteBlock"
+                  @add="addSelectedEntry"
+                />
+              </KeepAlive>
             </Transition>
           </div>
         </div>
@@ -167,19 +132,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, markRaw, watch, nextTick } from 'vue';
+import { ref, computed, markRaw, watch, nextTick, type Component } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { User, Briefcase, School, Star, Folder, Rank, Brush, Plus, Tickets, Hide, View, Delete } from '@element-plus/icons-vue';
 import draggable from 'vuedraggable';
-import BasicInfoEditor from './BasicInfoEditor.vue';
-import ThemeEditor from './ThemeEditor.vue';
+import EditorContentHost from './EditorContentHost.vue';
 import ExperienceEditor from './ExperienceEditor.vue';
 import EducationEditor from './EducationEditor.vue';
 import SkillEditor from './SkillEditor.vue';
 import ProjectEditor from './ProjectEditor.vue';
-import EditorSection from './EditorSection.vue';
-import CustomBlockEditor from './CustomBlockEditor.vue';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
@@ -228,7 +190,8 @@ const addActionLabel = computed(() => {
   return Array.isArray(getCustomContent(selectedSectionId.value)) ? '添加条目' : '';
 });
 
-const addSelectedEntry = () => {
+const addSelectedEntry = (id = selectedSectionId.value) => {
+  if (id !== selectedSectionId.value) return;
   const editor = selectedEditorRef.value;
   if (sectionConfig[selectedSectionId.value]) {
     editor?.addNew?.();
@@ -363,6 +326,60 @@ const sectionsList = computed({
   }
 });
 const selectedSection = computed(() => sectionsList.value.find(section => section.id === selectedSectionId.value));
+
+// Each visited section has its own component name so KeepAlive can prune just
+// removed modules via include, without rebuilding the other rich-text editors.
+const contentHosts = new Map<string, Component>();
+// KeepAlive splits string include patterns on commas; use comma-free names.
+const hostName = (id: string) => `EditorContent_${encodeURIComponent(JSON.stringify([data.value.id, id]))}`;
+const validSectionIds = computed(() => [
+  'theme', 'basic',
+  ...data.value.sectionOrder.filter(id => sectionConfig[id] || data.value.customBlocks.some(block => block.id === id)),
+]);
+const cacheableHostNames = computed(() => validSectionIds.value.map(hostName));
+const selectedContentHost = computed(() => {
+  const name = hostName(selectedSectionId.value);
+  let host = contentHosts.get(name);
+  if (!host) {
+    host = markRaw({ ...EditorContentHost, name });
+    contentHosts.set(name, host);
+  }
+  return host;
+});
+
+watch(() => data.value.id, () => {
+  contentHosts.clear();
+  selectedEditorRef.value = null;
+  transitionMinHeight.value = '';
+  selectedSectionId.value = validSectionIds.value.includes(resumeStore.activeSection || '')
+    ? resumeStore.activeSection!
+    : data.value.sectionOrder.find(id => validSectionIds.value.includes(id)) || 'basic';
+});
+watch([validSectionIds, selectedSectionId], ([ids]) => {
+  const names = new Set(cacheableHostNames.value);
+  for (const name of contentHosts.keys()) {
+    if (!names.has(name)) contentHosts.delete(name);
+  }
+  if (!ids.includes(selectedSectionId.value)) {
+    selectSection(data.value.sectionOrder.find(id => ids.includes(id)) || 'basic');
+  }
+});
+
+const transitionShell = ref<HTMLElement | null>(null);
+const transitionMinHeight = ref('');
+const prepareLeave = (element: Element) => {
+  const stage = element as HTMLElement;
+  transitionMinHeight.value = `${Math.max(transitionShell.value?.offsetHeight || 0, stage.offsetHeight)}px`;
+  stage.inert = true;
+  stage.setAttribute('aria-hidden', 'true');
+  if (stage.contains(document.activeElement)) (document.activeElement as HTMLElement)?.blur();
+};
+const prepareEnter = (element: Element) => {
+  const stage = element as HTMLElement;
+  stage.inert = false;
+  stage.removeAttribute('aria-hidden');
+};
+const finishEnter = () => { transitionMinHeight.value = ''; };
 </script>
 
 <style scoped>
@@ -396,8 +413,7 @@ const selectedSection = computed(() => sectionsList.value.find(section => sectio
   padding: 20px 18px 14px;
 }
 
-.sidebar-eyebrow,
-.editor-detail-eyebrow {
+.sidebar-eyebrow {
   color: var(--ui-text-muted);
   font-size: var(--ui-font-xs);
   font-weight: 600;
@@ -573,7 +589,7 @@ const selectedSection = computed(() => sectionsList.value.find(section => sectio
 
 .editor-section-switch-enter-active,
 .editor-section-switch-leave-active {
-  transition: opacity 160ms ease, transform 160ms ease;
+  transition: opacity var(--ui-duration-normal, 180ms) ease, transform var(--ui-duration-normal, 180ms) ease;
 }
 
 .editor-section-switch-enter-from {
@@ -585,6 +601,7 @@ const selectedSection = computed(() => sectionsList.value.find(section => sectio
   position: absolute;
   inset: 0;
   width: 100%;
+  z-index: 0;
   pointer-events: none;
 }
 
@@ -594,25 +611,6 @@ const selectedSection = computed(() => sectionsList.value.find(section => sectio
 }
 
 
-.editor-settings-panel {
-  padding: 24px;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-surface);
-}
-
-.editor-detail-heading {
-  margin-bottom: 20px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--ui-border);
-}
-
-.editor-detail-heading h2 {
-  margin: 4px 0 0;
-  color: var(--ui-text-main);
-  font-size: var(--ui-font-lg);
-  font-weight: 650;
-}
 
 .editor-main :deep(.editor-section) {
   margin-bottom: 0;
@@ -623,6 +621,18 @@ const selectedSection = computed(() => sectionsList.value.find(section => sectio
   outline-offset: 3px;
 }
 
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-section-switch-enter-active,
+  .editor-section-switch-leave-active {
+    transition: none;
+  }
+
+  .editor-section-switch-enter-from,
+  .editor-section-switch-leave-to {
+    transform: none;
+  }
+}
 @media (max-width: 1024px) {
   .editor-panel {
     width: 100%;
@@ -692,8 +702,5 @@ const selectedSection = computed(() => sectionsList.value.find(section => sectio
     padding: 14px;
   }
 
-  .editor-settings-panel {
-    padding: 16px;
-  }
 }
 </style>

@@ -36,7 +36,7 @@
         <div class="pdf-provider-summary">
           <span class="eyebrow">当前模型服务</span>
           <strong>{{ providerLabel }} · {{ modelSettings?.model || '未配置模型' }}</strong>
-          <span :class="{ 'is-ready': isModelReady }">{{ isModelReady ? 'API Key 已配置' : '需要完成模型配置' }}</span>
+          <span :class="{ 'is-ready': isModelReady }">{{ isModelReady ? '模型服务已就绪' : '需要完成模型配置' }}</span>
         </div>
         <el-button type="primary" plain @click="showModelSettings = !showModelSettings">
           {{ showModelSettings ? '收起配置' : '配置模型' }}
@@ -175,7 +175,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { UploadFilled } from '@element-plus/icons-vue';
 import type { ResumeData } from '@/types/resume';
 import type { MarkdownImportResult } from '@/types/markdown-import';
-import { AI_PROVIDER_PRESETS, getAiSessionApiKey, hasAiSessionApiKey, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
+import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
 import { extractPdfText, requestAiPdfMarkdown, type ExtractedPdfText } from '@/services/ai/pdfResumeImport';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
@@ -188,7 +188,7 @@ const emit = defineEmits<{
 }>();
 
 const modelSettings = ref<AiModelSettings | null>(loadAiModelSettings());
-const sessionKeyAvailable = ref(hasAiSessionApiKey());
+const sessionKeyAvailable = ref(isAiProviderReady(modelSettings.value));
 const showModelSettings = ref(false);
 const fileName = ref('');
 const fileInput = ref<HTMLInputElement>();
@@ -203,13 +203,13 @@ const extracting = ref(false);
 const requesting = ref(false);
 const isDragging = ref(false);
 const errorMessage = ref('');
-const isModelReady = computed(() => !!modelSettings.value?.baseUrl.trim() && !!modelSettings.value?.model.trim() && sessionKeyAvailable.value);
+const isModelReady = computed(() => sessionKeyAvailable.value);
 const canRequest = computed(() => isModelReady.value && consent.value && !requesting.value);
 const providerLabel = computed(() => modelSettings.value?.profileName || AI_PROVIDER_PRESETS.find((preset) => preset.id === modelSettings.value?.presetId)?.label || '未配置');
 
 function refreshAiConfiguration() {
   modelSettings.value = loadAiModelSettings();
-  sessionKeyAvailable.value = hasAiSessionApiKey();
+  sessionKeyAvailable.value = isAiProviderReady(modelSettings.value);
 }
 
 onMounted(refreshAiConfiguration);
@@ -264,11 +264,7 @@ async function parseWithAi() {
   requesting.value = true;
   errorMessage.value = '';
   try {
-    const result = await requestAiPdfMarkdown({
-      baseUrl: modelSettings.value.baseUrl,
-      apiKey: getAiSessionApiKey(modelSettings.value.profileId),
-      model: modelSettings.value.model,
-    }, fileName.value, extracted.value.text);
+    const result = await requestAiPdfMarkdown(toAiProviderConfig(modelSettings.value), fileName.value, extracted.value.text);
     const imported = parseResumeMarkdown(result.markdown, fileName.value.replace(/\.pdf$/i, '.md'));
     parsed.value = imported;
     draftResume.value = JSON.parse(JSON.stringify(imported.resume)) as ResumeData;

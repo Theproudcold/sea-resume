@@ -1,5 +1,4 @@
 import { zipSync } from 'fflate';
-import html2canvas from 'html2canvas';
 
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
@@ -82,6 +81,11 @@ export async function exportToImage(
       throw new Error(`未找到元素: ${elementId}`);
     }
 
+    const { default: html2canvas } = await import('html2canvas');
+    if ('fonts' in document) await document.fonts.ready;
+    await Promise.all(Array.from(element.querySelectorAll('img')).map((image) =>
+      image.decode?.().catch(() => undefined),
+    ));
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,

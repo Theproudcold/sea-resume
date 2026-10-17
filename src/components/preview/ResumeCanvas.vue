@@ -1,8 +1,10 @@
 <template>
   <div class="resume-canvas-wrapper">
     <div ref="canvasRef" class="resume-canvas">
-      <slot></slot>
-      
+      <div ref="contentRef" class="resume-canvas-content">
+        <slot></slot>
+      </div>
+
       <!-- Visual Page Breaks (for Editor View only) -->
       <div v-for="i in pageCount" :key="i" 
            class="page-break-line no-print"
@@ -11,51 +13,98 @@
         <span class="page-number">Page {{ i + 1 }}</span>
       </div>
     </div>
+    <!-- Keep the physical ruler outside the exported/printed canvas. -->
+    <div ref="rulerRef" class="a4-ruler no-print" aria-hidden="true"></div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { estimateA4PageCount } from '@/utils/pageFit';
 
 const canvasRef = ref<HTMLElement | null>(null);
+const contentRef = ref<HTMLElement | null>(null);
+const rulerRef = ref<HTMLElement | null>(null);
 let resizeObserver: ResizeObserver | null = null;
 let mutationObserver: MutationObserver | null = null;
+let intersectionObserver: IntersectionObserver | null = null;
 let scheduledFrame = 0;
+let a4Height = 0;
+let disposed = false;
 
 const pageCount = ref(0);
 const updatePageBreaks = () => {
+  // Clear before measuring so later notifications can schedule the next frame.
+  scheduledFrame = 0;
   const canvas = canvasRef.value;
-  if (!canvas) return;
-  const measure = document.createElement('div');
-  measure.style.cssText = 'position:fixed;left:-10000px;top:0;height:297mm;width:1px;visibility:hidden;';
-  document.body.appendChild(measure);
-  const a4Height = measure.getBoundingClientRect().height || measure.offsetHeight;
-  measure.remove();
-  const totalPages = estimateA4PageCount(canvas.scrollHeight, a4Height);
-  pageCount.value = Math.max(0, totalPages - 1);
+  const content = contentRef.value;
+  const ruler = rulerRef.value;
+  if (disposed || !canvas || !content || !ruler) return;
+
+  // display:none (including hidden ancestors) has no layout box. Keep the last
+  // page count and wait for ResizeObserver to report the restored layout.
+  const box = canvas.getClientRects()[0];
+  if (!box || box.width <= 0 || box.height <= 0) return;
+
+  // Read layout together; marker overflow must never contribute to pagination.
+  const pageHeight = a4Height || ruler.getBoundingClientRect().height;
+  const contentHeight = Math.max(content.scrollHeight, content.offsetHeight);
+  if (pageHeight <= 0) return;
+  a4Height = pageHeight;
+  const nextPageCount = Math.max(0, estimateA4PageCount(contentHeight, pageHeight) - 1);
+  if (pageCount.value !== nextPageCount) pageCount.value = nextPageCount;
 };
 
 const scheduleUpdate = () => {
-  if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
+  if (disposed || scheduledFrame) return;
   scheduledFrame = requestAnimationFrame(updatePageBreaks);
+};
+
+const handleWindowResize = () => {
+  // Reuse the ruler DOM, but recheck physical units after zoom/viewport changes.
+  a4Height = 0;
+  scheduleUpdate();
 };
 
 onMounted(() => {
   const canvas = canvasRef.value;
-  if (!canvas) return;
+  const content = contentRef.value;
+  if (!canvas || !content) return;
   scheduleUpdate();
   resizeObserver = new ResizeObserver(scheduleUpdate);
-  resizeObserver.observe(canvas);
+  resizeObserver.observe(content);
   mutationObserver = new MutationObserver(scheduleUpdate);
-  mutationObserver.observe(canvas, { childList: true, subtree: true, characterData: true });
-  if ('fonts' in document) void document.fonts.ready.then(scheduleUpdate);
+  mutationObserver.observe(content, {
+    childList: true, subtree: true, characterData: true, attributes: true,
+  });
+  // Image load events do not bubble; capture also handles newly inserted images.
+  content.addEventListener('load', scheduleUpdate, true);
+  content.addEventListener('error', scheduleUpdate, true);
+  if (typeof IntersectionObserver !== 'undefined') {
+    intersectionObserver = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) scheduleUpdate();
+    });
+    intersectionObserver.observe(canvas);
+  }
+  window.addEventListener('resize', handleWindowResize);
+  if ('fonts' in document) {
+    // The ready promise cannot be cancelled; scheduleUpdate guards late resolution.
+    void document.fonts.ready.then(scheduleUpdate, () => {});
+    document.fonts.addEventListener('loadingdone', scheduleUpdate);
+  }
 });
 
-onUnmounted(() => {
+onBeforeUnmount(() => {
+  disposed = true;
   resizeObserver?.disconnect();
   mutationObserver?.disconnect();
+  intersectionObserver?.disconnect();
+  contentRef.value?.removeEventListener('load', scheduleUpdate, true);
+  contentRef.value?.removeEventListener('error', scheduleUpdate, true);
+  window.removeEventListener('resize', handleWindowResize);
+  if ('fonts' in document) document.fonts.removeEventListener('loadingdone', scheduleUpdate);
   if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
+  scheduledFrame = 0;
 });
 </script>
 
@@ -75,6 +124,20 @@ onUnmounted(() => {
   box-shadow: var(--ui-shadow-md);
   margin: 0 auto;
   position: relative; /* For absolute positioning of breaks */
+}
+
+.resume-canvas-content {
+  display: flow-root;
+}
+
+.a4-ruler {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 1px;
+  height: 297mm;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .page-break-line {

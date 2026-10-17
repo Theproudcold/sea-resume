@@ -38,21 +38,21 @@
         </div>
       </div>
 
-      <div v-show="!isProjectCollapsed(project.id)" class="project-item__body">
+      <SmoothCollapse><div v-show="!isProjectCollapsed(project.id)" class="project-item__body">
         <el-form label-width="84px" size="default">
           <el-form-item label="项目名称">
             <el-input
-              v-model="project.name"
+              :model-value="project.name"
               placeholder="例如：电商平台前端开发"
-              @change="updateItem(project.id, { name: project.name })"
+              @update:model-value="(value: string) => updateItem(project.id, { name: value })"
             />
           </el-form-item>
 
           <el-form-item label="项目角色">
             <el-input
-              v-model="project.role"
+              :model-value="project.role"
               placeholder="例如：前端负责人"
-              @change="updateItem(project.id, { role: project.role })"
+              @update:model-value="(value: string) => updateItem(project.id, { role: value })"
             />
           </el-form-item>
 
@@ -60,8 +60,8 @@
             <div class="flex flex-col gap-1">
               <div class="flex items-center justify-end">
                 <el-checkbox
-                  v-model="isPresentEnd[index]"
-                  @change="(val: any) => handlePresentChange(project.id, index, val)"
+                  :model-value="isPresentEnd[index]"
+                  @update:model-value="(value: unknown) => handlePresentChange(project.id, value)"
                   label="至今"
                   size="small"
                 />
@@ -83,20 +83,20 @@
               <!-- Start Date Only (When Present) -->
               <el-date-picker
                 v-else
-                v-model="project.startDate"
+                :model-value="project.startDate"
                 type="month"
                 placeholder="开始月份"
                 format="YYYY-MM"
                 value-format="YYYY-MM"
                 class="!w-full"
-                @change="updateItem(project.id, { startDate: project.startDate })"
+                @update:model-value="(value: string | null) => updateItem(project.id, { startDate: value || '' })"
               />
             </div>
           </el-form-item>
 
           <el-form-item label="项目描述">
             <RichTextEditor
-              v-model="project.description"
+              :model-value="project.description"
               class="project-item__editor"
               @update:modelValue="(val: string) => updateItem(project.id, { description: val })"
             />
@@ -104,21 +104,21 @@
 
           <el-form-item label="项目链接">
             <el-input
-              v-model="project.link"
+              :model-value="project.link"
               placeholder="项目演示地址或代码仓库（选填）"
-              @change="updateItem(project.id, { link: project.link })"
+              @update:model-value="(value: string) => updateItem(project.id, { link: value })"
             />
           </el-form-item>
 
           <el-form-item label="技术栈">
             <el-select
-              v-model="project.techStack"
+              :model-value="project.techStack"
               multiple
               filterable
               allow-create
               default-first-option
               placeholder="选择或输入技术栈，按回车添加"
-              @change="updateItem(project.id, { techStack: project.techStack })"
+              @update:model-value="(value: string[]) => updateItem(project.id, { techStack: value })"
             >
               <el-option
                 v-for="tech in commonTechStack"
@@ -129,25 +129,26 @@
             </el-select>
           </el-form-item>
         </el-form>
-      </div>
+      </div></SmoothCollapse>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { Delete, Folder, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import type { Project } from '@/types/resume';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
+import SmoothCollapse from '@/components/common/SmoothCollapse.vue';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const projects = ref<Project[]>(JSON.parse(JSON.stringify(data.value.projects)));
+const projects = computed(() => data.value.projects);
 const collapsedProjectIds = ref<string[]>([]);
-const isPresentEnd = ref<boolean[]>([]);
+const isPresentEnd = computed(() => projects.value.map(project => project.endDate === 'present'));
 
 const isProjectCollapsed = (id: string) => collapsedProjectIds.value.includes(id);
 
@@ -167,14 +168,6 @@ const commonTechStack = [
   'Docker', 'Kubernetes', 'CI/CD',
 ];
 
-watch(() => data.value.projects, (newVal) => {
-  projects.value = JSON.parse(JSON.stringify(newVal));
-  updatePresentFlags();
-}, { deep: true });
-
-const updatePresentFlags = () => {
-  isPresentEnd.value = projects.value.map(p => p.endDate === 'present');
-};
 
 const addNew = () => {
   resumeStore.addProject({
@@ -186,7 +179,6 @@ const addNew = () => {
     link: '',
     techStack: [],
   });
-  updatePresentFlags();
 };
 
 const removeItem = (id: string) => {
@@ -197,14 +189,8 @@ const updateItem = (id: string, updates: Partial<Project>) => {
   resumeStore.updateProject(id, updates);
 };
 
-  const handlePresentChange = (id: string, index: number, isPresent: any) => {
-  // isPresent is the new boolean value from checkbox
-  const endDate = isPresent ? 'present' : '';
-  const project = projects.value[index];
-  if (project) {
-    project.endDate = endDate;
-    updateItem(id, { endDate });
-  }
+const handlePresentChange = (id: string, isPresent: unknown) => {
+  updateItem(id, { endDate: isPresent ? 'present' : '' });
 };
 
 const handleRangeUpdate = (id: string, val: any) => {
@@ -217,8 +203,6 @@ const handleRangeUpdate = (id: string, val: any) => {
   updateItem(id, { startDate: start, endDate: end });
 };
 
-// 初始化
-updatePresentFlags();
 defineExpose({ addNew });
 </script>
 

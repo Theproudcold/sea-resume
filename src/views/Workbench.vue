@@ -3,6 +3,7 @@
     <AppHeader title="简历工作台" subtitle="Sea Resume · 简历管理">
       <template #actions>
         <el-button type="primary" plain class="ai-settings-trigger" @click="openSettings('ai')">AI 模型配置</el-button>
+        <el-button @click="router.push('/interviews')">模拟面试与记录</el-button>
         <el-dropdown @command="handleManageCommand">
           <el-button>管理<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
           <template #dropdown>
@@ -54,6 +55,7 @@
             :resume="resume"
             @click="handleCardClick(resume.id)"
             @edit="handleEdit(resume.id)"
+            @interview="router.push({ path: '/interview/new', query: { resumeId: resume.id } })"
             @rename="handleRename(resume)"
             @duplicate="handleDuplicate(resume.id)"
             @delete="handleDelete(resume)"
@@ -167,16 +169,16 @@
       </template>
     </el-dialog>
 
-    <MarkdownImportDialog v-model="showMarkdownImport" :loading="creating" @confirm="handleMarkdownImport" />
-    <AiPdfImportDialog v-model="showPdfImport" :loading="creating" @confirm="handlePdfImport" />
-    <ResumeVersionManager v-model="showVersionManager" :resumes="resumeList" @created="handleVersionCreated" />
-    <FullBackupManager v-model="showFullBackupManager" @backup-success="handleFullBackupSuccess" />
+    <MarkdownImportDialog :active="showMarkdownImport" v-model="showMarkdownImport" :loading="creating" @confirm="handleMarkdownImport" />
+    <AiPdfImportDialog :active="showPdfImport" v-model="showPdfImport" :loading="creating" @confirm="handlePdfImport" />
+    <ResumeVersionManager :active="showVersionManager" v-model="showVersionManager" :resumes="resumeList" @created="handleVersionCreated" />
+    <FullBackupManager :active="showFullBackupManager" v-model="showFullBackupManager" @backup-success="handleFullBackupSuccess" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowDown, Plus, Loading, Upload, Delete, Document } from '@element-plus/icons-vue';
 import AppHeader from '@/components/common/AppHeader.vue';
@@ -185,17 +187,19 @@ import { useStorageStore } from '@/stores/storage';
 import { storageManager } from '@/services/storage/StorageManager';
 import { exportToJSON, importFromJSON } from '@/utils/export-json';
 import ResumeCard from '@/components/workbench/ResumeCard.vue';
-import MarkdownImportDialog from '@/components/workbench/MarkdownImportDialog.vue';
-import AiPdfImportDialog from '@/components/workbench/AiPdfImportDialog.vue';
-import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
-import ResumeVersionManager from '@/components/workbench/ResumeVersionManager.vue';
-import FullBackupManager from '@/components/workbench/FullBackupManager.vue';
+import { lazyFeature } from '@/utils/lazyFeature';
+const MarkdownImportDialog = lazyFeature(() => import('@/components/workbench/MarkdownImportDialog.vue'));
+const AiPdfImportDialog = lazyFeature(() => import('@/components/workbench/AiPdfImportDialog.vue'));
+const AiProviderSettingsPanel = lazyFeature(() => import('@/components/workbench/AiProviderSettingsPanel.vue'));
+const ResumeVersionManager = lazyFeature(() => import('@/components/workbench/ResumeVersionManager.vue'));
+const FullBackupManager = lazyFeature(() => import('@/components/workbench/FullBackupManager.vue'));
 import { getFullBackupReminderStatus } from '@/utils/fullBackup';
 import type { ResumeMeta } from '@/types/resume';
 
 type SettingsSection = 'ai' | 'storage' | 'backup' | 'about';
 
 const router = useRouter();
+const route = useRoute();
 const workbenchStore = useWorkbenchStore();
 const storageStore = useStorageStore();
 
@@ -227,6 +231,7 @@ watch(resumeList, (list) => {
 }, { immediate: true });
 
 onMounted(async () => {
+  if (route.query.aiSettings === '1') openSettings('ai');
   loading.value = true;
   try {
     // 初始化存储

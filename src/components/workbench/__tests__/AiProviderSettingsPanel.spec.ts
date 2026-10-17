@@ -1,7 +1,8 @@
 import { defineComponent, h } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { clearAiModelSettings, clearAiSessionApiKey } from '@/services/ai/AiSettings';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearAiModelSettings, clearAiSessionApiKey, loadAiProviderProfiles, saveAiModelSettings } from '@/services/ai/AiSettings';
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
 
 const ButtonStub = defineComponent({
@@ -26,6 +27,7 @@ const stubs = {
   'el-option': PassthroughStub,
   'el-switch': PassthroughStub,
   'el-input': PassthroughStub,
+  'el-input-number': PassthroughStub,
   'el-alert': PassthroughStub,
 };
 
@@ -45,7 +47,7 @@ describe('AiProviderSettingsPanel', () => {
     await wrapper.find('.add-first-provider-card').trigger('click');
 
     expect(wrapper.find('.provider-catalog-view').exists()).toBe(true);
-    expect(wrapper.findAll('.catalog-card')).toHaveLength(4);
+    expect(wrapper.findAll('.catalog-card')).toHaveLength(6);
   });
 
   it('moves directly from provider choice to inline configuration without opening another dialog', async () => {
@@ -68,7 +70,41 @@ describe('AiProviderSettingsPanel', () => {
 
     const customWrapper = mount(AiProviderSettingsPanel, { global: { stubs } });
     await customWrapper.find('.add-first-provider-card').trigger('click');
-    await customWrapper.findAll('.catalog-card')[3]!.trigger('click');
+    await customWrapper.findAll('.catalog-card')[5]!.trigger('click');
     expect(customWrapper.find('.provider-address-field').exists()).toBe(true);
+  });
+  it('offers local presets with editable address and no key field', async () => {
+    for (const label of ['Ollama', 'LM Studio']) {
+      const wrapper = mount(AiProviderSettingsPanel, { global: { stubs } });
+      await wrapper.find('.add-first-provider-card').trigger('click');
+      await wrapper.findAll('.catalog-card').find(card => card.text().includes(label))!.trigger('click');
+      expect(wrapper.find('.provider-address-field').exists()).toBe(true);
+      expect(wrapper.find('[type="password"]').exists()).toBe(false);
+      expect(wrapper.text()).toContain('本地失败不会回退到云端');
+      wrapper.unmount();
+    }
+  });
+  it('round-trips local options through export and import without credentials', async () => {
+    saveAiModelSettings({ presetId: 'ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3', authMode: 'none', jsonMode: false, timeoutMs: 180000 });
+    let exported!: Blob;
+    vi.stubGlobal('URL', class extends URL {
+      static createObjectURL(blob: Blob) { exported = blob; return 'blob:config'; }
+      static revokeObjectURL() {}
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    const wrapper = mount(AiProviderSettingsPanel, { global: { stubs } });
+    await wrapper.findAll('button').find(button => button.text() === '导出配置')!.trigger('click');
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsText(exported);
+    });
+    const payload = JSON.parse(text);
+    expect(payload.providers[0]).toMatchObject({ authMode: 'none', jsonMode: false, timeoutMs: 180000 });
+    expect(text).not.toContain('apiKey');
+    const input = wrapper.find('input[type="file"]');
+    Object.defineProperty(input.element, 'files', { value: [{ size: text.length, text: async () => text }], configurable: true });
+    await input.trigger('change'); await flushPromises();
+    expect(loadAiProviderProfiles()).toHaveLength(2);
+    expect(loadAiProviderProfiles()[1]).toMatchObject({ authMode: 'none', jsonMode: false, timeoutMs: 180000 });
+    wrapper.unmount();
   });
 });

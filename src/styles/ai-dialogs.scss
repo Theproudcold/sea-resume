@@ -1,0 +1,14 @@
+.ai-confirm-dialog.el-message-box {
+  width: min(440px, calc(100vw - 32px));
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  padding: var(--ui-space-6);
+  background: var(--ui-bg-elevated);
+  box-shadow: var(--ui-shadow-md);
+  .el-message-box__header { padding: 0 var(--ui-space-6) var(--ui-space-3) 0; }
+  .el-message-box__title { font-size: var(--ui-font-lg); font-weight: 650; color: var(--ui-text-main); }
+  .el-message-box__content { padding: var(--ui-space-2) 0 var(--ui-space-6); color: var(--ui-text-secondary); font-size: var(--ui-font-md); line-height: 1.8; }
+  .el-message-box__headerbtn { top: var(--ui-space-4); right: var(--ui-space-4); }
+  .el-message-box__btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--ui-space-2); padding: 0; }
+  .el-message-box__btns .el-button { margin: 0; min-height: var(--ui-control-height); }
+}

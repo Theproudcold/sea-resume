@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest';
 import { clearAiModelSettings, clearAiSessionApiKey, getActiveAiProviderId, getAiSessionApiKey, hasAiSessionApiKey, loadAiModelSettings, loadAiProviderProfiles, saveAiModelSettings, saveAiProviderProfiles, setAiSessionApiKey } from '../AiSettings';
+import { isAiProviderReady, toAiProviderConfig, normalizeAiProviderOptions } from '../AiSettings';
 
 beforeEach(() => {
   localStorage.clear();
@@ -39,7 +40,7 @@ describe('AI model settings', () => {
     setAiSessionApiKey('openai-key', 'openai-one');
     setAiSessionApiKey('qwen-key', 'qwen-one');
 
-    expect(loadAiProviderProfiles()).toEqual(profiles);
+    expect(loadAiProviderProfiles()).toEqual(profiles.map(profile => ({ ...profile, authMode: 'bearer', jsonMode: true, timeoutMs: 90000 })));
     expect(loadAiModelSettings()?.profileId).toBe('openai-one');
     expect(getAiSessionApiKey()).toBe('openai-key');
     expect(getAiSessionApiKey('qwen-one')).toBe('qwen-key');
@@ -70,5 +71,27 @@ describe('AI model settings', () => {
     saveAiModelSettings({ presetId: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' });
     clearAiModelSettings();
     expect(loadAiModelSettings()).toBeNull();
+  });
+  it('preserves local options in profiles and the legacy mirror without keys', () => {
+    const settings = { presetId: 'ollama' as const, baseUrl: 'http://localhost:11434/v1', model: 'llama3', authMode: 'none' as const, jsonMode: false, timeoutMs: 180000 };
+    saveAiModelSettings(settings);
+    expect(loadAiModelSettings()).toMatchObject(settings);
+    expect(isAiProviderReady(loadAiModelSettings())).toBe(true);
+    expect(toAiProviderConfig(loadAiModelSettings(), 'ignored')).toEqual({ baseUrl: settings.baseUrl, model: settings.model, authMode: 'none', jsonMode: false, timeoutMs: 180000, apiKey: '' });
+    localStorage.removeItem('sea-resume_ai-provider-profiles');
+    expect(loadAiModelSettings()).toMatchObject(settings);
+  });
+  it('defaults old options safely and bounds invalid timeout values', () => {
+    expect(normalizeAiProviderOptions()).toEqual({ authMode: 'bearer', jsonMode: true, timeoutMs: 90000 });
+    expect(normalizeAiProviderOptions({ timeoutMs: NaN }).timeoutMs).toBe(90000);
+    expect(normalizeAiProviderOptions({ timeoutMs: -1 }).timeoutMs).toBe(1000);
+    expect(normalizeAiProviderOptions({ timeoutMs: 1e12 }).timeoutMs).toBe(600000);
+  });
+  it('requires keys for old profiles and restricts no-auth to loopback', () => {
+    const settings = { baseUrl: 'https://example.com/v1', model: 'test' };
+    expect(isAiProviderReady(settings, '')).toBe(false);
+    expect(isAiProviderReady(settings, 'key')).toBe(true);
+    for (const baseUrl of ['https://example.com/v1', 'http://192.168.1.1/v1', 'http://localhost.evil/v1', 'http://user:pass@localhost/v1']) expect(isAiProviderReady({ ...settings, baseUrl, authMode: 'none' }, 'key')).toBe(false);
+    for (const baseUrl of ['http://localhost/v1', 'https://127.0.0.2/v1', 'http://[::1]/v1']) expect(isAiProviderReady({ ...settings, baseUrl, authMode: 'none' }, '')).toBe(true);
   });
 });

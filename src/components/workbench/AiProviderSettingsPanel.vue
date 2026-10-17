@@ -104,7 +104,7 @@
             </el-select>
           </el-form-item>
         </div>
-        <el-form-item v-if="selectedProfile.presetId === 'custom'" label="自定义服务商地址" class="provider-address-field">
+        <el-form-item v-if="['custom', 'ollama', 'lmstudio'].includes(selectedProfile.presetId)" label="服务商地址" class="provider-address-field">
           <el-input v-model="selectedProfile.baseUrl" placeholder="https://api.example.com/v1" autocomplete="url" />
         </el-form-item>
         <el-form-item label="模型">
@@ -126,7 +126,13 @@
           </div>
           <p class="field-note">从服务商的 <code>/models</code> 接口读取。服务商未开放列表或浏览器跨域时，可手动输入模型 ID。</p>
         </el-form-item>
-        <el-form-item label="API Key（仅当前会话）">
+        <el-form-item label="鉴权方式">
+          <el-select v-model="selectedProfile.authMode"><el-option label="Bearer API Key" value="bearer" /><el-option label="无鉴权（仅本机 loopback）" value="none" /></el-select>
+          <p class="field-note">本地服务需允许浏览器跨域（CORS）。本地失败不会回退到云端。</p>
+        </el-form-item>
+        <el-form-item label="JSON 模式"><el-switch v-model="selectedProfile.jsonMode" /><p class="field-note">关闭仅省略 response_format，返回内容仍须通过 JSON 校验。</p></el-form-item>
+        <el-form-item label="请求超时（毫秒）"><el-input-number v-model="selectedProfile.timeoutMs" :min="1000" :max="600000" :step="1000" /></el-form-item>
+        <el-form-item v-if="selectedProfile.authMode !== 'none'" label="API Key（仅当前会话）">
           <el-input
             v-model="apiKeyDraft"
             type="password"
@@ -161,6 +167,8 @@ import { ArrowRight, Plus } from '@element-plus/icons-vue';
 import AiProviderLogo from '@/components/workbench/AiProviderLogo.vue';
 import {
   AI_PROVIDER_PRESETS,
+  normalizeAiProviderOptions,
+  isAiProviderReady,
   clearAiModelSettings,
   clearAiSessionApiKey,
   getActiveAiProviderId,
@@ -194,6 +202,7 @@ const canSave = computed(() => !!selectedProfile.value
   && !!selectedProfile.value.profileName.trim()
   && !!selectedProfile.value.baseUrl.trim()
   && !!selectedProfile.value.model.trim()
+  && isAiProviderReady({ ...selectedProfile.value, enabled: true }, 'configuration-only')
   && !fetchingModels.value);
 
 function providerTypeLabel(profile: AiProviderProfile): string {
@@ -211,7 +220,7 @@ function modelCount(profile: AiProviderProfile): number {
 function providerStatus(profile: AiProviderProfile): { kind: string; label: string } {
   if (!profile.enabled) return { kind: 'off', label: '已停用' };
   if (!profile.baseUrl.trim() || !profile.model.trim()) return { kind: 'warning', label: '待配置' };
-  if (!hasAiSessionApiKey(profile.profileId)) return { kind: 'warning', label: '需输入 API Key' };
+  if (!isAiProviderReady(profile)) return { kind: 'warning', label: profile.authMode === 'none' ? '本机地址无效' : '需输入 API Key' };
   return { kind: 'success', label: '已就绪' };
 }
 
@@ -245,6 +254,7 @@ function makeProfile(presetId: AiProviderPresetId): AiProviderProfile {
     presetId,
     baseUrl: preset.baseUrl,
     model: preset.model,
+    ...normalizeAiProviderOptions(preset),
     enabled: true,
     models: [],
   };
@@ -270,6 +280,7 @@ function applyProviderPreset(presetId: AiProviderPresetId) {
   profile.presetId = presetId;
   profile.baseUrl = preset.baseUrl;
   profile.model = preset.model;
+  Object.assign(profile, normalizeAiProviderOptions(preset));
   profile.models = [];
 }
 
@@ -277,14 +288,14 @@ async function fetchModels() {
   const profile = selectedProfile.value;
   if (!profile) return;
   const apiKey = apiKeyDraft.value.trim() || getAiSessionApiKey(profile.profileId);
-  if (!apiKey) {
+  if (profile.authMode !== 'none' && !apiKey) {
     modelError.value = '请先填写这家服务商的 API Key，再获取模型列表。';
     return;
   }
   fetchingModels.value = true;
   modelError.value = '';
   try {
-    profile.models = await listProviderModels(profile.baseUrl, apiKey);
+    profile.models = await listProviderModels(profile.baseUrl, apiKey, profile);
     if (profile.model && !profile.models.includes(profile.model)) profile.models.unshift(profile.model);
     ElMessage.success(`已获取 ${profile.models.length} 个模型`);
   } catch (error) {
@@ -362,8 +373,8 @@ function exportConfig() {
   const payload = {
     format: 'sea-resume-ai-providers',
     version: 1,
-    providers: profiles.value.map(({ profileId, profileName, presetId, baseUrl, model, enabled, models }) => ({
-      profileId, profileName, presetId, baseUrl, model, enabled, models,
+    providers: profiles.value.map(({ profileId, profileName, presetId, baseUrl, model, enabled, models, authMode, jsonMode, timeoutMs }) => ({
+      profileId, profileName, presetId, baseUrl, model, enabled, models, authMode, jsonMode, timeoutMs,
     })),
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -398,6 +409,7 @@ async function importConfigFile(event: Event) {
         presetId,
         baseUrl: item.baseUrl.slice(0, 2048),
         model: item.model.slice(0, 200),
+        ...normalizeAiProviderOptions(item),
         enabled: item.enabled === true,
         models: Array.isArray(item.models) ? item.models.filter((model): model is string => typeof model === 'string' && model.length <= 200).slice(0, 1000) : [],
       }];
@@ -410,7 +422,7 @@ async function importConfigFile(event: Event) {
     selectedProfile.value = { ...firstImported, models: [...firstImported.models] };
     isNewProfile.value = false;
     view.value = 'detail';
-    ElMessage.success(`已导入 ${imported.length} 家服务商；请分别填写 API Key。`);
+    ElMessage.success(`已导入 ${imported.length} 家服务商；Bearer 服务需填写会话 API Key。`);
     emit('saved');
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '导入服务商配置失败。');

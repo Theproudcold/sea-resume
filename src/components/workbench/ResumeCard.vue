@@ -31,13 +31,14 @@
     <!-- 操作菜单 -->
     <div class="actions" @click.stop>
       <el-dropdown @command="handleCommand">
-        <el-button text :icon="MoreFilled" />
+        <el-button text :icon="MoreFilled" :aria-label="`${resume.title}的操作菜单`" />
         <template #dropdown>
           <el-dropdown-menu>
             <el-dropdown-item command="edit">
               <el-icon><Edit /></el-icon>
               编辑
             </el-dropdown-item>
+            <el-dropdown-item command="interview">模拟面试</el-dropdown-item>
             <el-dropdown-item command="rename">
               <el-icon><EditPen /></el-icon>
               重命名
@@ -73,6 +74,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   click: [];
   edit: [];
+  interview: [];
   rename: [];
   duplicate: [];
   delete: [];
@@ -133,6 +135,9 @@ const handleCommand = (command: string) => {
   switch (command) {
     case 'edit':
       emit('edit');
+      break;
+    case 'interview':
+      emit('interview');
       break;
     case 'rename':
       emit('rename');

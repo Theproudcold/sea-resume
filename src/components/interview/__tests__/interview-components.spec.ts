@@ -1,0 +1,120 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mount, flushPromises } from '@vue/test-utils';
+import { defineComponent } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
+import { ElMessageBox } from 'element-plus';
+import InterviewConsent from '../InterviewConsent.vue';
+import InterviewConversation from '../InterviewConversation.vue';
+import InterviewReport from '../InterviewReport.vue';
+import InterviewHistory from '@/views/InterviewHistory.vue';
+import { buildResumeContext } from '@/services/ai/resumeContext';
+import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
+import { storageManager } from '@/services/storage/StorageManager';
+import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
+import type { InterviewSession } from '@/types/interview';
+import { useAiWorkspaceStore } from '@/stores/aiWorkspace';
+import { createOptimizationRun } from '@/services/ai/resumeOptimization';
+vi.mock('@/services/ai/AiWorkspaceRepository', () => ({ aiWorkspaceRepository: { save: vi.fn(), get: vi.fn(), list: vi.fn(), delete: vi.fn(), clear: vi.fn() } }));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('@/components/ai/ResumeOptimizationPanel.vue', () => ({ default: defineComponent({ name: 'ResumeOptimizationPanel', props: ['resume', 'initialFacts'], template: '<div data-testid="optimizer">Review optimizer</div>' }) }));
+const Button = defineComponent({ props: ['disabled'], emits: ['click'], template: '<button :disabled="disabled" @click="$emit(\'click\')"><slot /></button>' });
+const options = { global: { stubs: { ElIcon: true, ElButton: Button, ElSelect: { props: ['modelValue'], template: '<div role="combobox"><slot /></div>' }, ElOption: { props: ['label'], template: '<span>{{ label }}</span>' }, AppHeader: { template: '<header><slot name="actions" /></header>' } } } };
+function fixture() {
+  const resume = parseResumeMarkdown('# Candidate').resume;
+  resume.id = 'resume-1'; resume.projects = [{ id: 'p1', name: 'Latest project', role: '开发', startDate: '', endDate: '', description: '最新内容' }];
+  const session: InterviewSession = { id: 'session-1', sourceResumeId: resume.id, createdAt: 'now', updatedAt: 'now', context: buildResumeContext(resume), settings: { targetRole: '工程师', jd: '', direction: '综合', level: '初级', mode: 'training', mainQuestionLimit: 5 }, provider: { baseUrl: 'https://test/v1', model: 'test' }, status: 'completed', pendingStage: null, coveragePlan: [], turns: [{ id: 'a1', mainNumber: 1, followup: false, question: { text: '请说明贡献', focus: '职责', kind: 'experience', itemIds: ['p1'] }, answer: '我实现缓存', submittedAt: 'now', feedback: { observations: [], referencePhrasing: '我实现缓存', organizationHint: 'COACH_HINT', knowledgeExplanation: 'GENERAL_KNOWLEDGE' } }], report: { incomplete: true, observations: [], followupReview: [], priorities: ['一', '二', '三'], facts: [{ id: 'fact1', answerId: 'a1', text: '我实现缓存' }], referencePhrasing: '我实现缓存', knowledgeExplanation: '知识并非经历' }, usage: { calls: 1, promptTokens: 0, completionTokens: 0 }, persistence: true, jsonMode: true, ending: true };
+  return { resume, session };
+}
+beforeEach(() => { vi.restoreAllMocks(); vi.resetAllMocks(); localStorage.clear(); setActivePinia(createPinia()); vi.spyOn(ElMessageBox, 'confirm').mockImplementation(vi.fn().mockResolvedValue('confirm')); });
+describe('interview UI safety and handoff', () => {
+  it('requires consent and in-memory key, previews data, resets confirmation on model change', async () => {
+    const wrapper = mount(InterviewConsent, { ...options, props: { preview: { context: 'public summary' } } });
+    expect(wrapper.find('button').attributes('disabled')).toBeDefined();
+    await wrapper.find('input[type="password"]').setValue('session-secret');
+    await wrapper.find('input[type="checkbox"]').setValue(true); await wrapper.find('button').trigger('click');
+    expect(wrapper.emitted('confirmed')?.[0]?.[0]).toMatchObject({ apiKey: 'session-secret' });
+    expect(wrapper.find('pre').text()).toContain('public summary'); expect(wrapper.find('pre').text()).not.toContain('session-secret');
+    await wrapper.findAll('input')[1]!.setValue('changed-model');
+    expect((wrapper.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false);
+    expect(wrapper.find('button').attributes('disabled')).toBeDefined(); expect(wrapper.emitted('changed')).toBeTruthy();
+    expect(localStorage.getItem('sea-resume_ai-model-settings')).toBeNull();
+    wrapper.unmount();
+  });
+  it('confirms a local preset without a key and rejects remote no-auth', async () => {
+    const wrapper = mount(InterviewConsent, { ...options, props: { preview: {} } });
+    await wrapper.find('select[aria-label="服务预设"]').setValue('ollama');
+    await wrapper.findAll('input')[1]!.setValue('llama3');
+    await wrapper.find('input[type="checkbox"]').setValue(true);
+    await wrapper.find('button').trigger('click');
+    expect(wrapper.emitted('confirmed')?.[0]?.[0]).toMatchObject({ baseUrl: 'http://localhost:11434/v1', authMode: 'none', apiKey: '' });
+    await wrapper.findAll('input')[0]!.setValue('https://remote.example/v1');
+    await wrapper.find('input[type="checkbox"]').setValue(true);
+    expect(wrapper.find('button').attributes('disabled')).toBeDefined();
+    wrapper.unmount();
+  });
+  it('shows raw question / answer bubbles; real mode never renders coach content, no HTML execution', () => {
+    const { session } = fixture(); session.settings.mode = 'real'; session.turns[0]!.answer = '<img src=x onerror=alert(1)>';
+    const wrapper = mount(InterviewConversation, { ...options, props: { session, busy: false, consented: true } });
+    expect(wrapper.text()).toContain('请说明贡献'); expect(wrapper.text()).toContain('<img src=x');
+    expect(wrapper.find('img').exists()).toBe(false); expect(wrapper.text()).not.toMatch(/COACH_HINT|GENERAL_KNOWLEDGE/);
+    wrapper.unmount();
+  });
+  it('requires target and explicit truth confirmation, rereads latest source at handoff, passes only raw facts to optimizer', async () => {
+    const { resume, session } = fixture(); const read = vi.spyOn(storageManager, 'read').mockResolvedValue(resume);
+    const wrapper = mount(InterviewReport, { ...options, props: { session } });
+    await wrapper.findAll('button')[0]!.trigger('click'); await flushPromises();
+    expect(read).toHaveBeenCalledWith('resume-1'); expect(wrapper.find('input[type="checkbox"]').attributes('disabled')).toBeDefined();
+    await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises(); expect(wrapper.find('[data-testid="optimizer"]').exists()).toBe(false);
+    await wrapper.find('select').setValue('p1'); await wrapper.find('input[type="checkbox"]').setValue(true);
+    await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises();
+    const optimizer = wrapper.findComponent({ name: 'ResumeOptimizationPanel' });
+    expect(optimizer.exists()).toBe(true); expect(optimizer.props('resume').projects[0].description).toBe('最新内容');
+    expect(optimizer.props('initialFacts')).toEqual([{ id: 'fact1', targetId: 'p1', text: '我实现缓存' }]);
+    expect(read).toHaveBeenCalledTimes(3); // prepare + failed confirmation + confirmed handoff
+    wrapper.unmount();
+  });
+  it('rejects a deleted target or a coach fact at the final handoff without mounting optimizer', async () => {
+    const { resume, session } = fixture(); const read = vi.spyOn(storageManager, 'read').mockResolvedValue(resume);
+    const wrapper = mount(InterviewReport, { ...options, props: { session } });
+    await wrapper.findAll('button')[0]!.trigger('click'); await flushPromises();
+    await wrapper.find('select').setValue('p1'); await wrapper.find('input[type="checkbox"]').setValue(true);
+    read.mockResolvedValueOnce({ ...resume, projects: [] }); await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises();
+    expect(wrapper.text()).toContain('事实来源或目标已变化'); expect(wrapper.find('[data-testid="optimizer"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+  it('history provides resume selection and explicit deletion / all-AI clear warning', async () => {
+    const { resume, session } = fixture();
+    vi.spyOn(storageManager, 'init').mockResolvedValue();
+    vi.spyOn(storageManager, 'list').mockResolvedValue([{ id: resume.id, title: 'Source', templateId: 'modern', createdAt: 1, updatedAt: 1 }]);
+    vi.mocked(aiWorkspaceRepository.list).mockImplementation(async kind => kind === 'interview' ? [session] : [{ id: 'optimization-1' }]);
+    vi.mocked(aiWorkspaceRepository.delete).mockResolvedValue(); vi.mocked(aiWorkspaceRepository.clear).mockResolvedValue();
+    const confirmation = vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel');
+    const wrapper = mount(InterviewHistory, options); await flushPromises();
+    expect(wrapper.find('[role=combobox]').text()).toContain('Source'); expect(wrapper.text()).toContain('不完整报告');
+    await wrapper.findAll('button').find(button => button.text() === '删除')!.trigger('click'); await flushPromises();
+    expect(aiWorkspaceRepository.delete).not.toHaveBeenCalled();
+    confirmation.mockImplementation(vi.fn().mockResolvedValue('confirm')); await wrapper.findAll('button').find(button => button.text() === '删除')!.trigger('click'); await flushPromises();
+    expect(aiWorkspaceRepository.delete).toHaveBeenCalledWith('interview', session.id);
+    await wrapper.findAll('button').find(button => button.text() === '清空全部 AI 记录')!.trigger('click'); await flushPromises();
+    expect(confirmation.mock.calls.some(([message]) => String(message).includes('所有面试回答 / 报告及简历优化记录'))).toBe(true);
+    expect(aiWorkspaceRepository.clear).toHaveBeenCalledTimes(1); wrapper.unmount();
+  });
+  it('starts a fresh backfill only after permission to replace an unsaved optimization', async () => {
+    const { resume, session } = fixture();
+    vi.spyOn(storageManager, 'read').mockResolvedValue(resume);
+    const optimization = useAiWorkspaceStore();
+    optimization.run = createOptimizationRun(resume, { target: '', company: '', jd: '', style: 'concise', personalSample: '', generalizeOrganizations: true }, { baseUrl: 'https://test/v1', model: 'test', apiKey: 'memory-key' });
+    optimization.dirty = true;
+    const oldId = optimization.run.id;
+    const confirm = vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel');
+    const wrapper = mount(InterviewReport, { ...options, props: { session } });
+    await wrapper.findAll('button')[0]!.trigger('click'); await flushPromises();
+    await wrapper.find('select').setValue('p1'); await wrapper.find('input[type="checkbox"]').setValue(true);
+    await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises();
+    expect(optimization.run?.id).toBe(oldId); expect(wrapper.find('[data-testid="optimizer"]').exists()).toBe(false);
+    confirm.mockImplementation(vi.fn().mockResolvedValue('confirm'));
+    await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises();
+    expect(optimization.run).toBeNull(); expect(wrapper.find('[data-testid="optimizer"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
