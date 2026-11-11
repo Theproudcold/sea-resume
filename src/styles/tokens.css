@@ -1,0 +1,56 @@
+:root {
+  color-scheme: light;
+  --space-3xs: 2px; --space-2xs: 4px; --space-xs: 8px; --space-sm: 12px; --space-md: 16px; --space-lg: 24px; --space-xl: 40px; --space-2xl: 64px; --space-3xl: 96px; --space-4xl: 144px;
+  --text-xs: 0.75rem; --text-sm: 0.875rem; --text-md: 1rem; --text-lg: 1.2rem; --text-xl: 1.44rem; --text-2xl: 1.728rem; --text-3xl: 2.074rem;
+  --text-display-s: 1.44rem; --text-display: 1.728rem; --text-section: 1.2rem; --text-title: 1rem; --text-lead: 1rem;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); --ease-in: cubic-bezier(0.7, 0, 0.84, 0); --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-micro: 120ms; --dur-short: 220ms; --dur-long: 420ms;
+  --container: 1440px; --gutter: 64px; --gap-columns: 32px; --section-gap-s: 120px; --section-gap: 144px; --section-gap-l: 176px;
+  --z-base: 1; --z-raised: 10; --z-dropdown: 100; --z-sticky: 200; --z-sticky-nav: 300; --z-modal: 400; --z-toast: 500; --z-tooltip: 600;
+
+  --color-paper: oklch(97.6% 0.005 252); --color-paper-2: oklch(95% 0.008 252); --color-paper-3: oklch(99.6% 0.002 250); --color-sunken: oklch(93% 0.011 252);
+  --color-ink: oklch(21% 0.028 262); --color-ink-2: oklch(36% 0.022 260); --color-muted: oklch(50% 0.018 258);
+  --color-rule: oklch(91% 0.009 252); --color-rule-2: oklch(84% 0.012 252);
+  --color-accent: oklch(52% 0.19 258); --color-accent-deep: oklch(45% 0.2 262); --color-accent-edge: oklch(39% 0.16 260); --color-accent-wash: oklch(95.5% 0.025 256);
+  --color-accent-2: oklch(76% 0.13 254); --color-accent-ink: oklch(99% 0.004 250); --color-focus: var(--color-accent);
+  --color-error: oklch(52% 0.19 27); --color-error-wash: oklch(96.5% 0.02 27);
+  --color-success: oklch(50% 0.12 150); --color-success-wash: oklch(96% 0.03 150);
+  --color-warning: oklch(52% 0.12 70); --color-warning-wash: oklch(96.5% 0.045 85);
+  --color-overlay: oklch(21% 0.028 262 / 0.45);
+  --color-graphite: oklch(21% 0.024 262); --color-graphite-2: oklch(26.5% 0.026 262); --color-graphite-ink: oklch(93% 0.01 250); --color-graphite-muted: oklch(69% 0.022 256);
+  --color-key-face: var(--color-paper-3); --color-key-edge: oklch(84% 0.016 254);
+
+  --font-display: "Familjen Grotesk", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-outlier: "JetBrains Mono", ui-monospace, monospace;
+  --tracking-display: -0.015em; --display-weight: 600;
+
+  --control-height: 36px; --control-height-s: 30px; --topbar-height: 60px;
+  --radius-card: 8px; --radius-input: 6px; --radius-s: 4px; --radius-pill: 999px;
+  --rule-hair: 1px; --rule-bar: 1px;
+  --shadow-card: 0 1px 2px oklch(21% 0.028 262 / 0.06);
+  --shadow-float: 0 12px 32px -12px oklch(21% 0.028 262 / 0.24), 0 2px 6px oklch(21% 0.028 262 / 0.06);
+  --shadow-key: 0 1px 0 var(--color-key-edge), 0 1px 2px oklch(21% 0.028 262 / 0.08);
+  --shadow-key-accent: 0 1px 0 var(--color-accent-edge), 0 2px 6px -2px oklch(30% 0.12 260 / 0.45);
+  --shadow-key-press: inset 0 1px 2px oklch(21% 0.028 262 / 0.14);
+}
+
+html.dark {
+  color-scheme: dark;
+  --color-paper: oklch(15.5% 0.018 262); --color-paper-2: oklch(22.5% 0.022 262); --color-paper-3: oklch(19% 0.02 262); --color-sunken: oklch(13.5% 0.016 262);
+  --color-ink: oklch(94% 0.008 250); --color-ink-2: oklch(82% 0.014 254); --color-muted: oklch(68% 0.02 256);
+  --color-rule: oklch(27% 0.022 262); --color-rule-2: oklch(34% 0.024 262);
+  --color-accent: oklch(66% 0.16 258); --color-accent-deep: oklch(72% 0.14 256); --color-accent-edge: oklch(52% 0.17 260); --color-accent-wash: oklch(26% 0.06 260);
+  --color-accent-2: oklch(80% 0.1 254); --color-accent-ink: oklch(15% 0.02 262);
+  --color-error: oklch(68% 0.16 25); --color-error-wash: oklch(24% 0.05 25);
+  --color-success: oklch(72% 0.13 150); --color-success-wash: oklch(24% 0.04 150);
+  --color-warning: oklch(78% 0.12 80); --color-warning-wash: oklch(25% 0.045 80);
+  --color-overlay: oklch(5% 0.01 262 / 0.62);
+  --color-graphite: oklch(12% 0.016 262); --color-graphite-2: oklch(17% 0.018 262);
+  --color-key-edge: oklch(11% 0.014 262);
+  --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.35);
+  --shadow-float: 0 16px 40px -12px oklch(0% 0 0 / 0.65), 0 2px 6px oklch(0% 0 0 / 0.3);
+  --shadow-key: 0 1px 0 var(--color-key-edge), inset 0 1px 0 oklch(100% 0 0 / 0.05);
+  --shadow-key-accent: 0 1px 0 var(--color-accent-edge), 0 2px 8px -2px oklch(0% 0 0 / 0.5);
+  --shadow-key-press: inset 0 1px 2px oklch(0% 0 0 / 0.4);
+}

@@ -1,4 +1,9 @@
 @use 'variables' as *;
+@use 'sass:list';
+@import url("./tokens.css");
+@import url("./base.css");
+@import url("./app.css");
+
 
 @tailwind base;
 @tailwind components;
@@ -6,327 +11,31 @@
 
 :root {
   --resume-font-family: #{$font-family-base};
-  --ui-primary: #{$primary-color};
-  --ui-primary-hover: #{$primary-hover};
-  --ui-text-main: #{$text-main};
-  --ui-text-secondary: #{$text-secondary};
-  --ui-bg-page: #{$bg-light};
-  --ui-bg-surface: #{$bg-white};
-  --ui-bg-subtle: #f9fafb;
-  --ui-border: #{$border-color};
-  --ui-radius-sm: #{$border-radius-sm};
-  --ui-radius-md: #{$border-radius-md};
-  --ui-radius-lg: 12px;
-  --ui-space-1: #{$spacing-xs};
-  --ui-space-2: #{$spacing-sm};
-  --ui-space-3: 12px;
-  --ui-space-4: #{$spacing-md};
-  --ui-space-6: #{$spacing-lg};
-  --ui-space-8: #{$spacing-xl};
-  --ui-content-max-width: 1280px;
-  --ui-page-gutter: 24px;
-  --ui-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
-  --ui-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.12);
-  --ui-text-muted: #6b7280;
-  --ui-text-faint: #9ca3af;
-  --ui-bg-hover: #f3f4f6;
-  --ui-bg-elevated: #ffffff;
-  --ui-success: #{$success-color};
-  --ui-warning: #{$warning-color};
-  --ui-danger: #{$danger-color};
-  --ui-info: #{$info-color};
-  --el-color-success: var(--ui-success);
-  --el-color-warning: var(--ui-warning);
-  --el-color-danger: var(--ui-danger);
-  --el-color-info: var(--ui-info);
-  --ui-font-xs: 12px;
-  --ui-font-sm: 13px;
-  --ui-font-md: 14px;
-  --ui-font-lg: 18px;
-  --ui-font-title: 20px;
-  --ui-font-xl: 24px;
-  --ui-line-height: 1.5;
-  --ui-control-height: 40px;
-  --ui-duration-fast: 120ms;
-  --ui-duration-normal: 180ms;
-  --ui-duration-collapse: 200ms;
-  --ui-easing-standard: cubic-bezier(0.2, 0, 0, 1);
-  --ui-dialog-width-sm: min(440px, calc(100vw - 32px));
-  --ui-dialog-width-md: min(760px, calc(100vw - 32px));
-  --ui-dialog-width-lg: min(980px, calc(100vw - 32px));
-  --ui-dialog-width-xl: min(1100px, calc(100vw - 32px));
-  --ui-dialog-max-height: calc(100dvh - 48px);
-  --el-dialog-border-radius: var(--ui-radius-lg);
-  --el-dialog-bg-color: var(--ui-bg-elevated);
-  --el-dialog-box-shadow: var(--ui-shadow-md);
-  --el-color-primary: var(--ui-primary);
-  --el-color-primary-light-3: color-mix(in srgb, var(--ui-primary) 70%, white);
-  --el-color-primary-light-5: color-mix(in srgb, var(--ui-primary) 50%, white);
-  --el-color-primary-light-7: color-mix(in srgb, var(--ui-primary) 30%, white);
-  --el-color-primary-light-8: color-mix(in srgb, var(--ui-primary) 20%, white);
-  --el-color-primary-light-9: color-mix(in srgb, var(--ui-primary) 10%, white);
-  --el-color-primary-dark-2: color-mix(in srgb, var(--ui-primary) 80%, black);
+  --resume-ink: #{$text-main};
+  --resume-paper: #{$bg-white};
   --a4-width: #{$a4-width};
   --a4-height: #{$a4-height};
 }
 
-@media (max-width: 768px) {
-  :root {
-    --ui-page-gutter: 16px;
+$el-roles: (primary, var(--color-accent)), (success, var(--color-success)), (warning, var(--color-warning)), (danger, var(--color-error)), (error, var(--color-error)), (info, var(--color-muted));
+$el-steps: (3, 70%), (5, 50%), (7, 30%), (8, 20%), (9, 9%);
+
+:root {
+  @each $role in $el-roles {
+    $name: list.nth($role, 1);
+    $value: list.nth($role, 2);
+    @each $step in $el-steps {
+      --el-color-#{$name}-light-#{list.nth($step, 1)}: color-mix(in oklab, #{$value} #{list.nth($step, 2)}, var(--color-paper-3));
+    }
+    --el-color-#{$name}-dark-2: color-mix(in oklab, #{$value} 80%, var(--color-ink));
   }
 }
 
-body {
-  margin: 0;
-  padding: 0;
-  font-family: $font-family-base;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background-color: var(--ui-bg-page);
-  color: var(--ui-text-main);
-}
-
-#app {
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
-  display: flex;
-  flex-direction: column;
-}
-
-:where(a, button, input, select, textarea, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
-  outline: 2px solid var(--ui-primary);
-  outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* Shared application component surfaces. Resume templates keep their own document styles. */
-.el-overlay-dialog.is-align-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  padding: 24px 16px;
-  overflow-y: auto;
-}
-
-.el-dialog:not(.is-fullscreen) {
-  display: flex;
-  max-height: var(--ui-dialog-max-height);
-  flex-direction: column;
-  margin: 0 auto !important;
-  overflow: hidden;
-  border-radius: var(--ui-radius-lg);
-}
-
-.el-dialog:not(.is-fullscreen) .el-dialog__header {
-  flex: 0 0 auto;
-  padding: var(--ui-space-6) var(--ui-space-6) var(--ui-space-2) !important;
-}
-
-.el-dialog:not(.is-fullscreen) .el-dialog__headerbtn { top: 18px; right: 20px; }
-
-.el-dialog__title {
-  color: var(--ui-text-main);
-  font-size: var(--ui-font-lg);
-  font-weight: 650;
-}
-
-.el-dialog:not(.is-fullscreen) .el-dialog__body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--ui-space-4) var(--ui-space-6) !important;
-  color: var(--ui-text-main);
-  line-height: var(--ui-line-height);
-}
-
-.el-dialog:not(.is-fullscreen) .el-dialog__footer {
-  flex: 0 0 auto;
-  margin-top: auto;
-  padding: var(--ui-space-3) var(--ui-space-6) var(--ui-space-6) !important;
-  border-top: 1px solid var(--ui-border);
-}
-
-.el-form-item__label {
-  color: var(--ui-text-secondary);
-  font-weight: 500;
-}
-
-.app-dialog-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: var(--ui-space-2);
-}
-
-.ui-danger-zone {
-  padding: var(--ui-space-4);
-  border: 1px solid color-mix(in srgb, var(--ui-danger) 24%, white);
-  border-radius: var(--ui-radius-md);
-  background: color-mix(in srgb, var(--ui-danger) 4%, white);
-}
-
-.ui-danger-zone__title {
-  margin: 0;
-  color: var(--ui-danger);
-  font-size: var(--ui-font-md);
-  font-weight: 600;
-}
-
-.ui-danger-zone__description {
-  margin: var(--ui-space-1) 0 var(--ui-space-3);
-  color: var(--ui-text-secondary);
-  font-size: var(--ui-font-sm);
-}
-
-.el-dropdown-menu__item.danger-menu-item {
-  color: var(--ui-danger);
-}
 /* Dropdown items already show keyboard focus with their highlighted row style. */
 .el-dropdown-menu__item:focus-visible {
   outline: none;
 }
-@media (max-width: 768px) {
-  .el-dialog:not(.is-fullscreen) .el-dialog__header {
-    padding: var(--ui-space-4) var(--ui-space-4) var(--ui-space-2) !important;
-  }
 
-  .el-dialog:not(.is-fullscreen) .el-dialog__footer {
-    padding: var(--ui-space-2) var(--ui-space-4) var(--ui-space-4) !important;
-  }
-
-  .app-dialog-actions {
-    justify-content: flex-start;
-  }
-
-  .app-dialog-actions > .el-button {
-    flex: 1 1 120px;
-  }
-
-  .item-heading-fields {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.resume-entry-card {
-  margin-bottom: var(--ui-space-4);
-  padding: var(--ui-space-4);
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-md);
-  background: var(--ui-bg-subtle);
-  transition: padding var(--ui-duration-collapse) var(--ui-easing-standard),
-    margin var(--ui-duration-collapse) var(--ui-easing-standard),
-    border-color var(--ui-duration-normal) var(--ui-easing-standard),
-    background-color var(--ui-duration-normal) var(--ui-easing-standard);
-}
-
-.resume-entry-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--ui-space-3);
-  padding-bottom: var(--ui-space-2);
-  border-bottom: 1px solid var(--ui-border);
-  min-height: 0;
-  transition: padding var(--ui-duration-collapse) var(--ui-easing-standard),
-    min-height var(--ui-duration-collapse) var(--ui-easing-standard),
-    border-color var(--ui-duration-collapse) var(--ui-easing-standard);
-}
-
-.resume-entry-card.is-collapsed {
-  margin-top: 0 !important;
-  margin-bottom: var(--ui-space-2);
-  padding: 6px var(--ui-space-4);
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-md);
-  background: var(--ui-bg-subtle);
-  box-shadow: none;
-}
-
-.resume-entry-card.is-collapsed .resume-entry-card__header {
-  min-height: 40px;
-  padding: 0 4px;
-  border-bottom-color: transparent;
-}
-
-.resume-entry-card__header > span {
-  transition: color var(--ui-duration-fast) var(--ui-easing-standard),
-    font-size var(--ui-duration-collapse) var(--ui-easing-standard),
-    font-weight var(--ui-duration-collapse) var(--ui-easing-standard);
-}
-
-.resume-entry-card.is-collapsed .resume-entry-card__header > span {
-  color: var(--ui-text-secondary);
-  font-size: 15px;
-  font-weight: 500;
-}
-
-.resume-entry-card.is-collapsed .resume-entry-card__header > div {
-  gap: var(--ui-space-2);
-}
-
-.item-card__delete {
-  position: absolute;
-  top: var(--ui-space-2);
-  right: var(--ui-space-2);
-  z-index: 1;
-}
-
-.item-card__delete:focus-visible {
-  outline: 2px solid var(--ui-danger);
-  outline-offset: 2px;
-}
-
-.icon-option-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  width: 100%;
-  padding: var(--ui-space-2);
-  border: 1px solid transparent;
-  border-radius: var(--ui-radius-sm);
-  background: transparent;
-  color: var(--ui-text-muted);
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
-}
-
-.icon-option-button:hover,
-.icon-option-button.is-active {
-  background: color-mix(in srgb, var(--ui-primary) 8%, white);
-  color: var(--ui-primary);
-}
-.item-heading-fields {
-  min-width: 0;
-}
-.resume-editor-empty {
-  display: flex;
-  min-height: 160px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--ui-space-2);
-  padding: var(--ui-space-6);
-  border: 1px dashed var(--ui-border);
-  border-radius: var(--ui-radius-md);
-  color: var(--ui-text-muted);
-  text-align: center;
-}
-
-.resume-editor-empty p {
-  margin: 0;
-}
 .ql-editor, .rich-text {
   line-height: 1.6;
 
@@ -334,7 +43,7 @@ body {
     padding-left: 1.5em;
     list-style-type: disc;
   }
-  
+
   ol {
     list-style-type: decimal;
   }
@@ -350,13 +59,17 @@ body {
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--ui-border);
-  border-radius: var(--ui-radius-sm);
+  background: var(--color-rule-2);
+  border-radius: var(--radius-s);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
 }
 
 ::-webkit-scrollbar-track {
@@ -366,7 +79,7 @@ body {
 /* Drag & Drop Ghost */
 .sortable-ghost {
   opacity: 0.5;
-  background: $bg-light;
+  background: var(--color-accent-wash);
 }
 
 .sortable-drag {
@@ -393,7 +106,7 @@ body {
     min-height: 297mm;
     margin: 0 !important;
     padding: 0 !important;
-    background: #fff;
+    background: var(--resume-paper);
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -435,6 +148,7 @@ body {
     box-shadow: none !important;
     transform: none !important;
     border: 0 !important;
+    outline: 0 !important;
   }
 
   .resume-canvas h1,

@@ -4,7 +4,7 @@
       <component :is="DisplayIcon" />
     </el-icon>
     <!-- Fallback if no icon found (shouldn't happen with defaults) -->
-    <span v-else>{{ defaultEmoji }}</span>
+    <span v-else>{{ defaultLabel }}</span>
   </div>
 </template>
 
@@ -28,13 +28,13 @@ const defaultIcons = {
   custom: 'Link',
 };
 
-const defaultEmojis = {
-  email: '📧',
-  phone: '📱',
-  location: '📍',
-  website: '🌐',
-  github: '🔗',
-  custom: '🔗',
+const defaultLabels = {
+  email: '邮箱',
+  phone: '电话',
+  location: '地址',
+  website: '网站',
+  github: 'GitHub',
+  custom: '链接',
 };
 
 const DisplayIcon = computed(() => {
@@ -42,5 +42,5 @@ const DisplayIcon = computed(() => {
   return (Icons as any)[iconName];
 });
 
-const defaultEmoji = computed(() => defaultEmojis[props.type]);
+const defaultLabel = computed(() => defaultLabels[props.type]);
 </script>

@@ -53,6 +53,20 @@
         <div v-if="inlineToolbar && $slots.toolbar" class="header-inline-toolbar">
           <slot name="toolbar" />
         </div>
+        <button
+          type="button"
+          class="scheme-toggle"
+          :aria-label="isDark ? '切换到浅色主题' : '切换到深色主题'"
+          :title="isDark ? '浅色主题' : '深色主题'"
+          @click="toggleScheme"
+        >
+          <svg v-if="isDark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M12 4.2a.9.9 0 0 1 .9.9V6a.9.9 0 0 1-1.8 0V5.1a.9.9 0 0 1 .9-.9Zm0 12.9a.9.9 0 0 1 .9.9v.9a.9.9 0 0 1-1.8 0v-.9a.9.9 0 0 1 .9-.9ZM4.2 12a.9.9 0 0 1 .9-.9H6a.9.9 0 0 1 0 1.8H5.1a.9.9 0 0 1-.9-.9Zm12.9 0a.9.9 0 0 1 .9-.9h.9a.9.9 0 0 1 0 1.8h-.9a.9.9 0 0 1-.9-.9ZM6.4 6.4a.9.9 0 0 1 1.27 0l.64.64a.9.9 0 1 1-1.27 1.27l-.64-.64a.9.9 0 0 1 0-1.27Zm9.29 9.29a.9.9 0 0 1 1.27 0l.64.64a.9.9 0 1 1-1.27 1.27l-.64-.64a.9.9 0 0 1 0-1.27Zm1.27-9.29a.9.9 0 0 1 0 1.27l-.64.64a.9.9 0 1 1-1.27-1.27l.64-.64a.9.9 0 0 1 1.27 0ZM7.68 15.05a.9.9 0 0 1 0 1.27l-.64.64a.9.9 0 1 1-1.27-1.27l.64-.64a.9.9 0 0 1 1.27 0ZM12 8.1A3.9 3.9 0 1 1 12 15.9 3.9 3.9 0 0 1 12 8.1Z" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path fill="currentColor" d="M14.2 3.4a.9.9 0 0 1 .2 1 8.2 8.2 0 1 0 5.2 5.2.9.9 0 0 1 1.2-.2A9.9 9.9 0 1 1 14 3.2a.9.9 0 0 1 .2 1.2Z" />
+          </svg>
+        </button>
         <a
           class="repository-link"
           href="https://github.com/Theproudcold/sea-resume"
@@ -76,7 +90,8 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { applyColorScheme, persistColorScheme, readStoredScheme } from '@/composables/useColorScheme';
 import { ArrowLeft, EditPen } from '@element-plus/icons-vue';
 
 const props = withDefaults(defineProps<{
@@ -131,30 +146,57 @@ const cancelTitleEdit = () => {
 };
 
 const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`;
+const isDark = ref(document.documentElement.classList.contains('dark'));
+let schemeMedia: MediaQueryList | null = null;
+
+const paintScheme = (dark: boolean) => {
+  applyColorScheme(dark);
+  isDark.value = dark;
+};
+
+const toggleScheme = () => {
+  const dark = !isDark.value;
+  persistColorScheme(dark);
+  isDark.value = dark;
+};
+
+const onSystemScheme = (event: MediaQueryListEvent) => {
+  if (readStoredScheme()) return;
+  paintScheme(event.matches);
+};
+
+onMounted(() => {
+  if (typeof window.matchMedia !== 'function') return;
+  schemeMedia = window.matchMedia('(prefers-color-scheme: dark)');
+  schemeMedia.addEventListener('change', onSystemScheme);
+});
+
+onUnmounted(() => {
+  schemeMedia?.removeEventListener('change', onSystemScheme);
+});
 </script>
 
 <style scoped>
 .app-header {
   position: relative;
-  z-index: 10;
+  z-index: var(--z-sticky-nav);
   flex: 0 0 auto;
-  background: var(--ui-bg-surface);
-  border-bottom: 1px solid var(--ui-border);
-  box-shadow: var(--ui-shadow-sm);
+  background: var(--color-paper-3);
+  color: var(--color-ink);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
 }
 
 .header-content {
   width: 100%;
   max-width: none;
-  min-height: 76px;
+  min-height: var(--topbar-height);
   margin: 0 auto;
-  padding: var(--ui-space-4) var(--ui-page-gutter);
+  padding: var(--space-xs) var(--ui-page-gutter);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ui-space-4);
+  gap: var(--space-md);
 }
-
 
 .header-identity,
 .header-trailing,
@@ -166,14 +208,18 @@ const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`
 .header-identity {
   flex: 1 1 auto;
   min-width: 0;
-  gap: var(--ui-space-3);
+  gap: var(--space-sm);
 }
 
 .brand-mark {
-  flex: 0 0 40px;
-  width: 40px;
-  height: 40px;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
+  padding: var(--space-3xs);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-input);
+  background: var(--color-paper-2);
 }
 
 .page-heading {
@@ -188,19 +234,22 @@ const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`
   max-width: 100%;
   margin: 0;
   overflow: hidden;
-  color: var(--ui-text-main);
-  font-size: var(--ui-font-lg);
-  font-weight: 650;
-  line-height: 1.25;
+  color: var(--color-ink);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  max-width: none;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .page-title-edit {
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-xs);
   padding: 0;
   border: 0;
   background: transparent;
@@ -212,30 +261,39 @@ const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`
 
 .page-title-edit > .el-icon {
   flex: 0 0 auto;
-  color: var(--ui-text-muted);
-  opacity: 0.65;
-  transition: color 0.15s ease, opacity 0.15s ease;
+  color: var(--color-muted);
+  transition: color var(--dur-micro) var(--ease-out);
 }
 
 .page-title-edit:hover > .el-icon {
-  color: var(--ui-primary);
-  opacity: 1;
+  color: var(--color-accent);
+}
+
+.page-title-edit:hover .page-title-text {
+  text-decoration: underline;
+  text-decoration-thickness: var(--rule-bar);
+  text-underline-offset: 0.2em;
+}
+
+.page-title-edit:active .page-title-text {
+  color: var(--color-accent);
+}
+
+.page-title-edit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .page-title-input {
   width: min(440px, 48vw);
 }
 
-.page-title-input :deep(.el-input__wrapper) {
-  box-shadow: 0 0 0 1px var(--ui-primary) inset;
-}
-
 .page-subtitle {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: var(--ui-space-1);
-  margin-top: var(--ui-space-1);
+  gap: var(--space-2xs);
+  margin-top: var(--space-3xs);
   overflow: hidden;
 }
 
@@ -243,63 +301,107 @@ const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`
   min-width: 0;
   overflow: hidden;
   margin: 0;
-  color: var(--ui-text-muted);
-  font-size: var(--ui-font-sm);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.back-button {
+.page-subtitle .back-button {
   flex: 0 0 auto;
   height: auto;
   min-height: 0;
   margin: 0;
   padding: 0;
-  color: var(--ui-text-secondary);
-  font-size: var(--ui-font-sm);
+  --el-button-text-color: var(--color-ink-2);
+  --el-button-hover-text-color: var(--color-accent);
+  --el-button-hover-bg-color: transparent;
+  --el-button-active-bg-color: transparent;
+  --el-button-active-text-color: var(--color-accent);
+  font-size: var(--text-xs);
+  font-weight: 500;
 }
 
-.back-button:hover {
-  color: var(--ui-primary);
+.page-subtitle .back-button:hover {
+  background: transparent !important;
 }
 
 .breadcrumb-divider {
   flex: 0 0 auto;
-  color: var(--ui-text-muted);
-  font-size: var(--ui-font-sm);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
 }
 
 .header-trailing {
   flex: 0 1 auto;
   min-width: 0;
   justify-content: flex-end;
-  gap: var(--ui-space-4);
+  gap: var(--space-sm);
 }
 
+.app-header :deep(.el-button.is-text),
+.app-header :deep(.el-button.is-link) {
+  --el-button-border-color: transparent;
+  --el-button-hover-border-color: transparent;
+  --el-button-disabled-border-color: transparent;
+  box-shadow: none;
+}
+
+.app-header :deep(.el-button.is-text:not(.is-disabled):hover),
+.app-header :deep(.el-button.is-text:not(.is-disabled):focus-visible) {
+  background-color: var(--color-paper-2);
+  color: var(--color-ink);
+}
+
+.scheme-toggle,
 .repository-link {
+  position: relative;
   display: inline-flex;
   flex: 0 0 36px;
   width: 36px;
   height: 36px;
   align-items: center;
   justify-content: center;
-  border-radius: 50%;
-  color: var(--ui-text-secondary);
-  transition: color 0.15s ease;
+  padding: 0;
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-input);
+  background: var(--color-paper-3);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-key);
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
 }
 
+.repository-link::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+
+.scheme-toggle svg,
 .repository-link svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
+.scheme-toggle:hover,
 .repository-link:hover {
-  color: var(--ui-primary);
+  border-color: var(--color-rule-2);
+  background: var(--color-paper-2);
 }
 
+.scheme-toggle:active,
+.repository-link:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-key-press);
+}
+
+.scheme-toggle:focus-visible,
 .repository-link:focus-visible {
-  outline: 2px solid var(--ui-primary);
+  outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
 
@@ -312,21 +414,25 @@ const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`
 .header-actions {
   justify-content: flex-end;
   flex-wrap: nowrap;
-  gap: var(--ui-space-2);
+  gap: var(--space-xs);
+}
+
+.header-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 .header-toolbar {
-  border-top: 1px solid var(--ui-border);
+  border-top: var(--rule-hair) solid var(--color-rule);
 }
 
 .header-toolbar-content {
   display: flex;
   width: 100%;
   max-width: var(--ui-content-max-width);
-  min-height: 52px;
+  min-height: 48px;
   align-items: center;
   margin: 0 auto;
-  padding: var(--ui-space-2) var(--ui-page-gutter);
+  padding: var(--space-xs) var(--ui-page-gutter);
 }
 
 @media (max-width: 768px) {
@@ -334,8 +440,8 @@ const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`
     min-height: 0;
     align-items: flex-start;
     flex-direction: column;
-    gap: var(--ui-space-3);
-    padding-block: var(--ui-space-3);
+    gap: var(--space-sm);
+    padding-block: var(--space-sm);
   }
 
   .header-identity,
@@ -351,7 +457,11 @@ const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`
   }
 
   .header-trailing {
-    gap: var(--ui-space-2);
+    gap: var(--space-xs);
+  }
+
+  .header-actions {
+    flex-wrap: wrap;
   }
 
   .header-inline-toolbar {
@@ -365,7 +475,7 @@ const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`
   .header-toolbar-content {
     min-height: 0;
     align-items: flex-start;
-    padding-block: var(--ui-space-2);
+    padding-block: var(--space-xs);
   }
 }
 </style>

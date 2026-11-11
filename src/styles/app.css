@@ -1,0 +1,999 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: Cobalt (app-trimmed: no ASCII field, no cut corners) · redesign: full · schemes: light + dark (html.dark)
+ * nav: kept top bar, set as a paper surface on a hairline with one cobalt key and the scheme toggle · signature: the white A4 sheet on a hairline wherever a resume appears, in both schemes · states: loading, empty, error, full
+ * axes: light+dark/sans/cool · posture: restrained · contrast: pass · v2.0.0 */
+/* Hallmark · dismissed 10b · .resume-entry-card padding eases its own collapse in the editor; the entry folds to one line and the motion is the fold itself, zeroed under reduced motion */
+/* Hallmark · answered F7 · every popper is the same kind of floating surface (menu, select, picker, popover), one recipe on purpose */
+/* Hallmark · answered F3 · the top bar title is one nowrap line with an ellipsis; balance has nothing to balance */
+:root {
+  /* Legacy role names, kept so every scoped component style follows the system. */
+  --ui-primary: var(--color-accent);
+  --ui-primary-hover: var(--color-accent-deep);
+  --ui-text-main: var(--color-ink);
+  --ui-text-secondary: var(--color-ink-2);
+  --ui-text-muted: var(--color-muted);
+  --ui-text-faint: var(--color-muted);
+  --ui-bg-page: var(--color-paper);
+  --ui-bg-surface: var(--color-paper-3);
+  --ui-bg-subtle: var(--color-paper-2);
+  --ui-bg-hover: var(--color-paper-2);
+  --ui-bg-elevated: var(--color-paper-3);
+  --ui-border: var(--color-rule);
+  --ui-border-strong: var(--color-rule-2);
+  --ui-radius-sm: var(--radius-s);
+  --ui-radius-md: var(--radius-input);
+  --ui-radius-lg: var(--radius-card);
+  --ui-space-1: var(--space-2xs);
+  --ui-space-2: var(--space-xs);
+  --ui-space-3: var(--space-sm);
+  --ui-space-4: var(--space-md);
+  --ui-space-6: var(--space-lg);
+  --ui-space-8: var(--space-xl);
+  --ui-content-max-width: 1280px;
+  --ui-page-gutter: var(--space-lg);
+  --ui-shadow-sm: var(--shadow-card);
+  --ui-shadow-md: var(--shadow-float);
+  --ui-success: var(--color-success);
+  --ui-warning: var(--color-warning);
+  --ui-danger: var(--color-error);
+  --ui-info: var(--color-muted);
+  --ui-font-xs: var(--text-xs);
+  --ui-font-sm: var(--text-sm);
+  --ui-font-md: var(--text-md);
+  --ui-font-lg: var(--text-lg);
+  --ui-font-title: var(--text-xl);
+  --ui-font-xl: var(--text-2xl);
+  --ui-line-height: 1.6;
+  --ui-control-height: var(--control-height);
+  --ui-duration-fast: var(--dur-micro);
+  --ui-duration-normal: var(--dur-short);
+  --ui-duration-collapse: var(--dur-short);
+  --ui-easing-standard: var(--ease-out);
+  --ui-ease-out: var(--ease-out);
+  --ui-dialog-width-sm: min(440px, calc(100vw - 32px));
+  --ui-dialog-width-md: min(760px, calc(100vw - 32px));
+  --ui-dialog-width-lg: min(980px, calc(100vw - 32px));
+  --ui-dialog-width-xl: min(1100px, calc(100vw - 32px));
+  --ui-dialog-max-height: calc(100dvh - 48px);
+
+  /* Element Plus, read from the same roles. */
+  --el-font-family: var(--font-body);
+  --el-font-size-base: var(--text-sm);
+  --el-font-size-small: var(--text-xs);
+  --el-font-size-medium: var(--text-md);
+  --el-font-size-large: var(--text-lg);
+  --el-font-size-extra-large: var(--text-xl);
+  --el-font-weight-primary: 500;
+  --el-text-color-primary: var(--color-ink);
+  --el-text-color-regular: var(--color-ink-2);
+  --el-text-color-secondary: var(--color-muted);
+  --el-text-color-placeholder: var(--color-muted);
+  --el-text-color-disabled: var(--color-muted);
+  --el-border-color: var(--color-rule-2);
+  --el-border-color-light: var(--color-rule);
+  --el-border-color-lighter: var(--color-rule);
+  --el-border-color-extra-light: var(--color-paper-2);
+  --el-border-color-dark: var(--color-rule-2);
+  --el-border-color-darker: var(--color-muted);
+  --el-border-color-hover: var(--color-muted);
+  --el-fill-color: var(--color-paper-2);
+  --el-fill-color-light: var(--color-paper-2);
+  --el-fill-color-lighter: var(--color-paper);
+  --el-fill-color-extra-light: var(--color-paper);
+  --el-fill-color-dark: var(--color-rule);
+  --el-fill-color-darker: var(--color-rule-2);
+  --el-fill-color-blank: var(--color-paper-3);
+  --el-bg-color: var(--color-paper-3);
+  --el-bg-color-page: var(--color-paper);
+  --el-bg-color-overlay: var(--color-paper-3);
+  --el-overlay-color: var(--color-overlay);
+  --el-overlay-color-light: var(--color-overlay);
+  --el-overlay-color-lighter: var(--color-overlay);
+  --el-mask-color: color-mix(in oklab, var(--color-paper) 85%, transparent);
+  --el-mask-color-extra-light: color-mix(in oklab, var(--color-paper) 40%, transparent);
+  --el-border-radius-base: var(--radius-input);
+  --el-border-radius-small: var(--radius-s);
+  --el-border-radius-round: var(--radius-card);
+  --el-border-radius-circle: 50%;
+  --el-box-shadow: var(--shadow-float);
+  --el-box-shadow-light: var(--shadow-float);
+  --el-box-shadow-lighter: var(--shadow-card);
+  --el-box-shadow-dark: var(--shadow-float);
+  --el-component-size: var(--control-height);
+  --el-component-size-small: var(--control-height-s);
+  --el-component-size-large: var(--control-height);
+  --el-transition-duration: var(--dur-short);
+  --el-transition-duration-fast: var(--dur-micro);
+  --el-transition-function-ease-in-out-bezier: var(--ease-in-out);
+  --el-transition-function-fast-bezier: var(--ease-out);
+  --el-disabled-bg-color: var(--color-paper-2);
+  --el-disabled-text-color: var(--color-muted);
+  --el-disabled-border-color: var(--color-rule);
+  --el-dialog-border-radius: var(--radius-card);
+  --el-dialog-bg-color: var(--color-paper-3);
+  --el-dialog-box-shadow: var(--shadow-float);
+  --el-card-border-radius: var(--radius-card);
+  --el-popover-border-radius: var(--radius-card);
+  --el-tag-border-radius: var(--radius-s);
+  --el-input-border-radius: var(--radius-input);
+  --el-color-white: var(--color-paper-3);
+  --el-color-black: var(--color-ink);
+  --el-color-primary: var(--color-accent);
+  --el-color-success: var(--color-success);
+  --el-color-warning: var(--color-warning);
+  --el-color-danger: var(--color-error);
+  --el-color-error: var(--color-error);
+  --el-color-info: var(--color-muted);
+}
+
+@media (max-width: 768px) {
+  :root {
+    --ui-page-gutter: var(--space-md);
+  }
+}
+
+#app {
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.resume-document {
+  color: var(--resume-ink);
+  font-size: 1rem;
+  line-height: 1.5;
+  caret-color: auto;
+}
+
+:where(a, button, input, select, textarea, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+:is(h1, h2, h3, h4):not(.resume-document *) {
+  color: var(--color-ink);
+}
+
+/* Buttons: keycaps. A key face on a 1px edge; the one primary is a solid cobalt key. */
+.el-button {
+  --el-button-text-color: var(--color-ink);
+  --el-button-bg-color: var(--color-key-face);
+  --el-button-border-color: var(--color-rule-2);
+  --el-button-hover-text-color: var(--color-ink);
+  --el-button-hover-bg-color: var(--color-paper-2);
+  --el-button-hover-border-color: var(--color-rule-2);
+  --el-button-active-text-color: var(--color-ink);
+  --el-button-active-bg-color: var(--color-paper-2);
+  --el-button-active-border-color: var(--color-rule-2);
+  --el-button-disabled-text-color: var(--color-muted);
+  --el-button-disabled-bg-color: var(--color-key-face);
+  --el-button-disabled-border-color: var(--color-rule);
+  --el-button-font-weight: 500;
+  border-radius: var(--radius-input);
+  font-family: var(--font-display);
+  font-weight: 500;
+  box-shadow: var(--shadow-key);
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out),
+    border-color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out),
+    transform var(--dur-micro) var(--ease-out);
+}
+
+.el-button:active:not(.is-disabled) {
+  background-color: var(--el-button-active-bg-color);
+  border-color: var(--el-button-active-border-color);
+  color: var(--el-button-active-text-color);
+  box-shadow: var(--shadow-key-press);
+  transform: translateY(1px);
+}
+
+.el-button.is-disabled,
+.el-button.is-disabled:hover {
+  opacity: 0.5;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.el-button--primary {
+  --el-button-text-color: var(--color-accent-ink);
+  --el-button-bg-color: var(--color-accent);
+  --el-button-border-color: var(--color-accent);
+  --el-button-hover-text-color: var(--color-accent-ink);
+  --el-button-hover-bg-color: var(--color-accent-deep);
+  --el-button-hover-border-color: var(--color-accent-deep);
+  --el-button-active-text-color: var(--color-accent-ink);
+  --el-button-active-bg-color: var(--color-accent-deep);
+  --el-button-active-border-color: var(--color-accent-deep);
+  --el-button-disabled-text-color: var(--color-accent-ink);
+  --el-button-disabled-bg-color: var(--color-accent);
+  --el-button-disabled-border-color: var(--color-accent);
+  box-shadow: var(--shadow-key-accent);
+}
+
+.el-button--primary.is-plain {
+  --el-button-text-color: var(--color-accent);
+  --el-button-bg-color: var(--color-key-face);
+  --el-button-border-color: color-mix(in oklab, var(--color-accent) 45%, var(--color-rule));
+  --el-button-hover-text-color: var(--color-accent);
+  --el-button-hover-bg-color: var(--color-accent-wash);
+  --el-button-hover-border-color: color-mix(in oklab, var(--color-accent) 60%, var(--color-rule));
+  --el-button-active-text-color: var(--color-accent);
+  --el-button-active-bg-color: var(--color-accent-wash);
+  box-shadow: var(--shadow-key);
+}
+
+.el-button--danger {
+  --el-button-text-color: var(--color-accent-ink);
+  --el-button-bg-color: var(--color-error);
+  --el-button-border-color: var(--color-error);
+  --el-button-hover-text-color: var(--color-accent-ink);
+  --el-button-hover-bg-color: color-mix(in oklab, var(--color-error) 88%, var(--color-ink));
+  --el-button-hover-border-color: color-mix(in oklab, var(--color-error) 88%, var(--color-ink));
+  --el-button-active-text-color: var(--color-accent-ink);
+  --el-button-active-bg-color: color-mix(in oklab, var(--color-error) 80%, var(--color-ink));
+  --el-button-active-border-color: color-mix(in oklab, var(--color-error) 80%, var(--color-ink));
+  box-shadow: none;
+}
+
+.el-button--danger.is-plain {
+  --el-button-text-color: var(--color-error);
+  --el-button-bg-color: var(--color-key-face);
+  --el-button-border-color: color-mix(in oklab, var(--color-error) 45%, var(--color-rule));
+  --el-button-hover-text-color: var(--color-error);
+  --el-button-hover-bg-color: var(--color-error-wash);
+  --el-button-hover-border-color: color-mix(in oklab, var(--color-error) 60%, var(--color-rule));
+  --el-button-active-text-color: var(--color-error);
+  --el-button-active-bg-color: var(--color-error-wash);
+  box-shadow: var(--shadow-key);
+}
+
+.el-button--success,
+.el-button--warning,
+.el-button--info {
+  --el-button-text-color: var(--color-ink);
+  --el-button-bg-color: var(--color-key-face);
+  --el-button-border-color: var(--color-rule-2);
+  --el-button-hover-text-color: var(--color-ink);
+  --el-button-hover-bg-color: var(--color-paper-2);
+  --el-button-hover-border-color: var(--color-rule-2);
+  --el-button-active-text-color: var(--color-ink);
+  --el-button-active-bg-color: var(--color-paper-2);
+}
+
+.el-button.is-text,
+.el-button.is-link {
+  --el-button-bg-color: transparent;
+  --el-button-border-color: transparent;
+  --el-button-hover-border-color: transparent;
+  --el-button-active-border-color: transparent;
+  --el-button-disabled-bg-color: transparent;
+  --el-button-disabled-border-color: transparent;
+  box-shadow: none;
+}
+
+.el-button.is-text:not(.is-disabled):hover,
+.el-button.is-text:not(.is-disabled):focus-visible {
+  background-color: var(--color-paper-2);
+  color: var(--color-ink);
+}
+
+.el-button.is-text:active:not(.is-disabled),
+.el-button.is-link:active:not(.is-disabled) {
+  box-shadow: none;
+  transform: none;
+}
+
+.el-button.is-link:not(.is-disabled):hover {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.el-button.is-text.el-button--danger,
+.el-button.is-link.el-button--danger {
+  --el-button-text-color: var(--color-error);
+  --el-button-hover-text-color: var(--color-error);
+}
+
+.el-button.is-text.el-button--danger:not(.is-disabled):hover {
+  background-color: var(--color-error-wash);
+  color: var(--color-error);
+}
+
+.el-button.is-text.el-button--primary,
+.el-button.is-link.el-button--primary {
+  --el-button-text-color: var(--color-accent);
+  --el-button-hover-text-color: var(--color-accent-deep);
+  --el-button-bg-color: transparent;
+}
+
+.el-button.is-text.el-button--primary:not(.is-disabled):hover {
+  background-color: var(--color-accent-wash);
+  color: var(--color-accent);
+}
+
+.el-button.is-circle {
+  border-radius: 50%;
+}
+
+.el-button-group > .el-button {
+  box-shadow: none;
+}
+
+/* Fields: a rule-2 edge on the surface, cobalt edge and a soft wash ring on focus. */
+.el-input,
+.el-textarea,
+.el-select,
+.el-date-editor,
+.el-input-number {
+  --el-input-border-color: var(--color-rule-2);
+  --el-input-hover-border-color: var(--color-muted);
+  --el-input-focus-border-color: var(--color-accent);
+  --el-input-bg-color: var(--color-paper-3);
+  --el-input-text-color: var(--color-ink);
+  --el-input-border-radius: var(--radius-input);
+  --el-select-border-color-hover: var(--color-muted);
+  --el-select-input-focus-border-color: var(--color-accent);
+}
+
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  border-radius: var(--radius-input) !important;
+  transition: box-shadow var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus,
+.el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1px var(--color-accent) inset, 0 0 0 3px var(--color-accent-wash) !important;
+}
+
+.el-input.is-disabled .el-input__wrapper,
+.el-textarea.is-disabled .el-textarea__inner,
+.el-select__wrapper.is-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.el-form-item.is-error .el-input__wrapper,
+.el-form-item.is-error .el-textarea__inner,
+.el-form-item.is-error .el-select__wrapper {
+  box-shadow: 0 0 0 1px var(--color-error) inset;
+}
+
+.el-form-item__label {
+  color: var(--color-ink-2);
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+.el-form-item__error {
+  color: var(--color-error);
+}
+
+@media (max-width: 768px) {
+  .el-input__inner,
+  .el-textarea__inner,
+  .el-select__selected-item {
+    font-size: var(--text-md);
+  }
+}
+
+/* Choice sets: keys on a sunken tray, the chosen one raised. */
+.el-radio-group:has(> .el-radio-button) {
+  gap: var(--space-3xs);
+  padding: var(--space-3xs);
+  border-radius: var(--radius-input);
+  background: var(--color-sunken);
+}
+
+.el-radio-button {
+  --el-radio-button-checked-bg-color: var(--color-paper-3);
+  --el-radio-button-checked-text-color: var(--color-ink);
+  --el-radio-button-checked-border-color: transparent;
+}
+
+.el-radio-button__inner {
+  border: 0 !important;
+  border-radius: var(--radius-s) !important;
+  background: transparent;
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-weight: 500;
+  box-shadow: none !important;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+
+.el-radio-button.is-active .el-radio-button__inner {
+  box-shadow: var(--shadow-key) !important;
+}
+
+.el-radio-button:not(.is-active) .el-radio-button__inner:hover {
+  color: var(--color-ink);
+}
+
+.el-checkbox__inner,
+.el-radio__inner {
+  border-color: var(--color-rule-2);
+  background-color: var(--color-paper-3);
+}
+
+.el-checkbox__inner {
+  border-radius: var(--radius-s);
+}
+
+.el-switch {
+  --el-switch-on-color: var(--color-accent);
+  --el-switch-off-color: var(--color-rule-2);
+}
+
+.el-slider {
+  --el-slider-main-bg-color: var(--color-accent);
+  --el-slider-runway-bg-color: var(--color-rule);
+}
+
+/* Tabs: the current tab is ink 600 over a cobalt bar, on a hairline. */
+.el-tabs {
+  --el-tabs-header-height: 44px;
+}
+
+.el-tabs__item {
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+.el-tabs__item.is-active,
+.el-tabs__item:hover {
+  color: var(--color-ink);
+}
+
+.el-tabs__item.is-active {
+  font-weight: 600;
+}
+
+.el-tabs__active-bar {
+  height: 2px;
+  background-color: var(--color-accent);
+}
+
+.el-tabs__nav-wrap::after {
+  height: 1px;
+  background-color: var(--color-rule);
+}
+
+/* Tags: 4px radius, a wash with its own colour as text. */
+.el-tag {
+  --el-tag-border-radius: var(--radius-s);
+  --el-tag-font-size: var(--text-xs);
+  border-radius: var(--radius-s);
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+.el-tag.el-tag--plain,
+.el-tag.el-tag--light {
+  --el-tag-bg-color: var(--color-paper-2);
+  --el-tag-border-color: var(--color-rule);
+  --el-tag-text-color: var(--color-ink-2);
+}
+
+.el-tag.el-tag--primary.el-tag--plain,
+.el-tag.el-tag--primary.el-tag--light {
+  --el-tag-bg-color: var(--color-accent-wash);
+  --el-tag-border-color: color-mix(in oklab, var(--color-accent) 30%, transparent);
+  --el-tag-text-color: var(--color-accent);
+}
+
+.el-tag.el-tag--success.el-tag--plain,
+.el-tag.el-tag--success.el-tag--light {
+  --el-tag-bg-color: var(--color-success-wash);
+  --el-tag-border-color: color-mix(in oklab, var(--color-success) 30%, transparent);
+  --el-tag-text-color: var(--color-success);
+}
+
+.el-tag.el-tag--warning.el-tag--plain,
+.el-tag.el-tag--warning.el-tag--light {
+  --el-tag-bg-color: var(--color-warning-wash);
+  --el-tag-border-color: color-mix(in oklab, var(--color-warning) 30%, transparent);
+  --el-tag-text-color: var(--color-warning);
+}
+
+.el-tag.el-tag--danger.el-tag--plain,
+.el-tag.el-tag--danger.el-tag--light {
+  --el-tag-bg-color: var(--color-error-wash);
+  --el-tag-border-color: color-mix(in oklab, var(--color-error) 30%, transparent);
+  --el-tag-text-color: var(--color-error);
+}
+
+.el-tag.el-tag--dark {
+  --el-tag-bg-color: var(--color-ink);
+  --el-tag-border-color: var(--color-ink);
+  --el-tag-text-color: var(--color-paper-3);
+}
+
+/* Alerts: a wash with a mixed edge in the alert's own colour. */
+.el-alert {
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-input);
+  background: var(--color-paper-2);
+  color: var(--color-ink);
+}
+
+.el-alert .el-alert__title {
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+.el-alert .el-alert__description,
+.el-alert .el-alert__icon {
+  color: var(--color-ink-2);
+}
+
+.el-alert--warning {
+  border-color: color-mix(in oklab, var(--color-warning) 40%, transparent);
+  background: var(--color-warning-wash);
+}
+
+.el-alert--warning .el-alert__icon {
+  color: var(--color-warning);
+}
+
+.el-alert--error {
+  border-color: color-mix(in oklab, var(--color-error) 40%, transparent);
+  background: var(--color-error-wash);
+}
+
+.el-alert--error .el-alert__title,
+.el-alert--error .el-alert__icon {
+  color: var(--color-error);
+}
+
+.el-alert--success {
+  border-color: color-mix(in oklab, var(--color-success) 40%, transparent);
+  background: var(--color-success-wash);
+}
+
+.el-alert--success .el-alert__icon {
+  color: var(--color-success);
+}
+
+.el-alert--info .el-alert__icon {
+  color: var(--color-accent);
+}
+
+.el-alert .el-alert__close-btn {
+  color: var(--color-ink-2);
+}
+
+/* Floating surfaces: a hairline edge, 8px radius, the float shadow. */
+.el-popper.is-light,
+.el-dropdown__popper.el-popper,
+.el-select__popper.el-popper,
+.el-picker__popper.el-popper,
+.el-popover.el-popper {
+  border: var(--rule-hair) solid var(--color-rule) !important;
+  border-radius: var(--radius-card) !important;
+  background: var(--color-paper-3) !important;
+  box-shadow: var(--shadow-float) !important;
+}
+
+.el-popper.is-light .el-popper__arrow::before {
+  border-color: var(--color-rule) !important;
+  background: var(--color-paper-3) !important;
+}
+
+.el-popper.is-dark {
+  border-radius: var(--radius-s);
+  background: var(--color-ink);
+  color: var(--color-paper-3);
+}
+
+.el-dropdown-menu {
+  --el-dropdown-menuItem-hover-fill: var(--color-paper-2);
+  --el-dropdown-menuItem-hover-color: var(--color-ink);
+  padding: var(--space-2xs);
+  background: transparent;
+}
+
+.el-dropdown-menu__item {
+  min-height: 34px;
+  border-radius: var(--radius-s);
+  color: var(--color-ink);
+  font-weight: 400;
+}
+
+.el-dropdown-menu__item--divided {
+  margin-top: var(--space-2xs);
+  border-top-color: var(--color-rule);
+}
+
+.el-dropdown-menu__item.danger-menu-item {
+  color: var(--ui-danger);
+}
+
+.el-dropdown-menu__item.danger-menu-item:not(.is-disabled):hover,
+.el-dropdown-menu__item.danger-menu-item:not(.is-disabled):focus {
+  background: var(--color-error-wash);
+  color: var(--ui-danger);
+}
+
+.el-select-dropdown__item {
+  border-radius: var(--radius-s);
+  margin-inline: var(--space-2xs);
+}
+
+.el-select-dropdown__item.is-selected {
+  color: var(--color-accent);
+  font-weight: 500;
+}
+
+.el-select-dropdown__item.is-hovering {
+  background: var(--color-paper-2);
+}
+
+/* Toasts and message boxes. */
+.el-message {
+  --el-message-border-radius: var(--radius-card);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-float);
+}
+
+.el-message .el-message__content {
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+.el-message--success .el-message__icon {
+  color: var(--color-success);
+}
+
+.el-message--warning .el-message__icon {
+  color: var(--color-warning);
+}
+
+.el-message--error .el-message__icon {
+  color: var(--color-error);
+}
+
+.el-message--info .el-message__icon {
+  color: var(--color-accent);
+}
+
+.el-message-box {
+  --el-messagebox-border-radius: var(--radius-card);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-float);
+}
+
+.el-message-box__title {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.el-message-box__message {
+  color: var(--color-ink-2);
+}
+
+/* Dialogs and drawers. */
+.el-overlay-dialog.is-align-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: var(--space-lg) var(--space-md);
+  overflow-y: auto;
+}
+
+.el-dialog:not(.is-fullscreen) {
+  display: flex;
+  max-height: var(--ui-dialog-max-height);
+  flex-direction: column;
+  margin: 0 auto !important;
+  overflow: hidden;
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+}
+
+.el-dialog:not(.is-fullscreen) .el-dialog__header {
+  flex: 0 0 auto;
+  padding: var(--space-md) var(--space-lg) !important;
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+}
+
+.el-dialog:not(.is-fullscreen) .el-dialog__headerbtn {
+  top: var(--space-xs);
+  right: var(--space-xs);
+}
+
+.el-dialog__headerbtn .el-dialog__close {
+  color: var(--color-muted);
+}
+
+.el-dialog__headerbtn:hover .el-dialog__close {
+  color: var(--color-ink);
+}
+
+.el-dialog__title {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+}
+
+.el-dialog:not(.is-fullscreen) .el-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-lg) !important;
+  color: var(--color-ink);
+  line-height: var(--ui-line-height);
+}
+
+.el-dialog:not(.is-fullscreen) .el-dialog__footer {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding: var(--space-sm) var(--space-lg) !important;
+  border-top: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper);
+}
+
+.el-drawer {
+  border-left: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper-3);
+}
+
+.el-drawer__header {
+  margin-bottom: 0;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+/* Tables: horizontal hairlines only, a muted display-face head. */
+.el-table {
+  --el-table-border-color: var(--color-rule);
+  --el-table-header-bg-color: var(--color-paper);
+  --el-table-header-text-color: var(--color-muted);
+  --el-table-row-hover-bg-color: var(--color-paper-2);
+  --el-table-text-color: var(--color-ink);
+  --el-table-bg-color: var(--color-paper-3);
+  --el-table-tr-bg-color: var(--color-paper-3);
+}
+
+.el-table th.el-table__cell {
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+.el-card {
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card) !important;
+}
+
+.el-collapse {
+  --el-collapse-border-color: var(--color-rule);
+  --el-collapse-header-font-size: var(--text-sm);
+  --el-collapse-header-bg-color: transparent;
+  --el-collapse-content-bg-color: transparent;
+}
+
+.el-collapse-item__header {
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+.el-divider {
+  --el-border-color: var(--color-rule);
+}
+
+.el-empty__description p {
+  color: var(--color-muted);
+}
+
+.el-loading-mask {
+  background-color: var(--el-mask-color);
+}
+
+.el-loading-spinner .path {
+  stroke: var(--color-accent);
+}
+
+/* Shared application surfaces. Resume templates keep their own document styles. */
+.app-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-xs);
+}
+
+.ui-danger-zone {
+  padding: var(--space-md);
+  border: var(--rule-hair) solid color-mix(in oklab, var(--color-error) 40%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-error-wash);
+}
+
+.ui-danger-zone__title {
+  margin: 0;
+  color: var(--color-error);
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.ui-danger-zone__description {
+  margin: var(--space-2xs) 0 var(--space-sm);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+}
+
+.ui-plate {
+  border: var(--rule-hair) solid color-mix(in oklab, var(--color-warning) 40%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-warning-wash);
+  color: var(--color-ink);
+}
+
+@media (max-width: 768px) {
+  .el-dialog:not(.is-fullscreen) .el-dialog__header {
+    padding: var(--space-sm) var(--space-md) !important;
+  }
+
+  .el-dialog:not(.is-fullscreen) .el-dialog__body {
+    padding: var(--space-md) !important;
+  }
+
+  .el-dialog:not(.is-fullscreen) .el-dialog__footer {
+    padding: var(--space-xs) var(--space-md) var(--space-md) !important;
+  }
+
+  .app-dialog-actions {
+    justify-content: flex-start;
+  }
+
+  .app-dialog-actions > .el-button {
+    flex: 1 1 120px;
+  }
+
+  .item-heading-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.resume-entry-card {
+  margin-bottom: var(--space-md);
+  padding: var(--space-md);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card);
+  transition: padding var(--ui-duration-collapse) var(--ui-easing-standard),
+    margin var(--ui-duration-collapse) var(--ui-easing-standard),
+    border-color var(--dur-micro) var(--ease-out),
+    background-color var(--dur-micro) var(--ease-out);
+}
+
+.resume-entry-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding-bottom: var(--space-xs);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  min-height: 0;
+  transition: padding var(--ui-duration-collapse) var(--ui-easing-standard),
+    border-color var(--dur-micro) var(--ease-out);
+}
+
+.resume-entry-card.is-collapsed {
+  margin-top: 0 !important;
+  margin-bottom: var(--space-xs);
+  padding: var(--space-2xs) var(--space-md);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .resume-entry-card.is-collapsed:hover {
+    border-color: var(--color-rule-2);
+  }
+}
+
+.resume-entry-card.is-collapsed .resume-entry-card__header {
+  min-height: 40px;
+  padding: 0 var(--space-2xs);
+  border-bottom-color: transparent;
+}
+
+.resume-entry-card__header > span {
+  font-family: var(--font-display);
+  font-weight: 600;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+
+.resume-entry-card.is-collapsed .resume-entry-card__header > span {
+  color: var(--color-ink-2);
+  font-weight: 500;
+}
+
+.resume-entry-card.is-collapsed .resume-entry-card__header > div {
+  gap: var(--space-xs);
+}
+
+.item-card__delete {
+  position: absolute;
+  top: var(--space-xs);
+  right: var(--space-xs);
+  z-index: 1;
+}
+
+.item-card__delete:focus-visible {
+  outline: 2px solid var(--ui-danger);
+  outline-offset: 2px;
+}
+
+.icon-option-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  width: 100%;
+  padding: var(--space-xs);
+  border: var(--rule-hair) solid transparent;
+  border-radius: var(--radius-input);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+}
+
+.icon-option-button:hover {
+  background: var(--color-paper-2);
+  color: var(--color-ink);
+}
+
+.icon-option-button.is-active {
+  border-color: color-mix(in oklab, var(--color-accent) 35%, transparent);
+  background: var(--color-accent-wash);
+  color: var(--color-accent);
+}
+
+.icon-option-button:active {
+  background: var(--color-accent-wash);
+  color: var(--color-accent);
+}
+
+.item-heading-fields {
+  min-width: 0;
+}
+
+.resume-editor-empty {
+  display: flex;
+  min-height: 160px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-xs);
+  padding: var(--space-lg);
+  border: var(--rule-hair) dashed var(--color-rule-2);
+  border-radius: var(--radius-card);
+  color: var(--color-muted);
+}
+
+.resume-editor-empty p {
+  margin: 0;
+}
