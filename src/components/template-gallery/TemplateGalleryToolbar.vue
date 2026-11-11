@@ -1,21 +1,17 @@
 <template>
   <section class="toolbar">
-    <div class="toolbar__row toolbar__row--categories">
-      <el-tag
+    <div class="toolbar__row toolbar__row--categories" role="group" aria-label="模板分类">
+      <button
         v-for="category in categories"
         :key="category.value"
+        type="button"
         class="toolbar__tag"
-        :effect="category.value === activeCategory ? 'dark' : 'plain'"
-        :type="category.value === activeCategory ? 'primary' : 'info'"
-        tabindex="0"
-        role="button"
+        :class="{ 'is-active': category.value === activeCategory }"
         :aria-pressed="category.value === activeCategory"
         @click="$emit('update:category', category.value)"
-        @keydown.enter.prevent="$emit('update:category', category.value)"
-        @keydown.space.prevent="$emit('update:category', category.value)"
       >
         {{ category.label }}
-      </el-tag>
+      </button>
     </div>
     <div class="toolbar__row toolbar__row--controls">
       <el-input
@@ -60,50 +56,94 @@ defineEmits<{
 
 <style scoped>
 .toolbar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ui-space-4);
-  padding: var(--ui-space-4) var(--ui-space-6);
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-surface);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-sm) var(--space-lg);
+  padding-bottom: var(--space-md);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
 }
 
 .toolbar__row {
   display: flex;
-  gap: var(--ui-space-3);
+  min-width: 0;
 }
 
+/* Category choice: keys on a sunken tray; the chosen key is raised. */
 .toolbar__row--categories {
   flex-wrap: wrap;
+  gap: var(--space-3xs);
+  justify-self: start;
+  padding: var(--space-3xs);
+  border-radius: var(--radius-input);
+  background: var(--color-sunken);
 }
 
 .toolbar__tag {
+  min-width: 0;
+  min-height: var(--control-height-s);
+  padding: 0 var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-ink-2);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+}
+
+@media (hover: hover) {
+  .toolbar__tag:not(.is-active):hover {
+    color: var(--color-ink);
+    background: color-mix(in oklab, var(--color-paper-3) 55%, transparent);
+  }
+}
+
+.toolbar__tag:active {
+  box-shadow: var(--shadow-key-press);
+}
+
+.toolbar__tag.is-active {
+  background: var(--color-paper-3);
+  color: var(--color-ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
 }
 
 .toolbar__tag:focus-visible {
-  outline: 2px solid var(--ui-primary);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
 }
 
 .toolbar__row--controls {
   align-items: center;
+  gap: var(--space-xs);
 }
 
 .toolbar__row--controls :deep(.el-input) {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
 .toolbar__sort {
-  width: 180px;
+  width: 11rem;
   flex-shrink: 0;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
   .toolbar {
-    padding: var(--ui-space-4);
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .toolbar__row--categories {
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   .toolbar__row--controls {

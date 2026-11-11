@@ -1,7 +1,7 @@
 <template>
-  <div class="thumbnail">
+  <div ref="thumbnailRef" class="thumbnail">
     <div v-if="templateComponent" class="thumbnail__viewport">
-      <div class="thumbnail__stage">
+      <div class="thumbnail__stage resume-document" :style="{ '--scale': scale }">
         <component :is="templateComponent" :data="data" />
       </div>
     </div>
@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { ResumeData } from '@/types/resume';
 import { getTemplateComponent } from '@/components/preview/template-registry';
 
@@ -22,6 +22,26 @@ const props = defineProps<{
   fallbackText?: string;
 }>();
 
+const A4_WIDTH_PX = 794;
+const thumbnailRef = ref<HTMLDivElement | null>(null);
+const scale = ref(0.36);
+let resizeObserver: ResizeObserver | null = null;
+
+const updateScale = () => {
+  const width = thumbnailRef.value?.clientWidth || 0;
+  if (width) scale.value = Math.min(1, width / A4_WIDTH_PX);
+};
+
+onMounted(() => {
+  updateScale();
+  if (thumbnailRef.value && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(updateScale);
+    resizeObserver.observe(thumbnailRef.value);
+  }
+});
+
+onBeforeUnmount(() => resizeObserver?.disconnect());
+
 const templateComponent = computed(() => getTemplateComponent(props.templateId));
 </script>
 
@@ -29,26 +49,28 @@ const templateComponent = computed(() => getTemplateComponent(props.templateId))
 .thumbnail {
   position: relative;
   width: 100%;
-  aspect-ratio: 210 / 200;
+  aspect-ratio: 210 / 297;
   overflow: hidden;
-  background: var(--ui-bg-page);
+  background: var(--color-paper-2);
 }
 
 .thumbnail__viewport {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: var(--ui-bg-subtle);
+  background: var(--resume-paper);
 }
 
 .thumbnail__stage {
-  --scale: 0.24;
-  width: calc(100% / var(--scale));
-  min-height: calc(100% / var(--scale));
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 210mm;
+  min-height: 297mm;
   transform: scale(var(--scale));
   transform-origin: top left;
   pointer-events: none;
-  background: var(--ui-bg-elevated);
+  background: var(--resume-paper);
 }
 
 .thumbnail__fallback {
@@ -57,8 +79,11 @@ const templateComponent = computed(() => getTemplateComponent(props.templateId))
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--ui-text-muted);
-  font-size: var(--ui-font-md);
-  background: linear-gradient(135deg, var(--ui-bg-subtle), var(--ui-bg-page));
+  padding: var(--space-md);
+  background: var(--color-paper-2);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-align: center;
 }
 </style>

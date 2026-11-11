@@ -187,31 +187,32 @@ const handleBack = () => {
 .template-gallery {
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--ui-bg-page);
+  background: var(--color-paper);
 }
 
 .template-gallery__content {
-  padding: var(--ui-space-8) var(--ui-page-gutter) 48px;
+  padding: var(--space-xl) var(--ui-page-gutter) var(--space-2xl);
 }
 
 .template-gallery__inner {
-  max-width: var(--ui-content-max-width);
-  margin: 0 auto;
   display: flex;
+  max-width: var(--ui-content-max-width);
   flex-direction: column;
-  gap: var(--ui-space-6);
+  gap: var(--space-lg);
+  margin: 0 auto;
 }
 
 .template-gallery__grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--ui-space-6);
+  gap: var(--space-lg);
 }
 
 .template-gallery__empty {
-  padding: 60px 0;
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-surface);
+  padding: var(--space-2xl) 0;
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
 }
 
 @media (max-width: 1024px) {
@@ -222,12 +223,12 @@ const handleBack = () => {
 
 @media (max-width: 768px) {
   .template-gallery__content {
-    padding: 20px var(--ui-page-gutter) 40px;
+    padding: var(--space-lg) var(--ui-page-gutter) var(--space-xl);
   }
 
   .template-gallery__grid {
-    grid-template-columns: 1fr;
-    gap: var(--ui-space-4);
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-md);
   }
 }
 </style>

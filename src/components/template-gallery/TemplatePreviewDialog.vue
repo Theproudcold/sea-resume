@@ -13,14 +13,14 @@
           <p class="preview-dialog__desc">{{ template.description }}</p>
         </div>
         <div class="preview-dialog__tags">
-          <el-tag effect="plain">{{ template.categoryLabel }}</el-tag>
+          <el-tag type="primary" effect="light">{{ template.categoryLabel }}</el-tag>
           <el-tag v-for="keyword in template.keywords.slice(0, 3)" :key="keyword" effect="plain" type="info">
             {{ keyword }}
           </el-tag>
         </div>
       </div>
       <div class="preview-dialog__canvas">
-        <div class="preview-dialog__paper">
+        <div class="preview-dialog__paper resume-document">
           <component :is="templateComponent" v-if="templateComponent" :data="previewData" />
           <el-empty v-else description="模板预览暂不可用" />
         </div>
@@ -62,60 +62,64 @@ const templateComponent = computed(() => (props.template ? getTemplateComponent(
 .preview-dialog {
   display: flex;
   flex-direction: column;
-  gap: var(--ui-space-4);
-}
-
-.preview-template-dialog :deep(.el-dialog__body) {
-  max-height: calc(100dvh - 200px);
-  overflow-y: auto;
+  gap: var(--space-md);
 }
 
 .preview-dialog__intro {
   display: flex;
-  justify-content: space-between;
-  gap: var(--ui-space-4);
   align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-md);
 }
 
 .preview-dialog__title {
   margin: 0;
-  font-size: var(--ui-font-xl);
-  font-weight: 650;
-  color: var(--ui-text-main);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.2;
 }
 
 .preview-dialog__desc {
-  margin: var(--ui-space-2) 0 0;
-  color: var(--ui-text-secondary);
+  max-width: 62ch;
+  margin: var(--space-2xs) 0 0;
+  color: var(--color-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
 }
 
 .preview-dialog__tags {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--ui-space-2);
   justify-content: flex-end;
+  gap: var(--space-2xs);
 }
 
+/* The sheet: a white A4 page with a hairline edge, on a sunken stage. */
 .preview-dialog__canvas {
   max-height: min(68dvh, 900px);
   overflow: auto;
-  padding: var(--ui-space-4);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-page);
+  padding: var(--space-lg);
+  border-radius: var(--radius-card);
+  background: var(--color-sunken);
 }
 
 .preview-dialog__paper {
+  box-sizing: content-box;
   width: 210mm;
   min-height: 297mm;
   margin: 0 auto;
-  background: #fff;
-  box-shadow: var(--ui-shadow-md);
+  border: var(--rule-hair) solid var(--color-rule);
+  background: var(--resume-paper);
+  box-shadow: var(--shadow-card);
 }
 
 .preview-dialog__hint {
-  margin: 0 0 var(--ui-space-2);
-  color: var(--ui-text-muted);
-  font-size: var(--ui-font-sm);
+  margin: 0 0 var(--space-xs);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
 }
 
 @media (max-width: 768px) {
@@ -129,7 +133,7 @@ const templateComponent = computed(() => (props.template ? getTemplateComponent(
 
   .preview-dialog__canvas {
     max-height: 54dvh;
-    padding: var(--ui-space-2);
+    padding: var(--space-xs);
   }
 
   .preview-dialog__actions {

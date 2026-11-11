@@ -40,14 +40,16 @@ const emit = defineEmits<{
 
 <style scoped>
 .use-template-dialog {
-  color: var(--ui-text-secondary);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
   line-height: var(--ui-line-height);
 }
 
 .use-template-dialog__lead {
-  margin: 0 0 var(--ui-space-2);
-  color: var(--ui-text-main);
-  font-size: var(--ui-font-md);
+  margin: 0 0 var(--space-xs);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-md);
   font-weight: 600;
 }
 
@@ -56,12 +58,14 @@ const emit = defineEmits<{
 }
 
 .use-template-dialog__hint {
-  margin: var(--ui-space-3) 0 0;
-  color: var(--ui-warning);
-  font-size: var(--ui-font-sm);
+  margin: var(--space-sm) 0 0;
+  padding-top: var(--space-sm);
+  border-top: var(--rule-hair) solid var(--color-rule);
+  color: var(--color-warning);
+  font-weight: 500;
 }
 
 .use-template-dialog__actions {
-  gap: var(--ui-space-2);
+  gap: var(--space-xs);
 }
 </style>

@@ -1,8 +1,8 @@
 <template>
   <article class="template-card">
-    <div class="template-card__preview">
+    <div class="template-card__preview" aria-hidden="true" @click="$emit('preview')">
       <TemplateThumbnail :template-id="template.id" :data="demoData" :fallback-text="template.name" />
-      <el-tag class="template-card__badge" size="small" effect="dark">{{ template.categoryLabel }}</el-tag>
+      <el-tag class="template-card__badge" size="small" type="primary" effect="light">{{ template.categoryLabel }}</el-tag>
     </div>
     <div class="template-card__body">
       <div class="template-card__meta">
@@ -21,7 +21,7 @@
         </el-tag>
       </div>
       <div class="template-card__actions">
-        <el-button type="primary" @click="$emit('preview')">预览并选择</el-button>
+        <el-button @click="$emit('preview')">预览并选择</el-button>
       </div>
     </div>
   </article>
@@ -43,66 +43,116 @@ defineEmits<{
 
 <style scoped>
 .template-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
   overflow: hidden;
-  border-radius: var(--ui-radius-lg);
-  border: 1px solid var(--ui-border);
-  background: var(--ui-bg-surface);
-  box-shadow: var(--ui-shadow-sm);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
 }
 
 @media (hover: hover) {
   .template-card:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--ui-shadow-md);
+    border-color: var(--color-rule-2);
+    box-shadow: var(--shadow-float);
+    transform: translateY(-2px);
   }
 }
 
+/* The sheet leads the card: a white A4 page on a tinted stage. */
 .template-card__preview {
   position: relative;
-  border-bottom: 1px solid var(--ui-border);
+  padding: var(--space-md) var(--space-lg) 0;
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper-2);
+  cursor: pointer;
+}
+
+.template-card__preview :deep(.thumbnail) {
+  border: var(--rule-hair) solid var(--color-rule);
+  border-bottom: 0;
+  box-shadow: var(--shadow-card);
+}
+
+.template-card__preview:active :deep(.thumbnail) {
+  border-color: var(--color-rule-2);
 }
 
 .template-card__badge {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: var(--space-xs);
+  left: var(--space-xs);
+  z-index: var(--z-base);
+  font-family: var(--font-display);
+  font-weight: 500;
 }
 
 .template-card__body {
   display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: var(--ui-space-4);
-  padding: var(--ui-space-4);
+  gap: var(--space-sm);
+  padding: var(--space-md);
+}
+
+.template-card__meta {
+  min-width: 0;
 }
 
 .template-card__title {
   margin: 0;
-  font-size: var(--ui-font-title);
-  font-weight: 700;
-  color: var(--ui-text-main);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.25;
 }
 
 .template-card__desc {
-  margin: var(--ui-space-2) 0 0;
-  min-height: 44px;
-  color: var(--ui-text-secondary);
-  line-height: 1.6;
-  font-size: var(--ui-font-md);
+  margin: var(--space-2xs) 0 0;
+  color: var(--color-muted);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: var(--ui-line-height);
 }
 
 .template-card__keywords {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--ui-space-2);
+  gap: var(--space-2xs);
+}
+
+.template-card__keywords :deep(.el-tag) {
+  border-radius: var(--radius-input);
+  font-family: var(--font-display);
 }
 
 .template-card__actions {
   display: flex;
-  gap: var(--ui-space-3);
+  margin-top: auto;
+  padding-top: var(--space-2xs);
 }
 
-.template-card__actions :deep(.el-button) {
-  flex: 1;
+@media (max-width: 768px) {
+  .template-card {
+    display: grid;
+    grid-template-columns: 136px minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .template-card__preview {
+    padding: var(--space-sm) var(--space-sm) 0;
+    border-right: var(--rule-hair) solid var(--color-rule);
+    border-bottom: 0;
+  }
+
+  .template-card__actions :deep(.el-button) {
+    width: 100%;
+  }
 }
 </style>
