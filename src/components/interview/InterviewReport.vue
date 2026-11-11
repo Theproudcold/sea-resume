@@ -47,24 +47,26 @@ async function review() {
 </script>
 <template>
   <section v-if="session.report" class="report">
-    <span class="report-eyebrow">本轮复盘 · 基于实际回答</span>
-    <h2>{{ session.report.incomplete ? '不完整面试报告' : '面试报告' }}</h2>
-    <p v-if="session.report.incomplete">存在未回答、跳过或提前结束；结论仅针对本次已提交回答。</p>
+    <header class="report-head">
+      <h2>{{ session.report.incomplete ? '不完整面试报告' : '面试报告' }}</h2>
+      <p class="report-meta"><span>本轮复盘</span><span>基于实际回答</span></p>
+    </header>
+    <p v-if="session.report.incomplete" class="report-warning">存在未回答、跳过或提前结束；结论仅针对本次已提交回答。</p>
     <p>同模型教练不是独立事实核验，不提供评分、录用概率或文字面试不可观察的语音 / 肢体评价。</p>
-    <details open><summary>优点、表达问题与知识缺口 · 证据摘要</summary><InterviewEvidence :observations="session.report.observations" /><p v-if="!session.report.observations.length">没有足够回答证据，不作能力判断。</p></details>
+    <details open><summary><span>优点、表达问题与知识缺口</span><span class="summary-note">证据摘要</span></summary><InterviewEvidence :observations="session.report.observations" /><p v-if="!session.report.observations.length">没有足够回答证据，不作能力判断。</p></details>
     <details><summary>重点追问回顾</summary><InterviewEvidence :observations="session.report.followupReview" /></details>
     <h3>三项优先练习</h3><ol><li v-for="(priority, i) in session.report.priorities" :key="i">{{ priority }}</li></ol>
-    <details><summary>参考表达 · 只重组真实回答</summary><p>{{ session.report.referencePhrasing || '没有可重组的回答事实' }}</p></details>
-    <details><summary>知识讲解 · 非个人经历，需核实</summary><p>{{ session.report.knowledgeExplanation || '无' }}</p></details>
+    <details><summary><span>参考表达</span><span class="summary-note">只重组真实回答</span></summary><p>{{ session.report.referencePhrasing || '没有可重组的回答事实' }}</p></details>
+    <details><summary><span>知识讲解</span><span class="summary-note">非个人经历，需核实</span></summary><p>{{ session.report.knowledgeExplanation || '无' }}</p></details>
     <h3>用于补充简历</h3><p>只能选择实际回答的引用片段，逐项确认真实性和已有目标。表达 / 知识建议不能变为经历；之后仍须优化、审查、逐条采纳，默认另存版本。</p>
     <el-button :loading="loading" :disabled="!session.report.facts.length || reviewing" @click="prepare">读取最新简历，确认回补事实</el-button>
-    <p v-if="error" role="alert">{{ error }}</p>
+    <p v-if="error" role="alert" class="report-error">{{ error }}</p>
     <template v-if="latestResume && !reviewing">
       <div v-for="fact in session.report.facts" :key="fact.id" class="fact">
         <blockquote>{{ fact.text }}<small>原回答：{{ fact.answerId }}</small></blockquote>
         <template v-if="selections[fact.id]">
           <label>关联已有经历 / 项目<select v-model="selections[fact.id]!.targetId" @change="selections[fact.id]!.confirmed = false"><option value="">请选择</option><option v-for="target in targets" :key="target.id" :value="target.id">{{ target.label }}</option></select></label>
-          <label><input v-model="selections[fact.id]!.confirmed" type="checkbox" :disabled="!selections[fact.id]!.targetId" />我确认这是我的真实职责、行动或结果，与所选目标相符</label>
+          <label class="check"><input v-model="selections[fact.id]!.confirmed" type="checkbox" :disabled="!selections[fact.id]!.targetId" />我确认这是我的真实职责、行动或结果，与所选目标相符</label>
         </template>
       </div>
       <el-button type="primary" :loading="loading" @click="review">仅将已确认事实交给优化与审查</el-button>
@@ -73,5 +75,177 @@ async function review() {
   </section>
 </template>
 <style scoped>
-.report { min-width: 0; padding: var(--ui-space-6); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); }.report-eyebrow { font-size: var(--ui-font-xs); color: var(--ui-primary); font-weight: 600; } h2 { font-size: var(--ui-font-xl); margin: var(--ui-space-2) 0; font-weight: 650; } h3 { font-size: var(--ui-font-lg); margin: var(--ui-space-6) 0 var(--ui-space-3); font-weight: 600; } p, li { white-space: pre-wrap; line-height: 1.8; overflow-wrap: anywhere; font-size: var(--ui-font-sm); } .report > p { color: var(--ui-text-secondary); }.report > details { margin: var(--ui-space-3) 0; padding: var(--ui-space-3) var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); }.report > details[open] { background: var(--ui-bg-subtle); } summary { cursor: pointer; font-size: var(--ui-font-sm); font-weight: 500; line-height: 1.7; } ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); list-style: none; padding: 0; gap: var(--ui-space-3); counter-reset: priority; } ol > li { counter-increment: priority; padding: var(--ui-space-4); background: var(--ui-bg-subtle); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); }ol > li::before { content: '0' counter(priority); display: block; font-size: var(--ui-font-xs); color: var(--ui-primary); margin-bottom: var(--ui-space-2); font-weight: 600; }.fact { margin-top: var(--ui-space-4); padding: var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); } blockquote { margin: 0 0 var(--ui-space-3); padding-left: var(--ui-space-3); border-left: 2px solid var(--ui-primary); white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--ui-font-md); } small { display: block; color: var(--ui-text-muted); font-size: var(--ui-font-xs); margin-top: var(--ui-space-2); } label { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); align-items: center; margin: var(--ui-space-3) 0; font-size: var(--ui-font-sm); color: var(--ui-text-secondary); } select { max-width: 100%; min-height: var(--ui-control-height); padding: var(--ui-space-2) var(--ui-space-3); background: var(--ui-bg-surface); color: var(--ui-text-main); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); } .report > :deep(.el-button) { margin-top: var(--ui-space-3); max-width: 100%; white-space: normal; min-height: var(--ui-control-height); height: auto; }.report > .optimization-panel { margin-top: var(--ui-space-6); padding-top: var(--ui-space-6); border-top: 1px solid var(--ui-border); } @media(max-width: 768px) { .report { padding: var(--ui-space-4); } ol { grid-template-columns: minmax(0, 1fr); }.report > :deep(.el-button) { width: 100%; } }
+/* The report: flat on the paper under a 2px ink rule; disclosures on hairlines, priorities as numbered plates. */
+.report {
+  min-width: 0;
+  padding-top: var(--space-md);
+  border-top: var(--rule-bar) solid var(--color-rule);
+}
+
+.report-head { display: grid; gap: var(--space-2xs); min-width: 0; margin-bottom: var(--space-sm); }
+
+h2 {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.15;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+.report-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-md);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+h3 {
+  margin: var(--space-lg) 0 var(--space-sm);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+p, li {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.report > p { color: var(--color-ink-2); }
+
+.report > .report-warning {
+  padding: var(--space-xs) var(--space-md);
+  border: var(--rule-hair) solid color-mix(in oklab, var(--color-warning) 40%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-warning-wash);
+  color: var(--color-ink);
+  font-weight: 500;
+}
+
+.report > .report-error { color: var(--color-error); font-weight: 500; }
+
+.report > details {
+  margin: 0;
+  padding: var(--space-sm) 0;
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+}
+
+.report > p + details { margin-top: var(--space-md); border-top: var(--rule-hair) solid var(--color-rule); }
+
+summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-sm);
+  color: var(--color-ink);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.6;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+
+.summary-note { color: var(--color-muted); font-weight: 500; }
+summary:active { color: var(--color-accent); }
+
+@media (hover: hover) {
+  summary:hover { text-decoration: underline; }
+}
+
+ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: priority;
+}
+
+ol > li {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-md);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  counter-increment: priority;
+}
+
+ol > li::before {
+  content: '0' counter(priority);
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--color-ink);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.fact {
+  margin-top: var(--space-md);
+  padding: var(--space-md) 0;
+  border-top: var(--rule-hair) solid var(--color-rule);
+}
+
+blockquote {
+  margin: 0 0 var(--space-sm);
+  padding-left: var(--space-sm);
+  border-left: var(--rule-bar) solid var(--color-rule);
+  font-size: var(--text-md);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+small { display: block; margin-top: var(--space-xs); color: var(--color-muted); font-size: var(--text-xs); font-weight: 500; }
+
+label {
+  display: grid;
+  gap: var(--space-2xs);
+  margin: var(--space-sm) 0;
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+label.check { display: flex; align-items: flex-start; gap: var(--space-xs); color: var(--color-ink); }
+label.check input { margin-top: var(--space-2xs); accent-color: var(--color-accent); }
+label.check input:disabled { opacity: 0.55; cursor: not-allowed; }
+
+select {
+  max-width: 100%;
+  min-height: var(--control-height);
+  padding: var(--space-2xs) var(--space-sm);
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--radius-input);
+  background: var(--color-paper-3);
+  color: var(--color-ink);
+  font: inherit;
+  font-weight: 400;
+  transition: box-shadow var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
+}
+
+select:focus-visible { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-wash); }
+
+@media (hover: hover) {
+  select:hover { border-color: var(--color-ink-2); }
+}
+
+.report > :deep(.el-button) { max-width: 100%; height: auto; min-height: var(--control-height); margin-top: var(--space-sm); white-space: normal; }
+.report > .optimization-panel { margin-top: var(--space-lg); padding-top: var(--space-lg); border-top: var(--rule-bar) solid var(--color-rule); }
+
+@media (max-width: 768px) {
+  h2 { font-size: var(--text-xl); }
+  ol { grid-template-columns: minmax(0, 1fr); }
+  ol > li + li { margin-top: 0; margin-left: 0; }
+  .report > :deep(.el-button) { width: 100%; }
+}
 </style>

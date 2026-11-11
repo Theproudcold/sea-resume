@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessageBox } from 'element-plus';
-import { ArrowRight, ChatDotRound, Document, FolderOpened, Lock, Plus } from '@element-plus/icons-vue';
+import { ArrowRight, FolderOpened, Lock, Plus } from '@element-plus/icons-vue';
 import AppHeader from '@/components/common/AppHeader.vue';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { useStorageStore } from '@/stores/storage';
@@ -123,10 +123,8 @@ onMounted(load);
 
       <section class="start-panel" aria-labelledby="start-title">
         <div class="start-intro">
-          <span class="eyebrow"><ChatDotRound aria-hidden="true" /> 文字模拟面试</span>
-          <h2 id="start-title">让每一次练习，都有迹可循</h2>
-          <p>从你的简历出发，练习表达、复盘回答。<br class="desktop-break" />在这里继续上次面试，或回看已保存的报告。</p>
-          <span class="quiet-note"><Lock aria-hidden="true" /> 由你确认发送范围，不会自动请求 AI</span>
+          <h2 id="start-title">文字模拟面试</h2>
+          <p>从你的简历出发，练习表达、复盘回答。在这里继续上次面试，或回看已保存的报告。</p>
         </div>
         <div class="start-form">
           <template v-if="!initialized">
@@ -147,15 +145,15 @@ onMounted(load);
             <el-button type="primary" :icon="Plus" :disabled="locked" @click="router.push('/templates')">创建第一份简历</el-button>
           </template>
         </div>
+        <p class="quiet-note"><Lock aria-hidden="true" /> 由你确认发送范围，不会自动请求 AI</p>
       </section>
 
       <article v-if="memorySession" class="memory-card" aria-labelledby="memory-title">
-        <div class="memory-icon"><ChatDotRound aria-hidden="true" /></div>
         <div class="memory-copy">
-          <div class="record-title"><h2 id="memory-title">{{ memorySession.settings.targetRole || '通用面试' }}</h2><span class="status status--warning">仅本次会话</span></div>
-          <p>当前内存会话（尚未保存） · 刷新或关闭页面后可能丢失，请及时导出。</p>
+          <div class="record-title"><h2 id="memory-title">{{ memorySession.settings.targetRole || '通用面试' }}</h2><span class="status status--memory">仅本次会话</span></div>
+          <p><span>当前内存会话（尚未保存）</span><span>刷新或关闭页面后可能丢失，请及时导出。</span></p>
         </div>
-        <el-button type="primary" plain :disabled="locked" @click="router.push(`/interview/${memorySession.id}`)">回到会话 / 导出</el-button>
+        <el-button :disabled="locked" @click="router.push(`/interview/${memorySession.id}`)">回到会话 / 导出</el-button>
       </article>
       <div v-if="memoryOptimization" class="notice notice--warning" role="status">当前还有一条未保存到列表的简历优化会话。清空全部 AI 记录也会关闭它。</div>
 
@@ -168,30 +166,28 @@ onMounted(load);
         <p v-if="busy" class="reading-state" role="status">正在读取 / 操作本机记录…</p>
         <div v-if="category === 'interview'" class="record-list">
           <div v-if="initialized && !busy && !records.length" class="empty-state">
-            <span class="empty-icon"><ChatDotRound aria-hidden="true" /></span>
             <h3>还没有已保存的面试</h3>
-            <p>从上方开始一次练习，并选择“保存到本机”。<br />未保存的面试只在当前会话中保留。</p>
-            <span class="empty-caption">练习 → 保存 → 随时复盘</span>
+            <p>从上方开始一次练习，并选择“保存到本机”。未保存的面试只在当前会话中保留。</p>
           </div>
           <article v-for="record in records" :key="record.id" class="record-card">
             <div class="record-heading">
               <div class="record-title"><h3>{{ record.settings.targetRole || '通用面试' }}</h3><span class="status" :class="{ 'status--success': record.report && !record.report.incomplete, 'status--warning': record.report?.incomplete || record.status === 'failed' }">{{ statusLabel(record) }}</span></div>
-              <span class="mode-label">{{ record.settings.mode === 'real' ? '真实模拟' : '训练模式' }} · {{ record.settings.direction }}</span>
+              <span class="mode-label"><span>{{ record.settings.mode === 'real' ? '真实模拟' : '训练模式' }}</span><span>{{ record.settings.direction }}</span></span>
             </div>
             <p class="record-source">{{ resumeTitle(record.sourceResumeId) }}</p>
-            <div class="record-meta"><time :datetime="record.updatedAt">更新于 {{ formatTime(record.updatedAt) }}</time><span>主问题 {{ record.turns[record.turns.length - 1]?.mainNumber ?? 0 }} / {{ record.settings.mainQuestionLimit }}</span></div>
+            <div class="record-meta"><span class="record-progress">主问题 <strong>{{ record.turns[record.turns.length - 1]?.mainNumber ?? 0 }}</strong> / {{ record.settings.mainQuestionLimit }}</span><time :datetime="record.updatedAt">更新于 {{ formatTime(record.updatedAt) }}</time></div>
             <div class="record-footer">
-              <div class="actions"><el-button type="primary" :disabled="locked" @click="router.push(`/interview/${record.id}`)">{{ record.report ? '查看报告' : '继续面试' }}</el-button><span v-if="!record.report" class="action-hint">恢复后不会自动请求</span></div>
-              <div class="actions secondary-actions"><span class="export-label">导出</span><el-button size="small" :disabled="locked" :aria-label="`导出 ${record.settings.targetRole || '通用面试'} 为 JSON`" @click="exportRecord(record, 'json')">JSON</el-button><el-button size="small" :disabled="locked" :aria-label="`导出 ${record.settings.targetRole || '通用面试'} 为 Markdown`" @click="exportRecord(record, 'markdown')">Markdown</el-button><el-button type="danger" text size="small" :disabled="locked" :aria-label="`删除面试记录：${record.settings.targetRole || '通用面试'}`" @click="remove('interview', record.id)">删除</el-button></div>
+              <div class="actions"><el-button :disabled="locked" @click="router.push(`/interview/${record.id}`)">{{ record.report ? '查看报告' : '继续面试' }}</el-button><span v-if="!record.report" class="action-hint">恢复后不会自动请求</span></div>
+              <div class="actions secondary-actions"><span class="export-label">导出</span><el-button text size="small" :disabled="locked" :aria-label="`导出 ${record.settings.targetRole || '通用面试'} 为 JSON`" @click="exportRecord(record, 'json')">JSON</el-button><el-button text size="small" :disabled="locked" :aria-label="`导出 ${record.settings.targetRole || '通用面试'} 为 Markdown`" @click="exportRecord(record, 'markdown')">Markdown</el-button><el-button type="danger" text size="small" :disabled="locked" :aria-label="`删除面试记录：${record.settings.targetRole || '通用面试'}`" @click="remove('interview', record.id)">删除</el-button></div>
             </div>
           </article>
         </div>
         <div v-else class="record-list">
           <div v-if="initialized && !busy && !optimizationRecords.length" class="empty-state">
-            <span class="empty-icon"><Document aria-hidden="true" /></span><h3>还没有已保存的简历优化</h3><p>在简历编辑器中使用 AI 优化，并选择保存到本机后，<br />可在这里管理对应记录。</p><el-button plain :disabled="locked" @click="router.push('/')">返回工作台</el-button>
+            <h3>还没有已保存的简历优化</h3><p>在简历编辑器中使用 AI 优化，并选择保存到本机后，可在这里管理对应记录。</p><el-button :disabled="locked" @click="router.push('/')">返回工作台</el-button>
           </div>
           <article v-for="record in optimizationRecords" :key="record.id" class="record-card optimization-card">
-            <div class="optimization-copy"><div class="record-title"><h3>{{ resumeTitle(record.sourceResumeId) }}</h3><span class="status">{{ stageLabels[record.stage || ''] || '已保存' }}</span></div><p class="record-meta">简历优化 · 更新于 {{ formatTime(record.updatedAt) }}</p><p class="record-id">记录编号 {{ record.id }}</p></div>
+            <div class="optimization-copy"><div class="record-title"><h3>{{ resumeTitle(record.sourceResumeId) }}</h3><span class="status">{{ stageLabels[record.stage || ''] || '已保存' }}</span></div><p class="record-meta"><span>简历优化</span><time :datetime="record.updatedAt">更新于 {{ formatTime(record.updatedAt) }}</time></p><p class="record-id">记录编号 {{ record.id }}</p></div>
             <el-button type="danger" text :disabled="locked" :aria-label="`删除优化记录：${record.id}`" @click="remove('optimization', record.id)">删除优化记录</el-button>
           </article>
         </div>
@@ -210,111 +206,461 @@ onMounted(load);
 </template>
 
 <style scoped>
-.history-page { min-height: 100vh; background: var(--ui-bg-page); color: var(--ui-text-main); font-size: var(--ui-font-md); line-height: var(--ui-line-height); }
-.history-main { width: 100%; max-width: var(--ui-content-max-width); margin: 0 auto; padding: var(--ui-space-8) var(--ui-page-gutter); display: grid; gap: var(--ui-space-6); }
+.history-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  line-height: 1.55;
+}
+
+.history-main {
+  display: grid;
+  gap: var(--space-lg);
+  width: 100%;
+  max-width: var(--ui-content-max-width);
+  margin: 0 auto;
+  padding: var(--space-xl) var(--ui-page-gutter) var(--space-2xl);
+}
+
 h2, h3, p { margin: 0; }
-h2 { font-size: var(--ui-font-lg); font-weight: 650; }
-h3 { font-size: var(--ui-font-md); font-weight: 650; }
-svg { width: 20px; height: 20px; flex: 0 0 auto; }
-p, h2, h3, time, .record-id { overflow-wrap: anywhere; }
-.start-panel { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--ui-space-8); align-items: center; padding: var(--ui-space-8); border: 1px solid color-mix(in srgb, var(--ui-primary) 18%, var(--ui-border)); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); box-shadow: var(--ui-shadow-sm); }
-.eyebrow { display: flex; align-items: center; gap: var(--ui-space-2); color: var(--ui-primary); font-weight: 600; font-size: var(--ui-font-sm); margin-bottom: var(--ui-space-3); }
-.start-intro h2 { font-size: var(--ui-font-xl); letter-spacing: -.02em; margin-bottom: var(--ui-space-3); }
-.start-intro > p { color: var(--ui-text-secondary); line-height: 1.8; }
-.quiet-note { display: flex; align-items: center; gap: var(--ui-space-1); margin-top: var(--ui-space-6); color: var(--ui-text-muted); font-size: var(--ui-font-xs); }
-.quiet-note svg { width: 14px; height: 14px; }
-.start-form { min-width: 0; padding: var(--ui-space-6); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-primary) 5%, var(--ui-bg-surface)); display: grid; gap: var(--ui-space-3); }
-.start-form label { font-weight: 600; }
-.start-form > p { color: var(--ui-text-secondary); font-size: var(--ui-font-sm); }
+h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing: var(--tracking-display); }
+h2 { font-size: var(--text-xl); line-height: 1.25; text-wrap: balance; }
+h3 { font-size: var(--text-md); line-height: 1.35; }
+svg { flex: 0 0 auto; width: 16px; height: 16px; }
+p, h2, h3, time, .record-id { min-width: 0; overflow-wrap: break-word; }
+
+/* Start: one card, the resume picker beside the one cobalt action. */
+.start-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  align-items: start;
+  gap: var(--space-md) var(--space-xl);
+  padding: var(--space-lg);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card);
+}
+
+.start-intro {
+  display: grid;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.start-intro h2 { font-size: var(--text-2xl); }
+
+.start-intro > p {
+  max-width: 48ch;
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+}
+
+.start-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  min-width: 0;
+}
+
+.start-form > :is(label, h3, p) {
+  grid-column: 1 / -1;
+}
+
+.start-form > .el-button:not(.start-button) {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.start-form label {
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.start-form > p {
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+}
+
+.start-form .start-button { grid-column: 2; }
+
 .resume-select { width: 100%; min-width: 0; }
-.resume-select :deep(.el-select__wrapper) { min-height: var(--ui-control-height); }
-.start-button { width: 100%; min-height: var(--ui-control-height); }
-.start-button .el-icon { margin-left: var(--ui-space-2); }
-.start-form .form-hint { text-align: center; font-size: var(--ui-font-xs); color: var(--ui-text-muted); }
-.records-panel { min-width: 0; background: var(--ui-bg-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); }
-.section-heading { display: flex; justify-content: space-between; align-items: center; gap: var(--ui-space-4); padding: var(--ui-space-6) var(--ui-space-6) var(--ui-space-4); }
-.section-heading p { color: var(--ui-text-muted); font-size: var(--ui-font-sm); margin-top: var(--ui-space-1); }
-.local-label { display: flex; align-items: center; gap: var(--ui-space-1); font-size: var(--ui-font-xs); color: var(--ui-text-muted); white-space: nowrap; }
-.local-label svg { width: 16px; height: 16px; }
-.category-bar { display: flex; gap: var(--ui-space-2); padding: 0 var(--ui-space-6) var(--ui-space-4); border-bottom: 1px solid var(--ui-border); }
-.category-bar button { display: flex; align-items: center; justify-content: center; gap: var(--ui-space-2); min-height: var(--ui-control-height); padding: var(--ui-space-2) var(--ui-space-4); border: 1px solid transparent; border-radius: var(--ui-radius-md); background: var(--ui-bg-subtle); color: var(--ui-text-secondary); cursor: pointer; font: inherit; font-weight: 500; }
-.category-bar button:hover { background: var(--ui-bg-hover); }
-.category-bar button:active { border-color: var(--ui-primary); }
-.category-bar button.selected { background: color-mix(in srgb, var(--ui-primary) 8%, var(--ui-bg-surface)); color: var(--ui-primary); border-color: color-mix(in srgb, var(--ui-primary) 22%, var(--ui-border)); }
-.category-bar button span { min-width: 20px; padding: 0 var(--ui-space-1); border-radius: var(--ui-radius-sm); background: var(--ui-bg-surface); font-size: var(--ui-font-xs); font-variant-numeric: tabular-nums; }
-.record-list { padding: 0 var(--ui-space-6); }
-.record-card { min-width: 0; padding: var(--ui-space-6) 0; }
-.record-card + .record-card { border-top: 1px solid var(--ui-border); }
-.record-heading, .record-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--ui-space-3); }
-.record-title { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); }
-.record-title h3 { font-size: var(--ui-font-lg); }
-.status { display: inline-flex; border-radius: var(--ui-radius-sm); padding: var(--ui-space-1) var(--ui-space-2); background: color-mix(in srgb, var(--ui-primary) 7%, var(--ui-bg-surface)); color: var(--ui-primary); font-size: var(--ui-font-xs); font-weight: 500; }
-.status--success { color: var(--ui-success); background: color-mix(in srgb, var(--ui-success) 8%, var(--ui-bg-surface)); }
-.status--warning { color: var(--ui-warning); background: color-mix(in srgb, var(--ui-warning) 8%, var(--ui-bg-surface)); }
-.mode-label, .record-source, .record-meta, .action-hint, .export-label, .record-id { font-size: var(--ui-font-sm); color: var(--ui-text-muted); }
-.record-source { margin-top: var(--ui-space-2); color: var(--ui-text-secondary); }
-.record-meta { display: flex; flex-wrap: wrap; gap: var(--ui-space-2) var(--ui-space-6); margin-top: var(--ui-space-2); font-variant-numeric: tabular-nums; }
-.record-footer { margin-top: var(--ui-space-4); }
-.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); }
-.actions :deep(.el-button), .history-main :deep(.el-button + .el-button) { margin-left: 0; }
-.secondary-actions { gap: var(--ui-space-2); }
-.empty-state { display: flex; align-items: center; flex-direction: column; gap: var(--ui-space-2); padding: var(--ui-space-8) var(--ui-space-4); text-align: center; }
-.empty-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: var(--ui-radius-lg); color: var(--ui-primary); background: color-mix(in srgb, var(--ui-primary) 6%, var(--ui-bg-surface)); margin-bottom: var(--ui-space-1); }
-.empty-icon svg { width: 24px; height: 24px; }
-.empty-state p { color: var(--ui-text-muted); font-size: var(--ui-font-sm); line-height: 1.8; }
-.empty-caption { font-size: var(--ui-font-xs); color: var(--ui-text-muted); margin-top: var(--ui-space-2); }
-.memory-card { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-4); padding: var(--ui-space-6); border-radius: var(--ui-radius-lg); border: 1px solid color-mix(in srgb, var(--ui-warning) 32%, var(--ui-border)); background: var(--ui-bg-surface); }
-.memory-icon { display: grid; place-items: center; color: var(--ui-warning); }
+.resume-select :deep(.el-select__wrapper) { min-height: var(--control-height); }
+.start-button { min-height: var(--control-height); }
+.start-button .el-icon { margin-left: var(--space-xs); }
+
+.start-form .form-hint {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+.quiet-note {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: var(--space-2xs);
+  padding-top: var(--space-sm);
+  border-top: var(--rule-hair) solid var(--color-rule);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+.quiet-note svg { width: 14px; height: 14px; }
+
+/* Unsaved in-memory session: a reminder on the warning wash. */
+.memory-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border: var(--rule-hair) solid color-mix(in oklab, var(--color-warning) 40%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-warning-wash);
+  color: var(--color-ink);
+}
+
 .memory-copy { flex: 1 1 320px; min-width: 0; }
-.memory-copy p { font-size: var(--ui-font-sm); color: var(--ui-text-secondary); margin-top: var(--ui-space-2); }
-.optimization-card { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--ui-space-4); }
+.memory-copy h2 { font-size: var(--text-lg); }
+
+.memory-copy p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-md);
+  margin-top: var(--space-2xs);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+}
+
+/* Records: a card whose rows split on hairlines. */
+.records-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card);
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-lg) var(--space-lg) var(--space-md);
+}
+
+.section-heading p {
+  margin-top: var(--space-2xs);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+.local-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xs);
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Record type: keys on a sunken tray, the chosen one raised. */
+.category-bar {
+  display: inline-flex;
+  gap: var(--space-3xs);
+  margin: 0 var(--space-lg) var(--space-md);
+  padding: var(--space-3xs);
+  border-radius: var(--radius-input);
+  background: var(--color-sunken);
+}
+
+.category-bar button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  min-height: var(--control-height-s);
+  padding: var(--space-2xs) var(--space-sm);
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-ink-2);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out);
+}
+
+.category-bar button span {
+  min-width: 20px;
+  padding: 0 var(--space-2xs);
+  border-radius: var(--radius-s);
+  background: var(--color-paper-2);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.category-bar button.selected {
+  background: var(--color-paper-3);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-key);
+}
+
+.category-bar button.selected span {
+  background: var(--color-accent-wash);
+  color: var(--color-accent);
+}
+
+.category-bar button:active {
+  box-shadow: var(--shadow-key-press);
+  transform: translateY(1px);
+}
+
+@media (hover: hover) {
+  .category-bar button:not(.selected):hover { color: var(--color-ink); background: var(--color-paper-2); }
+}
+
+.record-list {
+  min-width: 0;
+  border-top: var(--rule-hair) solid var(--color-rule);
+}
+
+.record-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 13rem);
+  align-items: start;
+  gap: var(--space-xs) var(--space-lg);
+  min-width: 0;
+  padding: var(--space-md) var(--space-lg);
+}
+
+.record-card + .record-card { border-top: var(--rule-hair) solid var(--color-rule); }
+
+.record-heading { display: grid; gap: var(--space-2xs); min-width: 0; }
+
+.record-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+.record-title h3 { font-size: var(--text-lg); }
+
+.status {
+  display: inline-flex;
+  padding: 0 var(--space-xs);
+  border-radius: var(--radius-input);
+  background: var(--color-paper-2);
+  color: var(--color-ink-2);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.status--success { background: var(--color-success-wash); color: var(--color-success); }
+.status--warning, .status--memory { background: var(--color-warning-wash); color: var(--color-warning); }
+.memory-card .status--memory { background: var(--color-paper-3); }
+
+.mode-label, .record-source, .record-meta, .action-hint, .export-label, .record-id {
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+}
+
+.mode-label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-md);
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-weight: 500;
+}
+
+.record-source { padding-top: var(--space-2xs); }
+
+.record-meta {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-2xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.record-meta time { color: var(--color-muted); font-size: var(--text-xs); }
+
+.record-progress { font-family: var(--font-display); font-weight: 500; }
+.record-progress strong { color: var(--color-ink); font-size: var(--text-lg); font-weight: 600; }
+
+.record-footer {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding-top: var(--space-xs);
+}
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+.actions :deep(.el-button), .history-main :deep(.el-button + .el-button) { margin-left: 0; }
+.action-hint, .export-label { color: var(--color-muted); font-size: var(--text-xs); }
+.export-label { font-family: var(--font-display); font-weight: 500; }
+
+.optimization-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
 .optimization-copy { flex: 1 1 280px; min-width: 0; }
-.record-id { margin-top: var(--ui-space-1); font-size: var(--ui-font-xs); }
-.reading-state { padding: var(--ui-space-4) var(--ui-space-6); color: var(--ui-text-muted); }
-.privacy-details { border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-bg-surface); font-size: var(--ui-font-sm); }
-.privacy-details summary { display: flex; align-items: center; gap: var(--ui-space-2); cursor: pointer; padding: var(--ui-space-4); color: var(--ui-text-secondary); border-radius: var(--ui-radius-md); }
-.privacy-details summary:hover { background: var(--ui-bg-subtle); }
-.privacy-details summary:focus-visible { outline: 2px solid var(--ui-primary); outline-offset: 2px; }
-.privacy-details summary svg { width: 16px; height: 16px; }
-.details-hint { margin-left: auto; color: var(--ui-text-muted); font-size: var(--ui-font-xs); }
+
+.optimization-card .record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-md);
+  margin-top: var(--space-2xs);
+}
+
+.record-id {
+  margin-top: var(--space-2xs);
+  color: var(--color-muted);
+  font-family: var(--font-outlier);
+  font-size: var(--text-xs);
+}
+
+/* Empty: what is empty and why, then the action that fills it. */
+.empty-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-md);
+  padding: var(--space-xl) var(--space-lg);
+}
+
+.empty-state p { flex: 1 1 320px; color: var(--color-ink-2); font-size: var(--text-sm); }
+
+.reading-state {
+  padding: var(--space-md) var(--space-lg);
+  border-top: var(--rule-hair) solid var(--color-rule);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+/* Privacy: a quiet disclosure row. */
+.privacy-details {
+  border-top: var(--rule-hair) solid var(--color-rule);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  font-size: var(--text-sm);
+}
+
+.privacy-details summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 44px;
+  padding: var(--space-xs) var(--space-2xs);
+  border-radius: var(--radius-input);
+  color: var(--color-ink-2);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: 500;
+  list-style: none;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+
+.privacy-details summary::-webkit-details-marker { display: none; }
+.privacy-details summary:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+.privacy-details summary:active { background: var(--color-accent-wash); color: var(--color-accent); }
+
+@media (hover: hover) {
+  .privacy-details summary:hover { background: var(--color-paper-2); color: var(--color-ink); }
+}
+
+.details-hint { margin-left: auto; color: var(--color-muted); font-size: var(--text-xs); }
 .details-hint::after { content: ' ＋'; }
 .privacy-details[open] .details-hint::after { content: ' −'; }
-.privacy-details ul { margin: 0; padding: 0 var(--ui-space-8) var(--ui-space-4); list-style: disc; color: var(--ui-text-secondary); }
-.privacy-details li + li { margin-top: var(--ui-space-2); }
-.data-management { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--ui-space-4); }
+
+.privacy-details ul {
+  margin: 0;
+  padding: 0 0 var(--space-md) var(--space-lg);
+  color: var(--color-ink-2);
+  list-style: disc;
+}
+
+.privacy-details li + li { margin-top: var(--space-xs); }
+
+.data-management { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-md); }
 .data-management > div { flex: 1 1 560px; min-width: 0; }
 .data-management .ui-danger-zone__description { margin-bottom: 0; }
-.nothing-to-clear { margin-top: var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-font-xs); }
-.notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--ui-space-3); padding: var(--ui-space-3) var(--ui-space-4); border-radius: var(--ui-radius-md); background: var(--ui-bg-surface); border: 1px solid var(--ui-border); }
-.notice--error { color: var(--ui-danger); }
-.notice--warning { color: var(--ui-text-secondary); border-color: color-mix(in srgb, var(--ui-warning) 35%, var(--ui-border)); }
-.notice--success { color: var(--ui-success); }
+.nothing-to-clear { margin-top: var(--space-xs); color: var(--color-muted); font-size: var(--text-xs); }
+
+/* Notices: each on its own wash with a 40% edge. */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+}
+
+.notice--error { border-color: color-mix(in oklab, var(--color-error) 40%, transparent); background: var(--color-error-wash); color: var(--color-error); }
+.notice--warning { border-color: color-mix(in oklab, var(--color-warning) 40%, transparent); background: var(--color-warning-wash); }
+.notice--success { border-color: color-mix(in oklab, var(--color-success) 40%, transparent); background: var(--color-success-wash); color: var(--color-success); }
+
 @media (max-width: 768px) {
-  .history-main { padding-top: var(--ui-space-4); gap: var(--ui-space-4); }
-  .start-panel { grid-template-columns: minmax(0, 1fr); gap: var(--ui-space-6); padding: var(--ui-space-6); }
-  .start-intro h2 { font-size: var(--ui-font-title); }
-  .quiet-note { margin-top: var(--ui-space-4); }
-  .start-form { padding: var(--ui-space-4); }
-  .desktop-break { display: none; }
-  .section-heading { padding: var(--ui-space-4); }
+  .history-main { gap: var(--space-md); padding-top: var(--space-lg); }
+  .start-panel { grid-template-columns: minmax(0, 1fr); padding: var(--space-md); }
+  .start-intro h2 { font-size: var(--text-xl); }
+  .start-form { grid-template-columns: minmax(0, 1fr); }
+  .start-form .start-button { grid-column: 1; justify-self: stretch; }
+  .section-heading { padding: var(--space-md); }
   .local-label { display: none; }
-  .category-bar { padding: 0 var(--ui-space-4) var(--ui-space-4); }
-  .category-bar button { flex: 1 1 0; padding-inline: var(--ui-space-2); }
-  .record-list { padding: 0 var(--ui-space-4); }
-  .record-card { padding-block: var(--ui-space-4); }
-  .record-heading { align-items: flex-start; flex-direction: column; gap: var(--ui-space-2); }
-  .record-footer { align-items: flex-start; flex-direction: column; gap: var(--ui-space-4); }
-  .empty-state { padding: var(--ui-space-6) 0; }
-  .memory-card { padding: var(--ui-space-4); }
-  .memory-icon { display: none; }
-  .memory-copy { flex-basis: 100%; }
+  .category-bar { display: flex; margin-inline: var(--space-md); }
+  .category-bar button { flex: 1 1 0; }
+  .record-card { grid-template-columns: minmax(0, 1fr); padding-inline: var(--space-md); }
+  .record-meta { justify-items: start; }
+  .record-footer { align-items: flex-start; flex-direction: column; }
+  .empty-state { padding: var(--space-lg) var(--space-md); }
+  .memory-card { padding: var(--space-md); }
 }
 </style>
 
 <style>
-.interview-history-confirm.el-message-box { width: var(--ui-dialog-width-sm); max-width: calc(100vw - 32px); border-radius: var(--ui-radius-lg); padding: var(--ui-space-6); box-shadow: var(--ui-shadow-md); }
-.interview-history-confirm .el-message-box__title { font-size: var(--ui-font-lg); color: var(--ui-text-main); }
-.interview-history-confirm .el-message-box__message { overflow-wrap: anywhere; line-height: 1.8; color: var(--ui-text-secondary); }
-.interview-history-confirm .el-message-box__btns { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); padding-top: var(--ui-space-6); }
-.interview-history-confirm .el-message-box__btns .el-button { margin: 0; min-height: var(--ui-control-height); }
+.interview-history-confirm.el-message-box {
+  width: var(--ui-dialog-width-sm);
+  max-width: calc(100vw - 32px);
+  padding: var(--space-lg);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-float);
+}
+
+.interview-history-confirm .el-message-box__title { color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; }
+.interview-history-confirm .el-message-box__message { color: var(--color-ink-2); font-family: var(--font-body); line-height: 1.7; overflow-wrap: break-word; }
+.interview-history-confirm .el-message-box__btns { display: flex; flex-wrap: wrap; gap: var(--space-xs); padding-top: var(--space-lg); }
+.interview-history-confirm .el-message-box__btns .el-button { min-height: var(--control-height); margin: 0; }
 </style>

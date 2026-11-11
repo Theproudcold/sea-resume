@@ -11,7 +11,63 @@ const labels = { strength: '优点', expression: '表达问题', knowledge: '知
   </article>
 </template>
 <style scoped>
-.observation { padding: var(--ui-space-4); background: var(--ui-bg-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); margin-top: var(--ui-space-3); }
-.observation-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-2); font-size: var(--ui-font-xs); }.observation-heading strong { color: var(--ui-primary); font-weight: 600; }.observation[data-category=strength] strong { color: var(--ui-success); }.observation[data-category=knowledge] strong { color: var(--ui-warning); }.observation-heading > span { color: var(--ui-text-muted); }
-p { white-space: pre-wrap; overflow-wrap: anywhere; margin: var(--ui-space-2) 0; font-size: var(--ui-font-sm); line-height: 1.8; } summary { cursor: pointer; font-size: var(--ui-font-xs); color: var(--ui-text-secondary); } blockquote { margin: var(--ui-space-3) 0 0; border-left: 2px solid var(--ui-border); padding-left: var(--ui-space-3); } small { color: var(--ui-text-muted); overflow-wrap: anywhere; font-size: var(--ui-font-xs); }
+/* Evidence as hairline rows: the category as a small square label, the note, its sources on demand. */
+.observation {
+  min-width: 0;
+  padding: var(--space-sm) 0;
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+}
+
+.observation:first-child { border-top: var(--rule-hair) solid var(--color-rule); }
+
+.observation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.observation-heading strong {
+  padding: 0 var(--space-2xs);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-s);
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.observation[data-category=strength] strong { border-color: var(--color-success); color: var(--color-success); }
+.observation[data-category=knowledge] strong { border-color: var(--color-warning); background: var(--color-warning-wash); color: var(--color-ink); }
+.observation-heading > span { color: var(--color-muted); }
+
+p {
+  margin: var(--space-xs) 0;
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+summary {
+  color: var(--color-ink-2);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+
+summary:active { color: var(--color-accent); }
+
+@media (hover: hover) {
+  summary:hover { color: var(--color-ink); text-decoration: underline; }
+}
+
+blockquote {
+  margin: var(--space-xs) 0 0;
+  padding-left: var(--space-sm);
+  border-left: var(--rule-bar) solid var(--color-rule);
+}
+
+small { color: var(--color-muted); font-size: var(--text-xs); font-weight: 500; overflow-wrap: break-word; }
 </style>

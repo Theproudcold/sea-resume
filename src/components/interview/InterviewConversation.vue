@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
-import { ArrowDown, ChatDotRound, EditPen, Right } from '@element-plus/icons-vue';
+import { ArrowDown, Right } from '@element-plus/icons-vue';
 import type { InterviewSession } from '@/types/interview';
 import InterviewEvidence from './InterviewEvidence.vue';
 const props = defineProps<{ session: InterviewSession; busy: boolean; consented: boolean }>();
@@ -40,25 +40,24 @@ function continueInterview() {
 <template>
   <section ref="conversation" aria-label="面试对话" class="conversation" :aria-busy="busy">
     <header class="conversation-heading">
-      <div><span class="eyebrow">INTERVIEW ROOM</span><h2>一次一题，把经历讲清楚</h2></div>
+      <h2>一次一题，把经历讲清楚</h2>
       <el-button v-if="session.turns.length > 1 && session.status !== 'completed'" text :icon="ArrowDown" @click="locateCurrent(true)">定位当前题</el-button>
     </header>
     <div class="turn-list">
       <article v-for="turn in session.turns" :key="turn.id" class="turn" :data-current="turn.id === current?.id">
         <div class="message interviewer">
-          <span class="avatar" aria-hidden="true"><el-icon><ChatDotRound /></el-icon></span>
+          <div class="message-meta"><strong>面试官</strong><span>第 {{ turn.mainNumber }} 题</span><span v-if="turn.followup" class="question-kind">追问 1/1</span><span v-else class="question-kind">主问题</span></div>
           <div class="message-body">
-            <div class="message-meta"><strong>面试官</strong><span>第 {{ turn.mainNumber }} 题</span><span v-if="turn.followup" class="question-kind">追问 1/1</span><span v-else class="question-kind">主问题</span></div>
             <p class="question-text" tabindex="-1">{{ turn.question.text }}</p>
             <details class="question-context"><summary>考察点与问题背景</summary><p>{{ turn.question.focus }}</p><p v-if="turn.question.kind === 'knowledge'">知识假设，不代表你的个人经历。</p></details>
           </div>
         </div>
         <div v-if="turn.submittedAt" class="message candidate">
-          <div class="message-body"><div class="message-meta"><strong>你的原回答</strong><span v-if="turn.skipped">已跳过</span><span v-else>原文保留</span></div><p>{{ turn.skipped ? '已跳过（未生成回答）' : turn.answer }}</p></div>
-          <span class="avatar" aria-hidden="true"><el-icon><EditPen /></el-icon></span>
+          <div class="message-meta"><strong>你的原回答</strong><span v-if="turn.skipped">已跳过</span><span v-else>原文保留</span></div>
+          <div class="message-body"><p>{{ turn.skipped ? '已跳过（未生成回答）' : turn.answer }}</p></div>
         </div>
         <details v-if="session.settings.mode === 'training' && turn.feedback" class="feedback" :open="turn.id === current?.id && session.status === 'reviewing'">
-          <summary>训练点评 · 基于证据的摘要（非内部推理）</summary>
+          <summary><span>训练点评</span><span class="summary-note">基于证据的摘要（非内部推理）</span></summary>
           <div class="feedback-body">
             <InterviewEvidence :observations="turn.feedback.observations" />
             <div class="feedback-tip"><h3>答题组织提示</h3><p>{{ turn.feedback.organizationHint || '先说清自己的职责，再说明行动与验证方式。' }}</p></div>
@@ -72,10 +71,10 @@ function continueInterview() {
     <form v-if="session.status === 'answering' && !session.ending" class="composer" @submit.prevent="submit()">
       <div class="composer-heading"><label for="interview-answer">你的回答（可回答“不知道”，或明确跳过）</label><span aria-live="off">{{ answer.length.toLocaleString() }} / 10,000</span></div>
       <textarea id="interview-answer" v-model="answer" rows="4" maxlength="10000" :disabled="!canAnswer" aria-describedby="answer-hint" placeholder="从你的职责、具体行动和结果说起。不必完美，保持真实。" @compositionstart="composing = true" @compositionend="composing = false" @keydown.enter.ctrl.prevent="submit(false, $event)" @keydown.enter.meta.prevent="submit(false, $event)" />
-      <div class="composer-footer"><p id="answer-hint">{{ consented ? 'Ctrl / ⌘ + Enter 提交 · 普通 Enter 换行' : '请先确认本次模型与发送范围，再开始作答。' }}</p><div class="actions"><el-button :disabled="!canAnswer" @click="submit(true)">跳过此题</el-button><el-button native-type="submit" type="primary" :disabled="!canAnswer || !answer.trim()" :icon="Right">提交原回答</el-button></div></div>
+      <div class="composer-footer"><p id="answer-hint"><template v-if="consented"><span>Ctrl / ⌘ + Enter 提交</span><span>普通 Enter 换行</span></template><template v-else>请先确认本次模型与发送范围，再开始作答。</template></p><div class="actions"><el-button :disabled="!canAnswer" @click="submit(true)">跳过此题</el-button><el-button native-type="submit" type="primary" :disabled="!canAnswer || !answer.trim()" :icon="Right">提交原回答</el-button></div></div>
     </form>
     <div v-if="session.status === 'reviewing'" class="continue-card">
-      <div><span class="eyebrow">{{ session.ending ? 'READY FOR REVIEW' : 'ANSWER SAVED' }}</span><h3>{{ session.ending ? '这轮问答已结束' : '回答已保留，按你的节奏继续' }}</h3><p>{{ session.ending ? '生成报告后可查看重点反馈，并确认是否回补简历。' : session.settings.mode === 'training' ? '可以先查看本题点评。下一题仍只依据你的原回答。' : '本轮不展示中途点评，结束后统一生成报告。' }}</p></div>
+      <div><h3>{{ session.ending ? '这轮问答已结束' : '回答已保留，按你的节奏继续' }}</h3><p>{{ session.ending ? '生成报告后可查看重点反馈，并确认是否回补简历。' : session.settings.mode === 'training' ? '可以先查看本题点评。下一题仍只依据你的原回答。' : '本轮不展示中途点评，结束后统一生成报告。' }}</p></div>
       <el-button type="primary" :disabled="busy || !consented" :icon="Right" @click="continueInterview">{{ session.ending ? '生成报告' : '继续下一题 / 追问' }}</el-button>
     </div>
     <div v-if="['paused', 'interrupted', 'failed'].includes(session.status)" class="paused-note"><strong>{{ session.status === 'failed' ? '这一步尚未完成' : '面试已暂停' }}</strong><p>已提交的原回答仍在。请使用顶部的恢复或重试操作，不会自动重新请求。</p></div>
@@ -83,36 +82,279 @@ function continueInterview() {
 </template>
 
 <style scoped>
-.conversation { min-width: 0; padding: var(--ui-space-6); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); border: 1px solid var(--ui-border); }
-.conversation-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); padding-bottom: var(--ui-space-6); border-bottom: 1px solid var(--ui-border); }
-.eyebrow { font-size: var(--ui-font-xs); letter-spacing: .1em; color: var(--ui-text-muted); font-weight: 600; }
-h2 { font-size: var(--ui-font-lg); margin: var(--ui-space-1) 0 0; font-weight: 650; } h3 { font-size: var(--ui-font-md); font-weight: 600; margin: 0 0 var(--ui-space-2); }
-.turn-list { padding-top: var(--ui-space-6); display: grid; gap: var(--ui-space-8); }
-.turn { min-width: 0; display: grid; gap: var(--ui-space-4); }
-.message { display: flex; gap: var(--ui-space-3); align-items: flex-start; min-width: 0; }
-.avatar { width: 32px; height: 32px; display: grid; place-items: center; flex: 0 0 auto; border-radius: var(--ui-radius-md); color: var(--ui-primary); background: color-mix(in srgb, var(--ui-primary) 8%, var(--ui-bg-surface)); }
-.message-body { min-width: 0; flex: 1; } .message-meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ui-space-2); color: var(--ui-text-muted); font-size: var(--ui-font-xs); }
-.message-meta strong { color: var(--ui-text-main); font-size: var(--ui-font-sm); } .question-kind { padding: 0 var(--ui-space-2); background: var(--ui-bg-subtle); border-radius: var(--ui-radius-sm); }
-p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; margin: var(--ui-space-2) 0 0; font-size: var(--ui-font-md); }
-.question-text { font-size: var(--ui-font-lg); font-weight: 550; line-height: 1.75; scroll-margin-top: var(--ui-space-6); }
-.question-context { margin-top: var(--ui-space-3); color: var(--ui-text-secondary); } summary { cursor: pointer; font-size: var(--ui-font-sm); line-height: var(--ui-line-height); }
-.question-context p { font-size: var(--ui-font-sm); }
-.candidate { margin-left: auto; width: min(85%, 640px); } .candidate .message-body { padding: var(--ui-space-4); background: color-mix(in srgb, var(--ui-primary) 5%, var(--ui-bg-surface)); border: 1px solid color-mix(in srgb, var(--ui-primary) 10%, var(--ui-border)); border-radius: var(--ui-radius-lg); }
-.candidate .avatar { color: var(--ui-text-secondary); background: var(--ui-bg-subtle); }
-.feedback { margin-left: calc(32px + var(--ui-space-3)); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-bg-subtle); }
-.feedback > summary { padding: var(--ui-space-3) var(--ui-space-4); color: var(--ui-primary); font-weight: 550; } .feedback-body { padding: 0 var(--ui-space-4) var(--ui-space-4); display: grid; gap: var(--ui-space-4); }
-.feedback-tip { padding: var(--ui-space-3); border-left: 2px solid var(--ui-primary); background: var(--ui-bg-surface); } .feedback-body p { font-size: var(--ui-font-sm); }
-.composer { position: sticky; bottom: var(--ui-space-3); z-index: 2; display: grid; gap: var(--ui-space-3); margin-top: var(--ui-space-6); padding: var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-elevated); box-shadow: var(--ui-shadow-md); }
-.composer:focus-within { border-color: var(--ui-primary); } .composer-heading, .composer-footer { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-3); }
-.composer-heading label { font-size: var(--ui-font-sm); font-weight: 550; } .composer-heading > span { flex-shrink: 0; font-size: var(--ui-font-xs); color: var(--ui-text-muted); font-variant-numeric: tabular-nums; }
-textarea { width: 100%; min-height: 96px; max-height: 240px; padding: 0; border: 0; resize: vertical; font: inherit; font-size: var(--ui-font-md); line-height: 1.8; background: transparent; color: inherit; } textarea:focus-visible { outline: none; } textarea::placeholder { color: var(--ui-text-muted); }
-.composer-footer p { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-font-xs); } .actions { display: flex; gap: var(--ui-space-2); flex-shrink: 0; }.actions :deep(.el-button) { margin: 0; }
-.continue-card { margin-top: var(--ui-space-6); display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-4); padding: var(--ui-space-4); border-radius: var(--ui-radius-md); background: var(--ui-bg-subtle); border: 1px solid var(--ui-border); }
-.continue-card h3 { margin-top: var(--ui-space-1); } .continue-card p, .paused-note p, .request-status p { font-size: var(--ui-font-sm); color: var(--ui-text-secondary); } .continue-card :deep(.el-button) { flex-shrink: 0; }
-.request-status { display: flex; gap: var(--ui-space-3); align-items: flex-start; padding: var(--ui-space-4) 0; color: var(--ui-text-secondary); font-size: var(--ui-font-sm); }
-.request-dot { height: 8px; width: 8px; border-radius: 50%; margin-top: var(--ui-space-2); background: var(--ui-primary); flex-shrink: 0; animation: breathe 1.4s ease-in-out infinite; }
-.paused-note { margin-top: var(--ui-space-6); padding: var(--ui-space-4); background: var(--ui-bg-subtle); border-radius: var(--ui-radius-md); font-size: var(--ui-font-sm); }
-@keyframes breathe { 50% { opacity: .35; } }
+/* A transcript: speakers in a label column, turns on hairlines, the live question on a 2px ink bar. */
+.conversation { min-width: 0; }
+
+.conversation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding-bottom: var(--space-sm);
+  border-bottom: var(--rule-bar) solid var(--color-rule);
+}
+
+h2 {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.2;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+
+h3 { margin: 0 0 var(--space-2xs); font-size: var(--text-md); font-weight: 600; }
+
+p {
+  margin: var(--space-xs) 0 0;
+  font-size: var(--text-md);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.turn-list { display: grid; }
+
+.turn {
+  display: grid;
+  min-width: 0;
+  padding: var(--space-md) 0;
+}
+
+.turn + .turn { border-top: var(--rule-hair) solid var(--color-rule); }
+
+.message {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: var(--space-md);
+  min-width: 0;
+  padding: var(--space-xs) 0 var(--space-xs) var(--space-sm);
+  border-left: var(--rule-bar) solid transparent;
+}
+
+.candidate {
+  margin-top: var(--space-xs);
+  padding-top: var(--space-sm);
+  border-top: var(--rule-hair) solid var(--color-rule);
+}
+
+.turn[data-current="true"] .interviewer { border-left-color: var(--color-accent); }
+
+.message-body { min-width: 0; }
+
+.message-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2xs);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.message-meta strong { color: var(--color-muted); font-size: var(--text-sm); font-weight: 500; }
+.message-meta span { font-variant-numeric: tabular-nums; }
+
+.question-kind {
+  padding: 0 var(--space-2xs);
+  border: var(--rule-hair) solid var(--color-rule);
+  color: var(--color-ink-2);
+}
+
+.turn[data-current="true"] .question-kind { border-color: var(--color-accent); color: var(--color-accent); border-radius: var(--radius-s); }
+
+.question-text {
+  margin-top: 0;
+  color: var(--color-ink-2);
+  font-size: var(--text-md);
+  font-weight: 500;
+  scroll-margin-top: var(--space-lg);
+}
+
+.turn[data-current="true"] .question-text {
+  color: var(--color-ink);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.candidate .message-body p { margin-top: 0; color: var(--color-ink); }
+
+summary {
+  color: var(--color-ink-2);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.55;
+  transition: color var(--dur-micro) var(--ease-out);
+}
+
+summary:active { color: var(--color-accent); }
+
+@media (hover: hover) {
+  summary:hover { color: var(--color-ink); text-decoration: underline; }
+}
+
+.question-context { margin-top: var(--space-xs); }
+.question-context p { color: var(--color-ink-2); font-size: var(--text-sm); }
+
+.feedback {
+  margin: var(--space-sm) 0 0 calc(9rem + var(--space-md) + var(--space-sm) + var(--rule-bar));
+  border-top: var(--rule-hair) solid var(--color-rule);
+}
+
+.feedback > summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-sm);
+  padding: var(--space-xs) 0;
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.summary-note { color: var(--color-muted); font-weight: 500; }
+
+.feedback-body { display: grid; gap: var(--space-sm); padding-bottom: var(--space-xs); }
+.feedback-body p { font-size: var(--text-sm); }
+.feedback-body > details { padding-top: var(--space-xs); border-top: var(--rule-hair) solid var(--color-rule); }
+.feedback-tip { padding: var(--space-sm) var(--space-md); background: var(--color-paper-2); }
+
+/* Composer: the answer field held on the paper by a 2px ink edge. */
+.composer {
+  position: sticky;
+  bottom: var(--space-sm);
+  z-index: 2;
+  display: grid;
+  gap: var(--space-xs);
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card);
+}
+
+.composer-heading, .composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.composer-heading label { color: var(--color-ink-2); font-size: var(--text-sm); font-weight: 500; }
+
+.composer-heading > span {
+  flex-shrink: 0;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+textarea {
+  width: 100%;
+  min-height: 96px;
+  max-height: 240px;
+  padding: var(--space-xs) var(--space-sm);
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--radius-input);
+  background: var(--color-paper-3);
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-md);
+  line-height: 1.7;
+  resize: vertical;
+  transition: box-shadow var(--dur-micro) var(--ease-out);
+}
+
+textarea:focus-visible { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-wash); }
+textarea:disabled { opacity: 0.55; cursor: not-allowed; }
+textarea::placeholder { color: var(--color-muted); }
+
+.composer-footer p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-md);
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.actions { display: flex; flex-shrink: 0; gap: var(--space-xs); }
+.actions :deep(.el-button) { margin: 0; }
+
+.continue-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card);
+}
+
+.continue-card p, .paused-note p, .request-status p { font-size: var(--text-sm); }
+.continue-card p { margin-top: 0; color: var(--color-ink-2); }
+.continue-card :deep(.el-button) { flex-shrink: 0; }
+
+.request-status {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-md) 0;
+  border-top: var(--rule-hair) solid var(--color-rule);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+}
+
+.request-status strong { color: var(--color-ink); font-weight: 600; }
+.request-status p { margin-top: var(--space-2xs); }
+
+.request-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-top: var(--space-2xs);
+  background: var(--color-accent);
+  animation: request-blink 1.2s var(--ease-out) infinite;
+}
+
+/* The paused or failed step: an amber plate under ink text. */
+.paused-note {
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: var(--rule-hair) solid color-mix(in oklab, var(--color-warning) 40%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-warning-wash);
+  color: var(--color-ink);
+  font-size: var(--text-sm);
+}
+
+.paused-note strong { font-weight: 600; }
+.paused-note p { margin-top: var(--space-2xs); }
+
+@keyframes request-blink { 50% { opacity: 0.25; } }
+
 @media (prefers-reduced-motion: reduce) { .request-dot { animation: none; } }
-@media (max-width: 768px) { .conversation { padding: var(--ui-space-4); }.conversation-heading { align-items: flex-start; }.conversation-heading h2 { font-size: var(--ui-font-md); }.conversation-heading :deep(.el-button) { padding: var(--ui-space-1); font-size: var(--ui-font-xs); }.candidate { width: 94%; }.feedback { margin-left: 0; }.composer { bottom: max(var(--ui-space-2), env(safe-area-inset-bottom)); padding: var(--ui-space-3); }.composer-heading { align-items: flex-start; }.composer-heading label { max-width: 75%; }.composer-footer, .continue-card { align-items: stretch; flex-direction: column; }.actions { justify-content: flex-end; }.continue-card :deep(.el-button) { align-self: flex-end; }.question-text { font-size: var(--ui-font-md); } }
+
+@media (max-width: 768px) {
+  .conversation-heading { align-items: flex-start; }
+  h2 { font-size: var(--text-lg); }
+  .conversation-heading :deep(.el-button) { padding: var(--space-2xs); font-size: var(--text-xs); }
+  .message { grid-template-columns: minmax(0, 1fr); gap: var(--space-xs); }
+  .message-meta { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+  .feedback { margin-left: 0; }
+  .composer { bottom: max(var(--space-xs), env(safe-area-inset-bottom)); padding: var(--space-sm); }
+  .composer-heading { align-items: flex-start; }
+  .composer-heading label { max-width: 75%; }
+  .composer-footer, .continue-card { align-items: stretch; flex-direction: column; }
+  .actions { justify-content: flex-end; }
+  .continue-card :deep(.el-button) { align-self: flex-end; }
+  .turn[data-current="true"] .question-text { font-size: var(--text-md); }
+}
 </style>
