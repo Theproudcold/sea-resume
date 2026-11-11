@@ -17,8 +17,8 @@
             />
           </div>
           <button v-else type="button" class="section-title-button" @click="startEditingTitle">
-            {{ title || '未命名模块' }}
-            <el-icon><EditPen /></el-icon>
+            <span class="section-title-text">{{ title || '未命名模块' }}</span>
+            <el-icon aria-hidden="true"><EditPen /></el-icon>
           </button>
         </div>
       </div>
@@ -124,18 +124,10 @@ const saveTitle = () => {
 </script>
 
 <style scoped>
+/* A section is a head row over its entries, never a card: the entries are the only boxes. */
 .editor-section {
-  margin-bottom: var(--ui-space-3);
-  overflow: hidden;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-md);
-  background: var(--ui-bg-surface);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
-}
-
-.editor-section:hover {
-  border-color: color-mix(in srgb, var(--ui-primary) 24%, var(--ui-border));
-  box-shadow: var(--ui-shadow-sm);
+  margin-bottom: var(--space-lg);
+  background: transparent;
 }
 
 .section-header {
@@ -143,9 +135,9 @@ const saveTitle = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ui-space-3);
-  padding: var(--ui-space-2) var(--ui-space-4);
-  background: var(--ui-bg-subtle);
+  gap: var(--space-sm);
+  padding: var(--space-sm) 0;
+  border-bottom: var(--rule-hair) solid var(--color-rule);
   cursor: pointer;
   user-select: none;
 }
@@ -158,7 +150,7 @@ const saveTitle = () => {
 .section-actions {
   display: flex;
   align-items: center;
-  gap: var(--ui-space-2);
+  gap: var(--space-xs);
 }
 
 .section-heading {
@@ -166,15 +158,20 @@ const saveTitle = () => {
   flex: 1;
 }
 
+.section-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
 .drag-handle {
   flex: 0 0 auto;
-  color: var(--ui-text-faint);
+  color: var(--color-muted);
   cursor: grab;
 }
 
-.drag-handle:hover,
 .section-icon {
-  color: var(--ui-text-muted);
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  font-size: var(--text-lg);
 }
 
 .section-title-wrap {
@@ -183,27 +180,44 @@ const saveTitle = () => {
 }
 
 .section-title-input {
-  max-width: 260px;
+  max-width: 320px;
 }
 
 .section-title-button {
   display: inline-flex;
   align-items: center;
-  gap: var(--ui-space-1);
+  gap: var(--space-xs);
   max-width: 100%;
+  min-height: 36px;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--ui-text-main);
+  color: var(--color-ink);
   font: inherit;
-  font-weight: 600;
   text-align: left;
-  cursor: pointer;
+  cursor: text;
 }
 
-.section-title-button:hover,
-.section-title-button:focus-visible {
-  color: var(--ui-primary);
+.section-title-text {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-title-button > .el-icon {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+  transition: color var(--dur-micro) var(--ease-out);
+}
+
+.section-title-button:active .section-title-text {
+  color: var(--color-accent);
 }
 
 .section-toggle {
@@ -214,18 +228,42 @@ const saveTitle = () => {
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: var(--ui-radius-sm);
+  border-radius: var(--radius-input);
   background: transparent;
-  color: var(--ui-text-muted);
+  color: var(--color-muted);
   cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
 }
 
-.section-toggle:hover {
-  background: var(--ui-bg-hover);
+.section-toggle:active {
+  background: var(--color-sunken);
+  color: var(--color-ink);
 }
+
+@media (hover: hover) {
+  .drag-handle:hover {
+    color: var(--color-ink);
+  }
+
+  .section-title-button:hover .section-title-text {
+    text-decoration: underline;
+    text-decoration-color: var(--color-rule-2);
+    text-decoration-thickness: var(--rule-hair);
+    text-underline-offset: 0.25em;
+  }
+
+  .section-title-button:hover > .el-icon {
+    color: var(--color-accent);
+  }
+
+  .section-toggle:hover {
+    background: var(--color-paper-2);
+    color: var(--color-ink);
+  }
+}
+
 .section-chevron {
-  color: var(--ui-text-muted);
-  transition: transform 0.18s ease;
+  transition: transform var(--dur-short) var(--ease-out);
 }
 
 .section-chevron.is-open {
@@ -233,17 +271,42 @@ const saveTitle = () => {
 }
 
 .section-body {
-  padding: var(--ui-space-4);
-  border-top: 1px solid var(--ui-border);
+  padding: var(--space-md) 0 0;
+}
+
+/* Forms inside a section run dense: 36px controls, labels in 500. */
+.section-body :deep(.el-form-item) {
+  margin-bottom: var(--space-md);
+}
+
+.section-body :deep(.el-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+.section-body :deep(.el-form-item--label-top .el-form-item__label) {
+  margin-bottom: var(--space-2xs);
+  line-height: 1.4;
+}
+
+.section-body :deep(.resume-entry-card__header > span) {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.section-body :deep(.resume-entry-card__header .el-button + .el-button) {
+  margin-left: 0;
+}
+
+.section-body :deep(.resume-entry-card > .resume-entry-card__header + *) {
+  padding-top: var(--space-md);
 }
 
 @media (max-width: 768px) {
-  .section-header {
-    padding-inline: var(--ui-space-3);
-  }
-
-  .section-body {
-    padding: var(--ui-space-3);
+  .section-title-text {
+    font-size: var(--text-md);
   }
 }
 </style>

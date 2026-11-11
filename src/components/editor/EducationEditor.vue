@@ -1,15 +1,15 @@
 <template>
-  <div class="education-editor space-y-4">
+  <div class="education-editor">
 
     <div v-if="education.length === 0" class="resume-editor-empty">
-      <el-icon :size="48"><School /></el-icon>
-      <p class="mt-2">暂无教育背景，点击上方按钮添加</p>
+      <el-icon :size="24" aria-hidden="true"><School /></el-icon>
+      <p>暂无教育背景，点击上方按钮添加</p>
     </div>
 
     <div v-for="(edu, index) in education" :key="edu.id" class="education-item resume-entry-card" :class="{ 'is-collapsed': isCollapsed(edu.id) }">
       <div class="resume-entry-card__header">
-        <span class="text-sm text-gray-600">教育背景 {{ index + 1 }}</span>
-        <div class="flex items-center gap-2">
+        <span>教育背景 {{ index + 1 }}</span>
+        <div class="flex items-center gap-1">
           <el-button
             link
             :type="edu.visible === false ? 'info' : ''"
@@ -101,8 +101,6 @@
           />
         </el-form-item>
       </el-form>
-
-        <el-divider v-if="index < education.length - 1" />
       </div></SmoothCollapse>
     </div>
   </div>

@@ -1,15 +1,15 @@
 <template>
-  <div class="skill-editor space-y-4">
+  <div class="skill-editor">
 
     <div v-if="skills.length === 0" class="resume-editor-empty">
-      <el-icon :size="48"><Star /></el-icon>
-      <p class="mt-2">暂无技能信息，点击上方按钮添加</p>
+      <el-icon :size="24" aria-hidden="true"><Star /></el-icon>
+      <p>暂无技能信息，点击上方按钮添加</p>
     </div>
 
     <div v-for="(skill, index) in skills" :key="skill.id" class="skill-item resume-entry-card" :class="{ 'is-collapsed': isCollapsed(skill.id) }">
       <div class="resume-entry-card__header">
-        <span class="text-sm text-gray-600">技能分类 {{ index + 1 }}</span>
-        <div class="flex items-center gap-2">
+        <span>技能分类 {{ index + 1 }}</span>
+        <div class="flex items-center gap-1">
           <el-button
             link
             :type="skill.visible === false ? 'info' : ''"
@@ -63,8 +63,6 @@
           </el-select>
         </el-form-item>
       </el-form>
-
-        <el-divider v-if="index < skills.length - 1" />
       </div></SmoothCollapse>
     </div>
   </div>

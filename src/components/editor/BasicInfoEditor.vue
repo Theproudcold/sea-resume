@@ -9,14 +9,14 @@
           :on-change="handleAvatarChange"
           accept="image/*"
         >
-          <div v-if="localBasic.avatar" class="relative group cursor-pointer">
-            <img :src="localBasic.avatar" class="w-24 h-24 rounded-full object-cover border border-gray-200" />
-            <div class="absolute inset-0 bg-black bg-opacity-50 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-              <el-icon class="text-white text-xl"><Edit /></el-icon>
+          <div v-if="localBasic.avatar" class="avatar-frame">
+            <img :src="localBasic.avatar" class="avatar-image" alt="" />
+            <div class="avatar-overlay">
+              <el-icon><Edit /></el-icon>
             </div>
           </div>
-          <div v-else class="w-24 h-24 rounded-full border border-dashed border-gray-300 flex items-center justify-center hover:border-blue-500 transition-colors cursor-pointer text-gray-400 hover:text-blue-500">
-            <el-icon class="text-2xl"><Plus /></el-icon>
+          <div v-else class="avatar-empty">
+            <el-icon><Plus /></el-icon>
           </div>
         </el-upload>
       </el-form-item>
@@ -341,26 +341,108 @@ const updateCustomContact = (id: string, updates: Partial<CustomContact>) => {
 .basic-info-editor {
   width: 100%;
 }
+
+.avatar-frame,
+.avatar-empty {
+  position: relative;
+  display: flex;
+  width: 96px;
+  height: 96px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  cursor: pointer;
+}
+
+.avatar-frame {
+  border: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper-2);
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The edit mark sits on a scrim that only appears while the photo is pointed at or the uploader holds focus. */
+.avatar-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-overlay);
+  color: var(--color-accent-ink);
+  font-size: var(--text-lg);
+  opacity: 0;
+  transition: opacity var(--dur-micro) var(--ease-out);
+}
+
+.avatar-uploader:focus-within .avatar-overlay {
+  opacity: 1;
+}
+
+.avatar-empty {
+  border: var(--rule-hair) dashed var(--color-rule-2);
+  background: var(--color-paper-2);
+  color: var(--color-muted);
+  font-size: var(--text-xl);
+  transition: border-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
+}
+
+.avatar-empty:active {
+  background: var(--color-sunken);
+}
+
+@media (hover: hover) {
+  .avatar-frame:hover .avatar-overlay {
+    opacity: 1;
+  }
+
+  .avatar-empty:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+}
+
+@media (hover: none) {
+  .avatar-overlay {
+    opacity: 1;
+    inset: auto 0 0;
+    height: 32px;
+    font-size: var(--text-md);
+  }
+}
+
 .custom-contact-list {
   display: flex;
   width: 100%;
   flex-direction: column;
-  gap: 10px;
+  align-items: flex-start;
+  gap: var(--space-sm);
 }
+
 .custom-contact-card {
   display: flex;
+  width: 100%;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-xs);
+  padding-bottom: var(--space-sm);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
 }
+
 .custom-contact-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-xs);
 }
+
 .privacy-note {
-  margin: 6px 0 0;
-  color: var(--ui-text-muted);
-  font-size: var(--ui-font-xs);
-  line-height: 1.4;
+  margin: var(--space-2xs) 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  line-height: 1.45;
 }
 </style>

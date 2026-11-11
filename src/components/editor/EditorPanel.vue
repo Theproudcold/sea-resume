@@ -2,7 +2,6 @@
   <div class="editor-panel">
     <aside class="editor-sidebar" aria-label="简历模块导航">
       <div class="sidebar-brand">
-        <span class="sidebar-eyebrow">编辑工作区</span>
         <span class="sidebar-title">简历内容</span>
       </div>
 
@@ -11,6 +10,7 @@
           type="button"
           class="sidebar-fixed-item"
           :class="{ 'is-active': selectedSectionId === 'theme' }"
+          :aria-current="selectedSectionId === 'theme' ? 'true' : undefined"
           @click="selectSection('theme')"
         >
           <el-icon><Brush /></el-icon>
@@ -20,6 +20,7 @@
           type="button"
           class="sidebar-fixed-item"
           :class="{ 'is-active': selectedSectionId === 'basic' }"
+          :aria-current="selectedSectionId === 'basic' ? 'true' : undefined"
           @click="selectSection('basic')"
         >
           <el-icon><User /></el-icon>
@@ -27,7 +28,6 @@
         </button>
       </nav>
 
-      <div class="sidebar-divider"></div>
       <div class="sidebar-section-heading">
         <span>简历模块</span>
         <span class="sidebar-count">{{ sectionsList.length }}</span>
@@ -47,9 +47,14 @@
           @end="isDraggingSections = false"
         >
           <template #item="{ element }">
-            <div class="sidebar-section-item" :class="{ 'is-active': selectedSectionId === element.id }">
+            <div class="sidebar-section-item" :class="{ 'is-active': selectedSectionId === element.id, 'is-hidden': isSectionHidden(element.id) }">
               <el-icon class="drag-handle" title="拖动排序"><Rank /></el-icon>
-              <button type="button" class="sidebar-section-button" @click="selectSection(element.id)">
+              <button
+                type="button"
+                class="sidebar-section-button"
+                :aria-current="selectedSectionId === element.id ? 'true' : undefined"
+                @click="selectSection(element.id)"
+              >
                 <el-icon><component :is="element.icon" /></el-icon>
                 <span>{{ getSectionTitle(element.id) }}</span>
               </button>
@@ -383,17 +388,18 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
 </script>
 
 <style scoped>
+/* The editor pane: a nav rail on the raised surface beside the form host, hairline seams. */
 .editor-panel {
   display: grid;
-  grid-template-columns: clamp(200px, 18vw, 272px) minmax(0, 1fr);
+  grid-template-columns: clamp(208px, 18vw, 264px) minmax(0, 1fr);
   width: min(62vw, 1080px);
   min-width: 620px;
   max-width: 1080px;
   height: 100%;
   flex: 0 1 62%;
   overflow: hidden;
-  border-right: 1px solid var(--ui-border);
-  background: var(--ui-bg-surface);
+  border-right: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper);
 }
 
 .editor-sidebar {
@@ -402,136 +408,145 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  border-right: 1px solid var(--ui-border);
-  background: var(--ui-bg-subtle);
+  border-right: var(--rule-hair) solid var(--color-rule);
+  background: var(--color-paper-3);
 }
 
 .sidebar-brand {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 20px 18px 14px;
-}
-
-.sidebar-eyebrow {
-  color: var(--ui-text-muted);
-  font-size: var(--ui-font-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  min-height: 52px;
+  align-items: center;
+  padding: var(--space-sm) var(--space-md);
 }
 
 .sidebar-title {
-  color: var(--ui-text-main);
-  font-size: var(--ui-font-lg);
-  font-weight: 650;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
 }
 
 .sidebar-fixed {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 0 10px;
+  gap: var(--space-3xs);
+  padding: 0 var(--space-xs);
+}
+
+.sidebar-fixed-item,
+.sidebar-section-item {
+  border-radius: var(--radius-input);
+  background: transparent;
+  color: var(--color-ink-2);
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
 }
 
 .sidebar-fixed-item {
   display: flex;
-  min-height: 42px;
+  min-height: 40px;
   align-items: center;
-  gap: 10px;
-  padding: 0 10px;
-  border: 1px solid transparent;
-  border-radius: var(--ui-radius-md);
-  background: transparent;
-  color: var(--ui-text-secondary);
-  font: inherit;
+  gap: var(--space-xs);
+  padding: 0 var(--space-sm);
+  border: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
 }
 
-.sidebar-fixed-item:hover,
-.sidebar-fixed-item.is-active {
-  border-color: color-mix(in srgb, var(--ui-primary) 20%, var(--ui-border));
-  background: var(--ui-bg-surface);
-  color: var(--ui-primary);
+/* The current module: an accent wash with cobalt text. */
+.sidebar-fixed-item.is-active,
+.sidebar-section-item.is-active {
+  background: var(--color-accent-wash);
+  color: var(--color-accent);
 }
 
-.sidebar-divider {
-  height: 1px;
-  margin: 14px 18px 10px;
-  background: var(--ui-border);
+.sidebar-fixed-item.is-active,
+.sidebar-section-item.is-active .sidebar-section-button {
+  font-weight: 600;
 }
 
 .sidebar-section-heading {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  padding: 0 18px 8px;
-  color: var(--ui-text-muted);
-  font-size: var(--ui-font-xs);
-  font-weight: 600;
+  gap: var(--space-xs);
+  margin-top: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) var(--space-xs);
+  border-top: var(--rule-hair) solid var(--color-rule);
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 500;
 }
 
 .sidebar-count {
-  color: var(--ui-text-faint);
-  font-weight: 500;
+  color: var(--color-ink-2);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .sidebar-list-scroll {
   min-height: 0;
   flex: 1;
   overflow: auto;
-  padding: 0 8px 12px;
+  padding: 0 var(--space-xs) var(--space-sm);
 }
 
 .sidebar-section-list {
   display: flex;
-  min-height: 8px;
+  min-height: var(--space-xs);
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-3xs);
 }
 
 .sidebar-section-item {
   display: flex;
   min-width: 0;
-  min-height: 44px;
+  min-height: 40px;
   align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
-  border: 1px solid transparent;
-  border-radius: var(--ui-radius-md);
-  color: var(--ui-text-secondary);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  gap: var(--space-3xs);
+  padding: 0 var(--space-3xs);
 }
 
-.sidebar-section-item:hover,
-.sidebar-section-item.is-active {
-  border-color: color-mix(in srgb, var(--ui-primary) 20%, var(--ui-border));
-  background: var(--ui-bg-surface);
-}
-
-.sidebar-section-item.is-active {
-  color: var(--ui-primary);
+.sidebar-section-item.is-hidden:not(.is-active) .sidebar-section-button {
+  color: var(--color-muted);
+  text-decoration: line-through;
+  text-decoration-thickness: var(--rule-hair);
 }
 
 .sidebar-section-item .drag-handle {
-  flex: 0 0 20px;
+  display: inline-flex;
+  flex: 0 0 24px;
+  height: 32px;
   justify-content: center;
-  color: var(--ui-text-faint);
+  color: var(--color-muted);
   cursor: grab;
+}
+
+.sidebar-section-item .drag-handle:active {
+  cursor: grabbing;
 }
 
 .sidebar-section-button {
   display: flex;
   min-width: 0;
-  min-height: 34px;
+  min-height: 36px;
   flex: 1;
   align-items: center;
-  gap: 8px;
-  padding: 0 2px;
+  gap: var(--space-xs);
+  padding: 0 var(--space-3xs);
   border: 0;
+  border-radius: var(--radius-s);
   background: transparent;
   color: inherit;
-  font: inherit;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
 }
@@ -549,15 +564,62 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
 }
 
 .sidebar-section-actions :deep(.el-button) {
+  --el-button-text-color: var(--color-muted);
+  --el-button-hover-text-color: var(--color-ink);
   width: 28px;
-  height: 30px;
+  height: 28px;
   margin: 0;
   padding: 0;
+  border-radius: var(--radius-s);
+  transition: opacity var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
+}
+
+.sidebar-section-actions :deep(.el-button.el-button--danger) {
+  --el-button-hover-text-color: var(--color-error);
+}
+
+.sidebar-section-actions :deep(.el-button.is-link:not(.is-disabled):hover) {
+  background: var(--color-paper-2);
+  text-decoration: none;
+}
+
+.sidebar-section-actions :deep(.el-button.is-link:not(.is-disabled):active) {
+  background: var(--color-sunken);
+}
+
+.sidebar-section-item.is-active .drag-handle,
+.sidebar-section-item.is-active .sidebar-section-actions :deep(.el-button) {
+  --el-button-text-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.sidebar-section-item.is-active .sidebar-section-actions :deep(.el-button.is-link:not(.is-disabled):hover) {
+  background: var(--color-paper-3);
+}
+
+/* Row controls stay quiet until the row is pointed at or holds focus; a hidden module keeps its eye. */
+@media (hover: hover) {
+  .sidebar-fixed-item:not(.is-active):hover,
+  .sidebar-section-item:not(.is-active):hover {
+    background: var(--color-paper-2);
+    color: var(--color-ink);
+  }
+
+  .sidebar-section-item:not(.is-active):not(:hover):not(:focus-within) .drag-handle,
+  .sidebar-section-item:not(.is-active):not(:hover):not(:focus-within) .sidebar-section-actions :deep(.el-button:not(.el-button--info)) {
+    opacity: 0;
+  }
+}
+
+.sidebar-fixed-item:not(.is-active):active,
+.sidebar-section-item:not(.is-active):has(> .sidebar-section-button:active) {
+  background: var(--color-sunken);
+  color: var(--color-ink);
 }
 
 .sidebar-footer {
-  padding: 12px;
-  border-top: 1px solid var(--ui-border);
+  padding: var(--space-sm) var(--space-md);
+  border-top: var(--rule-hair) solid var(--color-rule);
 }
 
 .sidebar-add-dropdown,
@@ -565,74 +627,44 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
   width: 100%;
 }
 
-.sidebar-add-button {
-  border-style: dashed;
-}
-
 .editor-main {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: var(--ui-bg-page);
+  background: var(--color-paper);
 }
 
 .editor-content {
   width: 100%;
   max-width: 820px;
   margin: 0 auto;
-  padding: 24px;
+  padding: var(--space-lg) var(--space-lg) var(--space-2xl);
 }
 
 .editor-section-transition-shell {
   position: relative;
 }
 
-.editor-section-switch-enter-active,
-.editor-section-switch-leave-active {
-  transition: opacity var(--ui-duration-normal, 180ms) ease, transform var(--ui-duration-normal, 180ms) ease;
-}
-
-.editor-section-switch-enter-from {
-  opacity: 0;
-  transform: translateY(6px);
-}
-
+/* Modules swap in place: the outgoing stage leaves the flow at once, nothing fades. */
 .editor-section-switch-leave-active {
   position: absolute;
   inset: 0;
   width: 100%;
   z-index: 0;
+  visibility: hidden;
   pointer-events: none;
 }
-
-.editor-section-switch-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-
-
 
 .editor-main :deep(.editor-section) {
   margin-bottom: 0;
 }
 
 .is-reordering {
-  outline: 2px dashed var(--ui-primary);
-  outline-offset: 3px;
+  border-radius: var(--radius-input);
+  outline: var(--rule-hair) dashed var(--color-accent);
+  outline-offset: var(--space-3xs);
 }
 
-
-@media (prefers-reduced-motion: reduce) {
-  .editor-section-switch-enter-active,
-  .editor-section-switch-leave-active {
-    transition: none;
-  }
-
-  .editor-section-switch-enter-from,
-  .editor-section-switch-leave-to {
-    transform: none;
-  }
-}
 @media (max-width: 1024px) {
   .editor-panel {
     width: 100%;
@@ -640,10 +672,10 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
     max-width: none;
     flex: 1 1 auto;
     border-right: 0;
-    border-bottom: 1px solid var(--ui-border);
   }
 }
 
+/* Narrow: the rail turns into two scrolling strips of rows. */
 @media (max-width: 700px) {
   .editor-panel {
     display: flex;
@@ -651,21 +683,20 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
   }
 
   .editor-sidebar {
-    max-height: 176px;
+    max-height: 184px;
     flex: 0 0 auto;
     border-right: 0;
-    border-bottom: 1px solid var(--ui-border);
+    border-bottom: var(--rule-hair) solid var(--color-rule);
   }
 
   .sidebar-brand,
-  .sidebar-divider,
   .sidebar-section-heading {
     display: none;
   }
 
   .sidebar-fixed {
     flex-direction: row;
-    padding: 8px 8px 4px;
+    padding: var(--space-xs) var(--space-xs) var(--space-2xs);
   }
 
   .sidebar-fixed-item {
@@ -675,10 +706,10 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
   }
 
   .sidebar-list-scroll {
-    flex: 0 0 48px;
+    flex: 0 0 auto;
     overflow-x: auto;
     overflow-y: hidden;
-    padding: 0 8px 6px;
+    padding: 0 var(--space-xs) var(--space-2xs);
   }
 
   .sidebar-section-list {
@@ -688,19 +719,16 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
   }
 
   .sidebar-section-item {
-    width: 156px;
-    min-height: 38px;
+    width: 168px;
     flex: 0 0 auto;
   }
 
   .sidebar-footer {
-    padding: 6px 10px 10px;
-    border-top: 0;
+    padding: var(--space-xs) var(--space-sm);
   }
 
   .editor-content {
-    padding: 14px;
+    padding: var(--space-md) var(--space-md) var(--space-xl);
   }
-
 }
 </style>

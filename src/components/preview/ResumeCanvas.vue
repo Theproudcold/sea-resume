@@ -1,6 +1,6 @@
 <template>
   <div class="resume-canvas-wrapper">
-    <div ref="canvasRef" class="resume-canvas">
+    <div ref="canvasRef" class="resume-canvas resume-document">
       <div ref="contentRef" class="resume-canvas-content">
         <slot></slot>
       </div>

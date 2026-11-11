@@ -1,15 +1,15 @@
 <template>
-  <div class="experience-editor space-y-4">
+  <div class="experience-editor">
 
     <div v-if="experiences.length === 0" class="resume-editor-empty">
-      <el-icon :size="48"><Briefcase /></el-icon>
-      <p class="mt-2">暂无工作经历，点击上方按钮添加</p>
+      <el-icon :size="24" aria-hidden="true"><Briefcase /></el-icon>
+      <p>暂无工作经历，点击上方按钮添加</p>
     </div>
 
     <div v-for="(exp, index) in experiences" :key="exp.id" class="experience-item resume-entry-card" :class="{ 'is-collapsed': isCollapsed(exp.id) }">
       <div class="resume-entry-card__header">
-        <span class="text-sm text-gray-600">工作经历 {{ index + 1 }}</span>
-        <div class="flex items-center gap-2">
+        <span>工作经历 {{ index + 1 }}</span>
+        <div class="flex items-center gap-1">
           <el-button
             link
             :type="exp.visible === false ? 'info' : ''"
@@ -91,8 +91,6 @@
           />
         </el-form-item>
       </el-form>
-
-        <el-divider v-if="index < experiences.length - 1" />
       </div></SmoothCollapse>
     </div>
   </div>

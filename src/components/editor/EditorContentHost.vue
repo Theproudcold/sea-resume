@@ -2,10 +2,7 @@
   <div class="editor-section-stage" :data-section-id="sectionId">
     <section v-if="sectionId === 'theme' || sectionId === 'basic'" :id="`editor-section-${sectionId}`" class="editor-settings-panel">
       <div class="editor-detail-heading">
-        <div>
-          <span class="editor-detail-eyebrow">{{ sectionId === 'theme' ? '外观' : '简历内容' }}</span>
-          <h2>{{ sectionId === 'theme' ? '主题设置' : '基础信息' }}</h2>
-        </div>
+        <h2>{{ sectionId === 'theme' ? '主题设置' : '基础信息' }}</h2>
       </div>
       <ThemeEditor v-if="sectionId === 'theme'" />
       <BasicInfoEditor v-else />
@@ -25,7 +22,7 @@
       @update:title="(value) => isCurrentResume && emit('updateTitle', sectionId, value)"
     >
       <template #header-actions>
-        <el-button v-if="addActionLabel" type="primary" size="small" :icon="Plus" @click.stop="isCurrentResume && emit('add', sectionId)">
+        <el-button v-if="addActionLabel" :icon="Plus" @click.stop="isCurrentResume && emit('add', sectionId)">
           {{ addActionLabel }}
         </el-button>
       </template>
@@ -82,36 +79,56 @@ defineExpose({
 </script>
 
 <style scoped>
+/* Theme and basic info hold a form with no inner cards, so the form itself sits on one raised card. */
 .editor-settings-panel {
-  padding: 24px;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-lg);
-  background: var(--ui-bg-surface);
-}
-
-.editor-detail-eyebrow {
-  color: var(--ui-text-muted);
-  font-size: var(--ui-font-xs);
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  padding: 0 var(--space-lg) var(--space-lg);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card);
 }
 
 .editor-detail-heading {
-  margin-bottom: 20px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--ui-border);
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  margin: 0 calc(var(--space-lg) * -1) var(--space-lg);
+  padding: var(--space-sm) var(--space-lg);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
 }
 
 .editor-detail-heading h2 {
-  margin: 4px 0 0;
-  color: var(--ui-text-main);
-  font-size: var(--ui-font-lg);
-  font-weight: 650;
+  max-width: none;
+  margin: 0;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.25;
+  text-wrap: balance;
 }
 
-@media (max-width: 700px) {
+.editor-settings-panel :deep(.el-form-item) {
+  margin-bottom: var(--space-md);
+}
+
+.editor-settings-panel :deep(.el-form-item--label-top .el-form-item__label) {
+  margin-bottom: var(--space-2xs);
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
   .editor-settings-panel {
-    padding: 16px;
+    padding: 0 var(--space-md) var(--space-md);
+  }
+
+  .editor-detail-heading {
+    margin: 0 calc(var(--space-md) * -1) var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+  }
+
+  .editor-detail-heading h2 {
+    font-size: var(--text-md);
   }
 }
 </style>

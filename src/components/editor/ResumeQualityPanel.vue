@@ -28,6 +28,6 @@ defineEmits<{ 'update:modelValue': [value: boolean]; navigate: [section: ResumeQ
 .quality-intro { margin-top: 0; color: var(--ui-text-muted); font-size: var(--ui-font-sm); }
 .quality-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .quality-list li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); }
-.quality-dot { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--ui-warning) 14%, white); color: var(--ui-warning); font-weight: 700; }
+.quality-dot { display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: var(--color-warning-wash); color: var(--color-warning); font-weight: 600; }
 @media (max-width: 480px) { .quality-list li { grid-template-columns: 22px minmax(0, 1fr); } .quality-list li :deep(.el-button) { grid-column: 2; justify-self: start; } }
 </style>
