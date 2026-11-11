@@ -7,6 +7,11 @@
     destroy-on-close
     @update:model-value="emit('update:modelValue', $event)"
   >
+    <ol class="import-steps" aria-label="导入步骤">
+      <li :class="{ 'is-current': !result }" :aria-current="!result ? 'step' : undefined"><b>1</b>选择文件</li>
+      <li :class="{ 'is-current': !!result }" :aria-current="result ? 'step' : undefined"><b>2</b>解析预览</li>
+    </ol>
+
     <section v-if="!result" class="import-dropzone" :class="{ 'is-dragging': isDragging }"
       @dragover.prevent="isDragging = true"
       @dragleave.prevent="isDragging = false"
@@ -23,7 +28,6 @@
       <div class="import-summary">
         <div class="import-heading">
           <div>
-            <span class="eyebrow">解析预览</span>
             <h3>{{ result.resume.basic.name || result.sourceTitle }}</h3>
             <p>{{ result.resume.basic.title || '未识别求职意向' }}</p>
           </div>
@@ -36,7 +40,10 @@
           <span>技能 {{ result.resume.skills.reduce((count, skill) => count + skill.items.length, 0) }} 项</span>
         </div>
         <p v-if="result.resume.basic.email || result.resume.basic.phone || result.resume.basic.website" class="contact-preview">
-          {{ [result.resume.basic.email, result.resume.basic.phone, result.resume.basic.location, result.resume.basic.website].filter(Boolean).join(' · ') }}
+          <span
+            v-for="(item, index) in [result.resume.basic.email, result.resume.basic.phone, result.resume.basic.location, result.resume.basic.website].filter(Boolean)"
+            :key="index"
+          >{{ item }}</span>
         </p>
       </div>
 
@@ -69,7 +76,7 @@
       <p class="privacy-note">解析在浏览器本地完成。导入内容中的 HTML 不会执行，未知章节会保留为自定义模块。</p>
     </template>
 
-    <el-alert v-if="errorMessage" class="mt-3" type="error" :closable="false" show-icon :title="errorMessage" />
+    <el-alert v-if="errorMessage" class="import-error" type="error" :closable="false" show-icon :title="errorMessage" />
 
     <template #footer>
       <div class="app-dialog-actions markdown-import-actions">
@@ -153,44 +160,89 @@ function confirmImport() {
 </script>
 
 <style scoped>
-.import-dropzone {
-  min-height: 250px;
+/* Steps: keys on a sunken tray; the current step is the raised key. */
+.import-steps {
   display: flex;
+  gap: var(--space-3xs);
+  margin: 0 0 var(--space-lg);
+  padding: var(--space-3xs);
+  border-radius: var(--radius-input);
+  background: var(--color-sunken);
+  list-style: none;
+}
+
+.import-steps li {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-2xs) var(--space-sm);
+  border-radius: var(--radius-s);
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.import-steps b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.import-steps li.is-current {
+  background: var(--color-paper-3);
+  color: var(--color-ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+
+.import-steps li.is-current b {
+  color: var(--color-accent);
+}
+
+.import-dropzone {
+  display: flex;
+  min-height: 250px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--ui-space-3);
-  padding: var(--ui-space-8);
-  border: 1px dashed var(--ui-border);
-  border-radius: var(--ui-radius-lg);
+  gap: var(--space-sm);
+  padding: var(--space-xl);
+  border: var(--rule-hair) dashed var(--color-rule-2);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-2);
   text-align: center;
-  background: var(--ui-bg-subtle);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out);
 }
 
 .import-dropzone.is-dragging {
-  border-color: var(--ui-primary);
-  background: color-mix(in srgb, var(--ui-primary) 8%, white);
+  border-style: solid;
+  border-color: var(--color-accent);
+  background: var(--color-accent-wash);
 }
 
 .import-icon {
-  color: var(--ui-primary);
+  color: var(--color-accent);
 }
 
 .import-dropzone h3 {
-  margin: var(--ui-space-1) 0 0;
-  color: var(--ui-text-main);
-  font-size: var(--ui-font-lg);
+  margin: var(--space-2xs) 0 0;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
 }
 
 .import-dropzone p,
 .privacy-note {
-  color: var(--ui-text-muted);
-  font-size: var(--ui-font-sm);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
 }
 
 .import-dropzone p {
-  margin: 0 0 var(--ui-space-2);
+  max-width: 46ch;
+  margin: 0 0 var(--space-xs);
 }
 
 .visually-hidden {
@@ -205,91 +257,112 @@ function confirmImport() {
 
 .import-heading {
   display: flex;
-  justify-content: space-between;
   align-items: flex-start;
-  gap: var(--ui-space-3);
+  justify-content: space-between;
+  gap: var(--space-sm);
 }
 
 .import-heading h3 {
-  margin: var(--ui-space-1) 0;
-  font-size: var(--ui-font-xl);
+  margin: 0 0 var(--space-2xs);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.2;
 }
 
 .import-heading p {
   margin: 0;
-  color: var(--ui-text-secondary);
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
 }
 
-.eyebrow {
-  color: var(--ui-text-muted);
-  font-size: var(--ui-font-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
+/* Counts: one row of figures between hairlines. */
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--ui-space-2);
-  margin: var(--ui-space-4) 0 var(--ui-space-2);
+  margin: var(--space-md) 0 var(--space-xs);
+  border-top: var(--rule-hair) solid var(--color-rule);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
 }
 
 .summary-grid span {
-  padding: var(--ui-space-2);
-  border-radius: var(--ui-radius-sm);
-  background: var(--ui-bg-subtle);
-  color: var(--ui-text-secondary);
-  text-align: center;
-  font-size: var(--ui-font-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-left: var(--rule-hair) solid var(--color-rule);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-grid span:first-child {
+  padding-left: 0;
+  border-left: 0;
 }
 
 .contact-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs) var(--space-md);
+  margin: 0;
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
   overflow-wrap: anywhere;
-  color: var(--ui-text-secondary);
-  font-size: var(--ui-font-sm);
 }
 
 .import-options {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px;
-  gap: var(--ui-space-4);
-  margin: var(--ui-space-4) 0;
+  grid-template-columns: minmax(0, 1fr) 11rem;
+  gap: var(--space-md);
+  margin: var(--space-md) 0;
 }
 
 .import-options :deep(.el-form-item) {
-  margin-bottom: var(--ui-space-2);
+  margin-bottom: var(--space-xs);
 }
 
 .warning-list {
-  margin: var(--ui-space-2) 0 0;
-  padding-left: var(--ui-space-6);
+  margin: var(--space-xs) 0 0;
+  padding-left: var(--space-lg);
 }
 
 .warning-list li {
-  margin: var(--ui-space-1) 0;
+  margin: var(--space-2xs) 0;
 }
 
 .unknown-details {
-  margin-top: var(--ui-space-4);
-  padding: var(--ui-space-3);
-  border-radius: var(--ui-radius-md);
-  background: var(--ui-bg-subtle);
+  margin-top: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-top: var(--rule-hair) solid var(--color-rule);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
 }
 
 .unknown-details summary {
-  cursor: pointer;
-  color: var(--ui-text-main);
-  font-size: var(--ui-font-sm);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
   font-weight: 600;
+  cursor: pointer;
 }
 
 .unknown-details p {
-  margin: var(--ui-space-2) 0 0;
-  font-size: var(--ui-font-sm);
+  margin: var(--space-xs) 0 0;
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
 }
 
 .privacy-note {
-  margin: var(--ui-space-4) 0 0;
+  margin: var(--space-md) 0 0;
+}
+
+.import-error {
+  margin-top: var(--space-sm);
+}
+
+.markdown-import-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
 }
 
 @media (max-width: 768px) {
@@ -297,8 +370,13 @@ function confirmImport() {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .summary-grid span:nth-child(3) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
   .import-options {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }
 

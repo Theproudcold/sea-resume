@@ -41,7 +41,7 @@
               <el-option v-for="resume in resumes" :key="`b-${resume.id}`" :label="resumeOptionLabel(resume)" :value="resume.id" />
             </el-select>
           </label>
-          <el-button type="primary" :loading="comparing" :disabled="!beforeId || !afterId || beforeId === afterId" @click="compare">查看差异</el-button>
+          <el-button :type="compared && differences.length ? 'default' : 'primary'" :loading="comparing" :disabled="!beforeId || !afterId || beforeId === afterId" @click="compare">查看差异</el-button>
         </div>
         <p class="compare-hint">仅比较简历正文；模板、配色和排版设置不会计入差异。</p>
 
@@ -93,7 +93,10 @@
               <div class="version-heading"><span>版本 B</span><strong>{{ selectedTitle(afterId) }}</strong><small>{{ selectedUpdatedAt(afterId) }}</small></div>
             </div>
             <section v-for="group in groupedDifferences" :key="group.section" class="diff-section">
-              <h3>{{ group.section }} <span>{{ group.differences.length }} 处</span></h3>
+              <header class="diff-section-head">
+                <h3>{{ group.section }}</h3>
+                <span>{{ group.differences.length }} 处</span>
+              </header>
               <article v-for="(difference, index) in group.differences" :key="`${difference.item}-${difference.field}-${index}`" class="diff-row" :class="`is-${difference.type}`">
                 <div class="diff-description">
                   <span class="change-badge" :class="`badge-${difference.type}`">{{ changeTypeLabel(difference.type) }}</span>
@@ -104,11 +107,11 @@
                   </label>
                 </div>
                 <div class="diff-value">
-                  <span class="mobile-version-label">版本 A · {{ selectedTitle(beforeId) }}</span>
+                  <span class="mobile-version-label"><span>版本 A</span><span>{{ selectedTitle(beforeId) }}</span></span>
                   <p>{{ displayedValue(difference, 'before') }}</p>
                 </div>
                 <div class="diff-value">
-                  <span class="mobile-version-label">版本 B · {{ selectedTitle(afterId) }}</span>
+                  <span class="mobile-version-label"><span>版本 B</span><span>{{ selectedTitle(afterId) }}</span></span>
                   <p>{{ displayedValue(difference, 'after') }}</p>
                 </div>
               </article>
@@ -412,47 +415,47 @@ async function openVersionComparison(entry: JobVersionHistoryEntry) {
 .compare-hint { margin: 10px 0 18px; color: var(--ui-text-muted); font-size: var(--ui-font-sm); }
 .compare-error { margin-bottom: 12px; }
 .compare-results { display: flex; max-height: 62vh; flex-direction: column; gap: 14px; }
-.compare-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid var(--ui-border, #e5e7eb); border-radius: 10px; background: var(--ui-surface-soft, #f8fafc); }
-.compare-summary strong { color: var(--ui-text, #1f2937); font-size: 16px; }
-.compare-summary p { margin: 4px 0 0; color: var(--ui-text-muted, #6b7280); font-size: var(--ui-font-sm, 13px); }
+.compare-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid var(--color-rule); border-radius: var(--radius-card); background: var(--color-paper-2); }
+.compare-summary strong { color: var(--color-ink); font-size: 16px; }
+.compare-summary p { margin: 4px 0 0; color: var(--color-muted); font-size: var(--ui-font-sm, 13px); }
 .change-counts { display: flex; flex-wrap: wrap; gap: 8px; }
-.count-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 999px; font-size: 12px; }
-.count-chip.added, .badge-added { color: #166534; background: #dcfce7; }
-.count-chip.modified, .badge-modified { color: #1d4ed8; background: #dbeafe; }
-.count-chip.removed, .badge-removed { color: #b91c1c; background: #fee2e2; }
+.count-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: var(--radius-s); font-size: 12px; }
+.count-chip.added, .badge-added { color: var(--color-success); background: var(--color-success-wash); }
+.count-chip.modified, .badge-modified { color: var(--color-accent); background: var(--color-accent-wash); }
+.count-chip.removed, .badge-removed { color: var(--color-error); background: var(--color-error-wash); }
 .diff-filters { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(140px, auto) minmax(140px, auto); gap: 8px; }
-.diff-filters input, .diff-filters select { min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--ui-border, #d1d5db); border-radius: 7px; color: var(--ui-text, #1f2937); background: var(--ui-surface, #fff); font: inherit; }
-.diff-list { min-height: 0; overflow: auto; border-top: 1px solid var(--ui-border, #e5e7eb); }
+.diff-filters input, .diff-filters select { min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--color-rule-2); border-radius: var(--radius-input); color: var(--color-ink); background: var(--color-paper-3); font: inherit; }
+.diff-list { min-height: 0; overflow: auto; border-top: 1px solid var(--color-rule); }
 .version-headings, .diff-row { display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1fr) minmax(0, 1fr); }
-.version-headings { position: sticky; z-index: 1; top: 0; padding: 10px 0; border-bottom: 1px solid var(--ui-border, #e5e7eb); background: var(--ui-surface, #fff); }
+.version-headings { position: sticky; z-index: 1; top: 0; padding: 10px 0; border-bottom: 1px solid var(--color-rule); background: var(--color-paper-3); }
 .version-heading { display: grid; gap: 2px; min-width: 0; padding: 0 12px; }
-.version-heading > span, .version-heading small { color: var(--ui-text-muted, #6b7280); font-size: 12px; }
-.version-heading strong { overflow: hidden; color: var(--ui-text, #1f2937); text-overflow: ellipsis; white-space: nowrap; }
-.diff-section h3 { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 10px 8px; color: var(--ui-text, #1f2937); font-size: 14px; }
-.diff-section h3 span { color: var(--ui-text-muted, #6b7280); font-size: 12px; font-weight: 400; }
-.diff-row { border-top: 1px solid var(--ui-border, #edf0f4); }
+.version-heading > span, .version-heading small { color: var(--color-muted); font-size: 12px; }
+.version-heading strong { overflow: hidden; color: var(--color-ink); text-overflow: ellipsis; white-space: nowrap; }
+.diff-section h3 { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 10px 8px; color: var(--color-ink); font-size: 14px; }
+.diff-section h3 span { color: var(--color-muted); font-size: 12px; font-weight: 400; }
+.diff-row { border-top: 1px solid var(--color-rule); }
 .diff-description, .diff-value { min-width: 0; padding: 12px 10px; }
 .diff-description { display: flex; align-items: flex-start; gap: 8px; }
 .diff-description > div { display: grid; gap: 4px; min-width: 0; }
-.diff-description strong { overflow-wrap: anywhere; color: var(--ui-text, #1f2937); font-size: 13px; }
-.diff-description small, .mobile-version-label { color: var(--ui-text-muted, #6b7280); font-size: 12px; }
-.change-badge { flex: none; padding: 2px 6px; border-radius: 5px; font-size: 11px; line-height: 1.5; }
-.diff-value { border-left: 1px solid var(--ui-border, #edf0f4); }
-.diff-value p { margin: 0; overflow-wrap: anywhere; color: var(--ui-text, #374151); font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+.diff-description strong { overflow-wrap: anywhere; color: var(--color-ink); font-size: 13px; }
+.diff-description small, .mobile-version-label { color: var(--color-muted); font-size: 12px; }
+.change-badge { flex: none; padding: 2px 6px; border-radius: var(--radius-s); font-size: 11px; line-height: 1.5; }
+.diff-value { border-left: 1px solid var(--color-rule); }
+.diff-value p { margin: 0; overflow-wrap: anywhere; color: var(--color-ink-2); font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
 .mobile-version-label { display: none; margin-bottom: 5px; }
 .merge-actions { display: grid; grid-template-columns: auto minmax(120px, 1fr) minmax(180px, 260px) auto; align-items: center; gap: 10px; }
-.merge-actions > span { color: var(--ui-text-muted, #6b7280); font-size: 12px; }
-.merge-actions > input[type="text"] { min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--ui-border, #d1d5db); border-radius: 7px; color: var(--ui-text, #1f2937); background: var(--ui-surface, #fff); font: inherit; }
-.select-all-differences, .adopt-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--ui-text-muted, #6b7280); font-size: 12px; white-space: nowrap; }
-.select-all-differences input, .adopt-toggle input { accent-color: var(--ui-primary, #2563eb); }
+.merge-actions > span { color: var(--color-muted); font-size: 12px; }
+.merge-actions > input[type="text"] { min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--color-rule-2); border-radius: var(--radius-input); color: var(--color-ink); background: var(--color-paper-3); font: inherit; }
+.select-all-differences, .adopt-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--color-muted); font-size: 12px; white-space: nowrap; }
+.select-all-differences input, .adopt-toggle input { accent-color: var(--color-accent); }
 .adopt-toggle { margin-left: auto; }
-.merge-note, .history-intro { margin: 0; color: var(--ui-text-muted, #6b7280); font-size: var(--ui-font-sm, 13px); }
-.history-state { color: var(--ui-text-muted, #6b7280); }
+.merge-note, .history-intro { margin: 0; color: var(--color-muted); font-size: var(--ui-font-sm, 13px); }
+.history-state { color: var(--color-muted); }
 .history-list { display: grid; gap: 10px; }
-.history-entry { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid var(--ui-border, #e5e7eb); border-radius: 10px; background: var(--ui-surface, #fff); }
+.history-entry { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid var(--color-rule); border-radius: var(--radius-card); background: var(--color-paper-3); }
 .history-entry-main { display: grid; gap: 4px; min-width: 0; }
-.history-entry-main strong { color: var(--ui-text, #1f2937); }
-.history-entry-main span, .history-entry-main small, .history-entry-actions small { color: var(--ui-text-muted, #6b7280); font-size: 12px; }
+.history-entry-main strong { color: var(--color-ink); }
+.history-entry-main span, .history-entry-main small, .history-entry-actions small { color: var(--color-muted); font-size: 12px; }
 .history-entry-actions { display: flex; align-items: center; gap: 12px; flex: none; }
 @media (max-width: 700px) {
   .target-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
@@ -465,7 +468,7 @@ async function openVersionComparison(entry: JobVersionHistoryEntry) {
   .diff-filters input { grid-column: 1 / -1; }
   .version-headings, .diff-row { grid-template-columns: minmax(0, 1fr); }
   .version-headings { display: none; }
-  .diff-value { border-top: 1px dashed var(--ui-border, #edf0f4); border-left: 0; padding-top: 8px; }
+  .diff-value { border-top: 1px dashed var(--color-rule); border-left: 0; padding-top: 8px; }
   .mobile-version-label { display: block; }
   .diff-description { padding-bottom: 4px; }
   .merge-actions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

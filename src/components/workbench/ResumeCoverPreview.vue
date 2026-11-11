@@ -1,6 +1,6 @@
 <template>
   <div ref="previewRef" class="resume-cover-preview" aria-hidden="true">
-    <div class="resume-cover-preview__paper" :style="paperStyle">
+    <div class="resume-cover-preview__paper resume-document" :style="paperStyle">
       <component :is="templateComponent" :data="data" />
     </div>
   </div>
@@ -20,7 +20,7 @@ onMounted(() => {
   const updateScale = () => {
     const width = previewRef.value?.clientWidth || 0;
     if (!width) return;
-    coverScale.value = Math.min(0.65, Math.max(0.18, (width - 12) / 794));
+    coverScale.value = Math.min(0.65, Math.max(0.1, width / 794));
   };
 
   updateScale();
@@ -50,7 +50,7 @@ const paperStyle = computed(() => ({
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: var(--ui-bg-subtle);
+  background: var(--color-paper-2);
   pointer-events: none;
 }
 
@@ -64,8 +64,7 @@ const paperStyle = computed(() => ({
   overflow: hidden;
   transform: scale(var(--resume-cover-scale));
   transform-origin: top center;
-  background: #fff;
-  box-shadow: 0 1px 5px rgb(15 23 42 / 14%);
+  background: var(--resume-paper);
 }
 
 </style>

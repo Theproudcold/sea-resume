@@ -24,14 +24,14 @@ defineProps<{ presetId: AiProviderPresetId }>();
   width: 40px;
   height: 40px;
   place-items: center;
-  border: 1px solid #e5e7eb;
-  border-radius: 11px;
-  background: #fff;
-  color: #536276;
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  color: var(--color-ink-2);
 }
 .provider-logo img { display: block; width: 25px; height: 25px; object-fit: contain; }
-.logo-deepseek { background: #f2f7ff; }
+.logo-deepseek { background: var(--color-accent-wash); }
 .logo-qwen { border: 0; background: transparent; }
 .logo-qwen img { width: 36px; height: 36px; }
-.logo-custom { background: #f3f6fa; }
+.logo-custom { background: var(--color-paper-2); }
 </style>

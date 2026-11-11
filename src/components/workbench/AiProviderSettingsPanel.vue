@@ -466,12 +466,12 @@ async function importConfigFile(event: Event) {
 .local-config-actions { display: flex; align-items: center; gap: 4px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 .add-first-provider-card { display: flex; width: 100%; min-height: 190px; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; border: 1px dashed var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); color: var(--ui-text-main); cursor: pointer; transition: border-color .16s ease, background-color .16s ease, transform .16s ease; }
-.add-first-provider-card:hover { border-color: var(--ui-primary); background: color-mix(in srgb, var(--ui-primary) 3%, white); transform: translateY(-1px); }
+.add-first-provider-card:hover { border-color: var(--ui-primary); background: var(--color-accent-wash); transform: translateY(-1px); }
 .add-first-provider-card:focus-visible { outline: 2px solid var(--ui-primary); outline-offset: 3px; }
-.first-provider-plus { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--ui-primary) 9%, white); color: var(--ui-primary); font-size: 32px; font-weight: 300; line-height: 1; }
+.first-provider-plus { display: grid; width: 48px; height: 48px; place-items: center; border-radius: var(--radius-card); background: var(--color-accent-wash); color: var(--ui-primary); font-size: 32px; font-weight: 300; line-height: 1; }
 .add-first-provider-card strong { color: var(--ui-text-main); font-size: var(--ui-font-md); font-weight: 650; }
 .empty-enabled-alert { margin-top: -2px; }
-.detail-eyebrow { color: var(--ui-primary); font-size: var(--ui-font-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.detail-eyebrow { color: var(--ui-primary); font-size: var(--ui-font-xs); font-weight: 600; }
 .provider-form :deep(.el-form-item) { min-width: 0; margin-bottom: 12px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .form-grid :deep(.el-form-item) { min-width: 0; }
@@ -486,7 +486,7 @@ async function importConfigFile(event: Event) {
 .add-dialog-intro { margin: 0 0 14px; color: var(--ui-text-secondary); font-size: var(--ui-font-sm); }
 .provider-catalog { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .catalog-card { display: flex; min-width: 0; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); background: var(--ui-bg-surface); color: var(--ui-text-main); text-align: left; cursor: pointer; transition: border-color .16s ease, background-color .16s ease; }
-.catalog-card:hover { border-color: var(--ui-primary); background: color-mix(in srgb, var(--ui-primary) 4%, white); }
+.catalog-card:hover { border-color: var(--ui-primary); background: var(--color-accent-wash); }
 .catalog-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
 .catalog-copy strong { font-size: var(--ui-font-sm); }
 .catalog-copy small { color: var(--ui-text-muted); font-size: var(--ui-font-xs); }

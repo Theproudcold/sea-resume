@@ -1,5 +1,5 @@
 <template>
-  <el-card class="resume-card" :class="{ 'is-selected': selected }" shadow="hover">
+  <article class="resume-card" :class="{ 'is-selected': selected }">
     <div
       class="card-content"
       role="button"
@@ -47,7 +47,7 @@
               <el-icon><CopyDocument /></el-icon>
               复制
             </el-dropdown-item>
-            <el-dropdown-item command="delete" divided>
+            <el-dropdown-item command="delete" divided class="danger-menu-item">
               <el-icon><Delete /></el-icon>
               删除
             </el-dropdown-item>
@@ -55,7 +55,7 @@
         </template>
       </el-dropdown>
     </div>
-  </el-card>
+  </article>
 </template>
 
 <script setup lang="ts">
@@ -155,38 +155,58 @@ const handleCommand = (command: string) => {
 <style scoped>
 .resume-card {
   position: relative;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  align-items: center;
+  column-gap: var(--space-lg);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  background: transparent;
+  transition: background-color var(--dur-micro) var(--ease-out);
 }
 
 @media (hover: hover) {
   .resume-card:hover {
-    transform: translateY(-3px);
+    background: var(--color-paper-3);
+  }
+
+  .resume-card:hover .thumbnail {
+    border-color: var(--color-accent);
   }
 }
 
 .resume-card.is-selected {
-  border-color: var(--el-color-primary);
-  box-shadow: 0 0 0 2px var(--el-color-primary-light-7);
+  background: var(--color-accent-wash);
 }
 
 .card-content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--ui-space-3);
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-lg);
+  min-width: 0;
+  padding: var(--space-md) 0 var(--space-md) var(--space-md);
+  cursor: pointer;
 }
 
 .card-content:focus-visible {
-  border-radius: var(--ui-radius-md);
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.card-content:active .title {
+  color: var(--color-accent);
 }
 
 .thumbnail {
   position: relative;
-  width: 100%;
+  width: 96px;
   aspect-ratio: 210 / 297;
-  background: var(--ui-bg-subtle);
-  border-radius: var(--ui-radius-md);
   overflow: hidden;
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-s);
+  background: var(--resume-paper);
+  box-shadow: var(--shadow-card);
+  transition: border-color var(--dur-micro) var(--ease-out);
 }
 
 .placeholder {
@@ -194,49 +214,86 @@ const handleCommand = (command: string) => {
   height: 100%;
   align-items: center;
   justify-content: center;
-  padding: var(--ui-space-4);
-  color: var(--ui-text-secondary);
-  font-size: var(--ui-font-sm);
+  padding: var(--space-xs);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
   text-align: center;
 }
 
 .info {
-  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 10rem 8rem;
+  align-items: center;
+  gap: var(--space-lg);
+  min-width: 0;
 }
 
 .title {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 var(--ui-space-2) 0;
+  max-width: none;
+  margin: 0;
   overflow: hidden;
+  color: var(--color-ink);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .meta {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--ui-space-2);
-  font-size: 13px;
-  color: var(--ui-text-secondary);
+  display: contents;
+}
+
+.template,
+.date {
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.date {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .actions {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  display: flex;
+  justify-content: center;
 }
 
-.resume-card:hover .actions,
-.resume-card:focus-within .actions {
-  opacity: 1;
+.actions :deep(.el-button) {
+  width: 44px;
+  height: 44px;
 }
 
-@media (hover: none) {
-  .actions {
-    opacity: 1;
+@media (max-width: 768px) {
+  .card-content {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: var(--space-md);
+    padding-left: 0;
+  }
+
+  .thumbnail {
+    width: 64px;
+  }
+
+  .info {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2xs);
+  }
+
+  .title {
+    font-size: var(--text-md);
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2xs) var(--space-md);
+  }
+
+  .date {
+    text-align: left;
   }
 }
 </style>

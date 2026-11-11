@@ -1,8 +1,8 @@
 <template>
   <div class="workbench-view">
-    <AppHeader title="简历工作台" subtitle="Sea Resume · 简历管理">
+    <AppHeader title="简历工作台" subtitle="Sea Resume 简历管理">
       <template #actions>
-        <el-button type="primary" plain class="ai-settings-trigger" @click="openSettings('ai')">AI 模型配置</el-button>
+        <el-button class="ai-settings-trigger" @click="openSettings('ai')">AI 模型配置</el-button>
         <el-button @click="router.push('/interviews')">模拟面试与记录</el-button>
         <el-dropdown @command="handleManageCommand">
           <el-button>管理<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
@@ -35,32 +35,49 @@
         <el-button type="primary" size="small" @click="showFullBackupManager = true">立即备份</el-button>
         <el-button text size="small" aria-label="关闭备份提醒" @click="backupReminderDismissed = true">稍后</el-button>
       </div>
-        <div v-if="loading" class="loading-state">
-          <el-icon class="is-loading" :size="48"><Loading /></el-icon>
-          <p>加载中...</p>
-        </div>
-
-        <el-empty v-else-if="!hasResumes" description="还没有简历，浏览模板或导入现有内容开始。">
-          <div class="empty-actions">
-            <el-button type="primary" :icon="Plus" @click="goToTemplates">浏览模板</el-button>
-            <el-button :icon="Upload" @click="showMarkdownImport = true">导入 Markdown</el-button>
-            <el-button :icon="Document" @click="showPdfImport = true">AI 导入 PDF</el-button>
+        <div v-if="loading" class="loading-state" role="status" aria-label="加载中…">
+          <div v-for="row in 3" :key="row" class="skeleton-row" aria-hidden="true">
+            <span class="skeleton-sheet"></span>
+            <span class="skeleton-line"></span>
           </div>
-        </el-empty>
-
-        <div v-else class="resume-grid">
-          <ResumeCard
-            v-for="resume in resumeList"
-            :key="resume.id"
-            :resume="resume"
-            @click="handleCardClick(resume.id)"
-            @edit="handleEdit(resume.id)"
-            @interview="router.push({ path: '/interview/new', query: { resumeId: resume.id } })"
-            @rename="handleRename(resume)"
-            @duplicate="handleDuplicate(resume.id)"
-            @delete="handleDelete(resume)"
-          />
         </div>
+
+        <section v-else-if="!hasResumes" class="empty-board" aria-labelledby="empty-board-title">
+          <div class="empty-sheet" aria-hidden="true"></div>
+          <div class="empty-copy">
+            <h2 id="empty-board-title">还没有简历，浏览模板或导入现有内容开始。</h2>
+            <div class="empty-actions">
+              <el-button type="primary" :icon="Plus" @click="goToTemplates">浏览模板</el-button>
+              <el-button :icon="Upload" @click="showMarkdownImport = true">导入 Markdown</el-button>
+              <el-button :icon="Document" @click="showPdfImport = true">AI 导入 PDF</el-button>
+            </div>
+          </div>
+        </section>
+
+        <section v-else class="resume-board" aria-labelledby="resume-board-title">
+          <header class="board-head">
+            <h2 id="resume-board-title">我的简历</h2>
+            <span class="board-count"><strong>{{ resumeList.length }}</strong> 份</span>
+          </header>
+          <div class="board-columns" aria-hidden="true">
+            <span>简历</span>
+            <span>模板</span>
+            <span>最近编辑</span>
+          </div>
+          <div class="resume-grid">
+            <ResumeCard
+              v-for="resume in resumeList"
+              :key="resume.id"
+              :resume="resume"
+              @click="handleCardClick(resume.id)"
+              @edit="handleEdit(resume.id)"
+              @interview="router.push({ path: '/interview/new', query: { resumeId: resume.id } })"
+              @rename="handleRename(resume)"
+              @duplicate="handleDuplicate(resume.id)"
+              @delete="handleDelete(resume)"
+            />
+          </div>
+        </section>
     </div>
 
 
@@ -100,7 +117,6 @@
         <main class="settings-main">
           <section v-if="settingsSection === 'ai'" class="settings-page">
             <header class="settings-page-heading">
-              <span class="settings-eyebrow">AI 助手 · PDF 导入</span>
               <h2>统一配置模型服务</h2>
               <p>只需设置一次，编辑器助手和 PDF 简历解析会共用服务商、模型与本次会话密钥。</p>
             </header>
@@ -109,7 +125,6 @@
 
           <section v-else-if="settingsSection === 'storage'" class="settings-page">
             <header class="settings-page-heading">
-              <span class="settings-eyebrow">数据位置</span>
               <h2>存储位置</h2>
               <p>选择简历保存在当前浏览器，或你授权的本地目录。</p>
             </header>
@@ -128,7 +143,6 @@
 
           <section v-else-if="settingsSection === 'backup'" class="settings-page">
             <header class="settings-page-heading">
-              <span class="settings-eyebrow">数据安全</span>
               <h2>备份与恢复</h2>
               <p>备份用于迁移或恢复；导入会创建副本，不会覆盖已有简历。</p>
             </header>
@@ -154,7 +168,6 @@
 
           <section v-else class="settings-page">
             <header class="settings-page-heading">
-              <span class="settings-eyebrow">应用信息</span>
               <h2>关于 Sea Resume</h2>
               <p>简洁、灵活的简历制作工具。</p>
             </header>
@@ -180,7 +193,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowDown, Plus, Loading, Upload, Delete, Document } from '@element-plus/icons-vue';
+import { ArrowDown, Plus, Upload, Delete, Document } from '@element-plus/icons-vue';
 import AppHeader from '@/components/common/AppHeader.vue';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { useStorageStore } from '@/stores/storage';
@@ -469,83 +482,400 @@ const handleSwitchToBrowserStorage = async () => {
   width: 100%;
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--ui-bg-page);
+  background: var(--color-paper);
 }
 
 .workbench-content {
   width: 100%;
   max-width: var(--ui-content-max-width);
   margin: 0 auto;
-  padding: var(--ui-space-8) var(--ui-page-gutter);
+  padding: var(--space-xl) var(--ui-page-gutter) var(--space-2xl);
+}
+
+/* The board: one row per resume, a 2px ink head rule. */
+.board-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding-bottom: var(--space-sm);
+}
+
+.board-head h2,
+.empty-copy h2,
+.settings-page-heading h2 {
+  text-wrap: balance;
+}
+
+.board-head h2 {
+  font-size: var(--text-2xl);
+  font-weight: 600;
+}
+
+.board-count {
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.board-count strong {
+  margin-right: var(--space-2xs);
+  color: var(--color-ink);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.board-columns {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 10rem 8rem 48px;
+  column-gap: var(--space-lg);
+  padding: var(--space-xs) 0 var(--space-xs) var(--space-md);
+  border-top: var(--rule-bar) solid var(--color-rule);
+  border-bottom: var(--rule-bar) solid var(--color-rule);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.board-columns span:first-child {
+  grid-column: 1 / span 2;
+}
+
+.board-columns span:last-child {
+  text-align: right;
+}
+
+.resume-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Loading: rows in the shape of what is coming. */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  border-top: var(--rule-bar) solid var(--color-rule);
+}
+
+.skeleton-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-md);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+}
+
+.skeleton-sheet {
+  aspect-ratio: 210 / 297;
+  background: var(--color-paper-2);
+}
+
+.skeleton-line {
+  width: min(320px, 60%);
+  height: var(--space-md);
+  background: var(--color-paper-2);
+}
+
+/* Empty: what is empty and the actions that fill it. */
+.empty-board {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-xl);
+  padding: var(--space-xl) 0;
+  border-top: var(--rule-bar) solid var(--color-rule);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+}
+
+.empty-sheet {
+  aspect-ratio: 210 / 297;
+  border: var(--rule-bar) dashed var(--color-muted);
+  background: var(--color-paper-3);
+}
+
+.empty-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0;
+}
+
+.empty-copy h2 {
+  max-width: 24ch;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 .empty-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--ui-space-3);
+  gap: var(--space-xs);
 }
 
-.resume-grid {
+.empty-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.backup-reminder {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-md);
+  margin-bottom: var(--space-xl);
+  padding: var(--space-sm) var(--space-md);
+  border: var(--rule-hair) solid color-mix(in oklab, var(--color-warning) 40%, transparent);
+  border-radius: var(--radius-card);
+  background: var(--color-warning-wash);
+  color: var(--color-ink);
+}
+
+.backup-reminder span {
+  flex: 1 1 240px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.backup-reminder :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+/* Settings: a rail of square cells beside the page. */
+.settings-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 320px));
-  justify-content: start;
-  gap: var(--ui-space-6);
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--space-lg);
+  min-height: 400px;
 }
 
-.loading-state {
-  text-align: center;
-  padding: var(--ui-space-8) var(--ui-space-4);
-  color: var(--ui-text-secondary);
+.settings-sidebar {
+  display: flex;
+  flex-direction: column;
+  border-right: var(--rule-bar) solid var(--color-rule);
 }
 
-.loading-state p {
-  margin-top: var(--ui-space-4);
-  font-size: var(--ui-font-md);
+.settings-nav-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  border: 0;
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+  background: transparent;
+  color: var(--color-ink);
+  text-align: left;
+  border-radius: var(--radius-input);
+  cursor: pointer;
+  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
 }
 
-.ai-settings-trigger { font-weight: 650; }
-.settings-layout { display: grid; grid-template-columns: 205px minmax(0, 1fr); gap: 22px; min-height: 400px; }
-.settings-sidebar { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; border-right: 1px solid var(--ui-border); }
-.settings-nav-item { display: flex; flex-direction: column; gap: 4px; margin-right: 14px; padding: 12px 14px; border: 0; border-radius: var(--ui-radius-md); background: transparent; color: var(--ui-text-main); text-align: left; cursor: pointer; transition: background-color .16s ease, color .16s ease; }
-.settings-nav-item strong { font-size: var(--ui-font-md); font-weight: 650; }
-.settings-nav-item span { color: var(--ui-text-muted); font-size: var(--ui-font-xs); }
-.settings-nav-item:hover { background: var(--ui-bg-hover); }
-.settings-nav-item.is-active { background: color-mix(in srgb, var(--ui-primary) 9%, white); color: var(--ui-primary); }
-.settings-nav-item.is-active span { color: color-mix(in srgb, var(--ui-primary) 72%, var(--ui-text-muted)); }
-.settings-main { min-width: 0; max-height: min(68vh, 680px); overflow-y: auto; padding: 2px 2px 4px 0; }
-.settings-page { display: flex; flex-direction: column; gap: 20px; }
-.settings-page-heading { margin-bottom: 2px; }
-.settings-eyebrow { color: var(--ui-primary); font-size: var(--ui-font-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.settings-page-heading h2 { margin: 5px 0 0; color: var(--ui-text-main); font-size: 21px; line-height: 1.3; }
-.settings-page-heading p { max-width: 620px; margin: 7px 0 0; color: var(--ui-text-secondary); font-size: var(--ui-font-sm); line-height: var(--ui-line-height); }
-.settings-section { display: flex; flex-direction: column; gap: var(--ui-space-4); padding: 18px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); }
-.settings-section h3 { margin: 0; color: var(--ui-text-main); font-size: var(--ui-font-md); font-weight: 650; }
-.storage-status { margin: 0; color: var(--ui-text-secondary); overflow-wrap: anywhere; }
-.settings-help { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-font-sm); line-height: var(--ui-line-height); }
-.settings-alert { margin: 0; }
-.settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ui-space-2); }
-.backup-actions { align-items: center; }
-.backup-select { flex: 1 1 220px; min-width: min(220px, 100%); max-width: 100%; }
-.about-card { display: flex; flex-direction: column; gap: 5px; padding: 20px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); }
-.about-card strong { font-size: var(--ui-font-lg); }
-.about-card span { color: var(--ui-text-muted); font-size: var(--ui-font-sm); }
+.settings-nav-item strong {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
 
-.backup-reminder { display: flex; align-items: center; flex-wrap: wrap; gap: var(--ui-space-2); margin-bottom: var(--ui-space-6); padding: var(--ui-space-3) var(--ui-space-4); border: 1px solid color-mix(in srgb, var(--ui-warning) 35%, white); border-radius: var(--ui-radius-md); background: color-mix(in srgb, var(--ui-warning) 7%, white); color: var(--ui-text-main); }
-.backup-reminder span { flex: 1 1 240px; font-size: var(--ui-font-sm); }
+.settings-nav-item span {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.settings-nav-item:hover {
+  background: var(--color-paper-2);
+}
+
+.settings-nav-item:active,
+.settings-nav-item.is-active {
+  background: var(--color-accent-wash);
+  color: var(--color-accent);
+}
+
+.settings-nav-item:active span,
+.settings-nav-item.is-active span {
+  color: var(--color-accent);
+}
+
+.settings-nav-item:focus-visible {
+  outline-offset: -2px;
+}
+
+.settings-main {
+  min-width: 0;
+  max-height: min(68vh, 680px);
+  overflow-y: auto;
+  padding: 0 var(--space-2xs) var(--space-2xs) 0;
+}
+
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.settings-page-heading h2 {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.settings-page-heading p {
+  max-width: 62ch;
+  margin: var(--space-xs) 0 0;
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  line-height: var(--ui-line-height);
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) 0 0;
+  border-top: var(--rule-bar) solid var(--color-rule);
+}
+
+.settings-section h3 {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.storage-status {
+  margin: 0;
+  color: var(--color-ink-2);
+  overflow-wrap: anywhere;
+}
+
+.storage-status strong {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.settings-help {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  line-height: var(--ui-line-height);
+}
+
+.settings-alert {
+  margin: 0;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.settings-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.backup-select {
+  flex: 1 1 220px;
+  min-width: min(220px, 100%);
+  max-width: 100%;
+}
+
+.about-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-md);
+  padding: var(--space-md) 0;
+  border-top: var(--rule-bar) solid var(--color-rule);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+}
+
+.about-card strong {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.about-card span {
+  color: var(--color-ink-2);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 768px) {
-  .workbench-content { padding: var(--ui-space-6) var(--ui-page-gutter); }
-  .resume-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: var(--ui-space-4); }
-  .settings-layout { grid-template-columns: 1fr; gap: 14px; }
-  .settings-sidebar { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--ui-border); padding: 0 0 8px; }
-  .settings-nav-item { flex: 0 0 auto; min-width: 128px; margin: 0; padding: 10px 12px; }
-  .settings-main { max-height: min(64vh, 600px); padding-right: 0; }
-  .settings-actions, .empty-actions { align-items: stretch; flex-direction: column; }
-  .empty-actions :deep(.el-button), .settings-actions :deep(.el-button), .backup-select { width: 100%; }
+  .workbench-content {
+    padding: var(--space-lg) var(--ui-page-gutter);
+  }
+
+  .board-columns {
+    display: none;
+  }
+
+  .resume-grid {
+    border-top: var(--rule-bar) solid var(--color-rule);
+  }
+
+  .empty-board {
+    grid-template-columns: 88px minmax(0, 1fr);
+    gap: var(--space-md);
+  }
+
+  .settings-layout {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+
+  .settings-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: var(--rule-bar) solid var(--color-rule);
+  }
+
+  .settings-nav-item {
+    flex: 0 0 auto;
+    min-width: 128px;
+    border-bottom: 0;
+    border-right: var(--rule-hair) solid var(--color-rule);
+  }
+
+  .settings-main {
+    max-height: min(64vh, 600px);
+    padding-right: 0;
+  }
+
+  .settings-actions,
+  .empty-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .empty-actions :deep(.el-button),
+  .settings-actions :deep(.el-button),
+  .backup-select {
+    width: 100%;
+  }
 }
 
 @media (max-width: 420px) {
-  .settings-nav-item span { display: none; }
-  .settings-nav-item { min-width: 0; }
+  .settings-nav-item span {
+    display: none;
+  }
+
+  .settings-nav-item {
+    min-width: 0;
+  }
+
+  .empty-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .empty-sheet {
+    display: none;
+  }
 }
 </style>
