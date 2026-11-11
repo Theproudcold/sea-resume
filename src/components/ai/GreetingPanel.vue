@@ -87,7 +87,7 @@ async function copy(index: number) {
 .provider, .actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .provider { justify-content: space-between; }
 .provider span { overflow-wrap: anywhere; }
-textarea { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid var(--ui-border, #dcdfe6); border-radius: var(--ui-radius-md, 8px); background: var(--ui-bg, #fff); color: var(--ui-text-primary); font: inherit; line-height: 1.7; resize: vertical; }
+textarea { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid var(--color-rule-2); border-radius: var(--radius-input); background: var(--color-paper-3); color: var(--color-ink); font: inherit; line-height: 1.7; resize: vertical; }
 textarea:focus { outline: 2px solid var(--el-color-primary); outline-offset: 1px; }
 .consent { display: flex; align-items: flex-start; gap: 8px; line-height: 1.6; }
 .greeting-result { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }

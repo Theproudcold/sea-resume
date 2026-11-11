@@ -12,13 +12,98 @@ withDefaults(defineProps<{ steps: readonly string[]; current: number; complete?:
 </template>
 
 <style scoped>
-.workflow { display: grid; grid-template-columns: repeat(var(--step-count), minmax(0, 1fr)); padding: 0; margin: 0; list-style: none; gap: var(--ui-space-2); }
-.workflow li { position: relative; display: flex; gap: var(--ui-space-2); align-items: center; min-width: 0; color: var(--ui-text-muted); font-size: var(--ui-font-xs); line-height: var(--ui-line-height); }
-.workflow__marker { display: grid; place-items: center; flex: 0 0 24px; height: 24px; border: 1px solid var(--ui-border); border-radius: 50%; background: var(--ui-bg-surface); font-weight: 600; }
-.workflow__label { overflow-wrap: anywhere; }
-.is-current .workflow__marker { background: var(--ui-primary); border-color: var(--ui-primary); color: var(--ui-bg-surface); }
-.workflow .is-current { color: var(--ui-text-main); font-weight: 600; }
-.workflow .is-done { color: var(--ui-primary); }
-.is-done .workflow__marker { border-color: color-mix(in srgb, var(--ui-primary) 20%, var(--ui-border)); background: color-mix(in srgb, var(--ui-primary) 7%, var(--ui-bg-surface)); }
-@media (max-width: 768px) { .workflow li { flex-direction: column; align-items: flex-start; gap: var(--ui-space-1); } }
+/* Steps: small numbered markers joined by a hairline; cobalt for the current step, a wash for done. */
+.workflow {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow li {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.workflow li:last-child {
+  flex: 0 0 auto;
+}
+
+.workflow li:not(:last-child)::after {
+  content: "";
+  flex: 1 1 var(--space-md);
+  min-width: var(--space-xs);
+  height: var(--rule-hair);
+  margin-right: var(--space-xs);
+  background: var(--color-rule-2);
+}
+
+.workflow li.is-done:not(:last-child)::after {
+  background: var(--color-accent);
+}
+
+.workflow__marker {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: var(--rule-hair) solid var(--color-rule-2);
+  border-radius: var(--radius-s);
+  background: var(--color-paper-3);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.workflow__label {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.workflow .is-done {
+  color: var(--color-ink-2);
+}
+
+.is-done .workflow__marker {
+  border-color: transparent;
+  background: var(--color-accent-wash);
+  color: var(--color-accent);
+}
+
+.workflow .is-current {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.is-current .workflow__marker {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+@media (max-width: 768px) {
+  .workflow li {
+    flex-wrap: wrap;
+  }
+
+  .workflow__label {
+    flex: 1 1 100%;
+    order: 2;
+  }
+
+  .workflow li:not(:last-child)::after {
+    order: 1;
+  }
+}
 </style>

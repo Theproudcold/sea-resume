@@ -169,19 +169,19 @@ function currentValue(operation: ResumeAiOperation) {
 .external-ai-panel { display: flex; flex-direction: column; gap: 20px; }
 .external-ai-panel p { line-height: 1.65; margin: 8px 0; }
 .external-ai-panel h3 { margin: 0 0 8px; font-size: 16px; }
-.external-ai-panel section { border-top: 1px solid var(--ui-border-color, #e5e7eb); padding-top: 18px; }
+.external-ai-panel section { border-top: 1px solid var(--color-rule); padding-top: 18px; }
 .external-ai-panel :deep(.el-checkbox) { white-space: normal; height: auto; align-items: flex-start; }
 .session-heading, .action-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .session-heading { justify-content: space-between; }
 .action-row { margin-top: 12px; }
 .action-row :deep(.el-button + .el-button) { margin-left: 0; }
-pre { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--ui-bg-subtle, #f4f5f7); border-radius: 8px; font-size: 12px; }
-.proposal-card { border: 1px solid var(--ui-border-color, #e5e7eb); border-radius: 10px; padding: 14px; margin-top: 12px; }
+pre { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--color-paper-2); border-radius: var(--radius-input); font-size: 12px; }
+.proposal-card { border: 1px solid var(--color-rule); border-radius: var(--radius-card); padding: 14px; margin-top: 12px; }
 .proposal-card small { overflow-wrap: anywhere; color: var(--ui-text-secondary); }
 .proposal-card ol { padding-left: 20px; }
 .proposal-card li { margin: 12px 0; overflow-wrap: anywhere; white-space: pre-wrap; }
-.diff-before { padding: 8px; background: #fff1f2; color: #881337; }
-.diff-after { padding: 8px; background: #ecfdf5; color: #065f46; }
-.error-text { color: var(--ui-danger, #b91c1c); }
+.diff-before { padding: 8px; border-radius: var(--radius-s); background: var(--color-error-wash); color: var(--color-error); }
+.diff-after { padding: 8px; border-radius: var(--radius-s); background: var(--color-success-wash); color: var(--color-success); }
+.error-text { color: var(--color-error); }
 .session-note { font-size: 12px; color: var(--ui-text-secondary); }
 </style>
