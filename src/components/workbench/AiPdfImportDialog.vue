@@ -318,8 +318,10 @@ async function loadSource() {
 }
 
 async function toggleMode() {
-  mode.value = mode.value === 'text' ? 'vision' : 'text';
+  const previous = mode.value;
+  mode.value = previous === 'text' ? 'vision' : 'text';
   await loadSource();
+  if (errorMessage.value) mode.value = previous;
 }
 
 async function readFile(file?: File) {

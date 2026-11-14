@@ -286,4 +286,19 @@ describe('AiPdfImportDialog', () => {
     expect(wrapper.findAll('.page-thumbnails img')).toHaveLength(2);
     expect(wrapper.text()).not.toContain('未能从 PDF 中提取到可选择文本');
   });
+
+  it('keeps the file picker available when vision rendering also fails', async () => {
+    mocks.extractPdfText.mockRejectedValue(new Error('未能从 PDF 中提取到可选择文本。'));
+    mocks.renderPdfPagesToImages.mockRejectedValue(new Error('页面渲染失败。'));
+    const wrapper = createWrapper();
+    await extractPdf(wrapper);
+
+    const fallback = wrapper.findAll('button').find((button) => button.text().includes('改用视觉识别'));
+    await fallback?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('页面渲染失败');
+    expect(wrapper.text()).toContain('改用视觉识别');
+    expect(wrapper.find('input[type="file"]').exists()).toBe(true);
+  });
 });
