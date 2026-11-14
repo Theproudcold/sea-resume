@@ -53,7 +53,7 @@
             <MonthRangeField
               :start="project.startDate"
               :end="project.endDate === 'present' ? '' : project.endDate"
-              :present="isPresentEnd[index]"
+              :present="isPresentEnd[index] ?? false"
               @update:start="(value) => updateItem(project.id, { startDate: value })"
               @update:end="(value) => updateItem(project.id, { endDate: value })"
               @update:present="(value) => handlePresentChange(project.id, value)"

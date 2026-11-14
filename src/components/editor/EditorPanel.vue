@@ -300,6 +300,7 @@ const moveSection = (id: string, delta: number) => {
   const target = index + delta;
   if (index < 0 || target < 0 || target >= order.length) return;
   const [item] = order.splice(index, 1);
+  if (!item) return;
   order.splice(target, 0, item);
   resumeStore.updateSectionOrder(order);
 };

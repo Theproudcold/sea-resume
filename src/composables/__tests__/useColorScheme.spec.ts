@@ -12,7 +12,7 @@ describe('color scheme preference', () => {
     document.documentElement.classList.remove('dark', 'scheme-rippling');
     delete document.documentElement.dataset.mode;
     document.documentElement.style.removeProperty('--scheme-ripple-x');
-    delete (document as Document & { startViewTransition?: unknown }).startViewTransition;
+    Reflect.deleteProperty(document, 'startViewTransition');
     vi.unstubAllGlobals();
   });
 
