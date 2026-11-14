@@ -22,6 +22,10 @@
       </div>
       <div class="template-card__actions">
         <el-button @click="$emit('preview')">预览并选择</el-button>
+        <template v-if="template.source === 'custom'">
+          <el-button @click="$emit('rename')">重命名</el-button>
+          <el-button @click="$emit('remove')">删除</el-button>
+        </template>
       </div>
     </div>
   </article>
@@ -38,6 +42,8 @@ defineProps<{
 
 defineEmits<{
   preview: [];
+  rename: [];
+  remove: [];
 }>();
 </script>
 
@@ -134,6 +140,8 @@ defineEmits<{
 
 .template-card__actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2xs);
   margin-top: auto;
   padding-top: var(--space-2xs);
 }

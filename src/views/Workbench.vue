@@ -29,6 +29,10 @@
 
     <!-- 主内容 -->
     <div class="workbench-content">
+      <div v-if="storageStore.initializationWarning" class="backup-reminder" role="alert">
+        <span>{{ storageStore.initializationWarning }}</span>
+        <el-button v-if="storageStore.hasFileSystemConfig" type="primary" size="small" @click="handleReauthorizeStorageDirectory">重新授权本地目录</el-button>
+      </div>
       <div v-if="!loading && hasResumes && backupReminderDue && !backupReminderDismissed" class="backup-reminder" role="status">
         <span v-if="storageStore.currentType === 'file_system'">保存到本地目录并不等于备份：目录误删或磁盘故障仍可能导致数据丢失，授权失效时也可能暂时无法访问。建议定期导出全量 JSON，并保存到其他安全位置。</span>
         <span v-else>简历保存在当前浏览器，清理浏览器数据可能导致丢失。建议定期导出全量 JSON，并保存到安全位置。</span>
@@ -59,17 +63,33 @@
             <h2 id="resume-board-title">我的简历</h2>
             <span class="board-count"><strong>{{ resumeList.length }}</strong> 份</span>
           </header>
-          <div class="board-columns" aria-hidden="true">
-            <span>简历</span>
-            <span>模板</span>
-            <span>最近编辑</span>
+          <div v-if="resumeList.length > 8" class="board-tools">
+            <el-input v-model="resumeQuery" clearable placeholder="按名称筛选" aria-label="按名称筛选简历" />
+            <el-select v-model="resumeSort" aria-label="简历排序">
+              <el-option label="最近编辑" value="recent" />
+              <el-option label="标题" value="title" />
+            </el-select>
           </div>
-          <div class="resume-grid">
+          <div class="board-columns" role="row">
+            <span role="columnheader">简历</span>
+            <span role="columnheader">模板</span>
+            <span role="columnheader">最近编辑</span>
+          </div>
+          <p v-if="!visibleResumes.length" class="board-empty-filter">没有名称包含「{{ resumeQuery.trim() }}」的简历。</p>
+          <div
+            v-else
+            class="resume-grid"
+            @keydown="onBoardKeydown"
+            @focusin="boardFocused = true"
+            @focusout="onBoardFocusOut"
+          >
             <ResumeCard
-              v-for="resume in resumeList"
+              v-for="resume in visibleResumes"
               :key="resume.id"
               :resume="resume"
+              :selected="boardFocused && resume.id === activeResumeId"
               @click="handleCardClick(resume.id)"
+              @focusin="activeResumeId = resume.id"
               @edit="handleEdit(resume.id)"
               @interview="router.push({ path: '/interview/new', query: { resumeId: resume.id } })"
               @rename="handleRename(resume)"
@@ -135,6 +155,7 @@
               <p v-else class="settings-help">简历保存在你授权的本地目录；浏览器可能在后续访问时要求重新授权。</p>
               <div class="settings-actions">
                 <el-button :loading="storageStore.isMigrating" @click="handleChooseStorageDirectory">选择本地目录并迁移</el-button>
+                <el-button v-if="storageStore.hasFileSystemConfig && storageStore.currentType !== 'file_system'" type="primary" plain :loading="storageStore.isMigrating" @click="handleReauthorizeStorageDirectory">重新授权本地目录</el-button>
                 <el-button v-if="storageStore.currentType === 'file_system'" :loading="storageStore.isMigrating" @click="handleSwitchToBrowserStorage">迁回浏览器缓存</el-button>
               </div>
               <p class="settings-help">空目录会复制当前简历；已有简历时仅补入缺失项，同 ID 冲突保留目录版本。旧目录升级时保留原文件。</p>
@@ -238,10 +259,41 @@ const renameForm = ref({
 
 const resumeList = computed(() => workbenchStore.resumeList);
 const hasResumes = computed(() => workbenchStore.hasResumes);
+const resumeQuery = ref('');
+const resumeSort = ref<'recent' | 'title'>('recent');
+const activeResumeId = ref('');
+const boardFocused = ref(false);
+const visibleResumes = computed(() => {
+  const query = resumeQuery.value.trim().toLocaleLowerCase();
+  const matched = resumeList.value.filter((resume) => !query || resume.title.toLocaleLowerCase().includes(query));
+  return [...matched].sort((left, right) => resumeSort.value === 'title'
+    ? left.title.localeCompare(right.title, 'zh-CN')
+    : right.updatedAt - left.updatedAt);
+});
 
 watch(resumeList, (list) => {
   if (!list.some((resume) => resume.id === backupResumeId.value)) backupResumeId.value = list[0]?.id || '';
 }, { immediate: true });
+
+watch(visibleResumes, (list) => {
+  if (!list.some((resume) => resume.id === activeResumeId.value)) activeResumeId.value = list[0]?.id || '';
+}, { immediate: true });
+
+function onBoardFocusOut(event: FocusEvent) {
+  const next = event.relatedTarget;
+  if (!(next instanceof Node) || !(event.currentTarget as HTMLElement).contains(next)) boardFocused.value = false;
+}
+
+function onBoardKeydown(event: KeyboardEvent) {
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+  const cards = [...(event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>('.card-content')];
+  const index = cards.findIndex((card) => card === document.activeElement);
+  if (index < 0) return;
+  const next = cards[index + (event.key === 'ArrowDown' ? 1 : -1)];
+  if (!next) return;
+  event.preventDefault();
+  next.focus();
+}
 
 onMounted(async () => {
   if (route.query.aiSettings === '1') openSettings('ai');
@@ -463,6 +515,16 @@ const handleChooseStorageDirectory = async () => {
   }
 };
 
+const handleReauthorizeStorageDirectory = async () => {
+  try {
+    const directoryName = await storageStore.reauthorizeFileSystem();
+    await workbenchStore.init();
+    ElMessage.success(`已重新授权本地目录（${directoryName}）并切换为该存储位置`);
+  } catch (error) {
+    ElMessage.error('重新授权失败: ' + (error instanceof Error ? error.message : '未知错误'));
+  }
+};
+
 const handleSwitchToBrowserStorage = async () => {
   try {
     await ElMessageBox.confirm('将把当前目录中的简历复制回浏览器缓存。目录中的文件会保留，但切换后浏览器缓存将成为当前存储。', '切换存储位置', {
@@ -524,6 +586,22 @@ const handleSwitchToBrowserStorage = async () => {
   font-size: var(--text-2xl);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.board-tools {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-bottom: var(--space-sm);
+}
+
+.board-tools :deep(.el-input) {
+  max-width: 280px;
+}
+
+.board-empty-filter {
+  margin: var(--space-lg) 0;
+  color: var(--color-muted);
 }
 
 .board-columns {

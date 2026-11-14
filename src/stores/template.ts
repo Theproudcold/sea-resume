@@ -1,11 +1,22 @@
 import { defineStore } from 'pinia';
-import type { TemplateMetadata } from '@/types/resume';
+import type { CustomResumeTemplate } from '@/types/custom-template';
+import type { ResumeData, TemplateMetadata } from '@/types/resume';
+import {
+  deleteCustomTemplate,
+  listCustomTemplates,
+  renameCustomTemplate,
+  saveCustomTemplate,
+} from '@/services/templates/CustomTemplateRepository';
+import {
+  buildCustomTemplateFromResume,
+  customTemplateToMetadata,
+} from '@/utils/custom-template';
 
-const templates: TemplateMetadata[] = [
+export const builtinTemplates: TemplateMetadata[] = [
   {
     id: 'modern',
     name: '现代简约',
-    description: '单栏布局，蓝色主题，适合互联网行业',
+    description: '单栏布局，信息清晰，适合互联网与通用岗位投递',
     category: 'modern',
     categoryLabel: '现代',
     keywords: ['前端', '互联网', '产品', '运营'],
@@ -14,111 +25,100 @@ const templates: TemplateMetadata[] = [
   {
     id: 'professional',
     name: '商务专业',
-    description: '双栏布局，灰色主题，适合传统行业',
+    description: '双栏结构，排版稳重，适合金融、咨询与职能岗位',
     category: 'professional',
     categoryLabel: '商务',
-    keywords: ['金融', '咨询', '市场', '销售'],
+    keywords: ['金融', '咨询', '人事', '行政'],
     recommendedOrder: 2,
   },
   {
     id: 'creative',
     name: '创意设计',
-    description: '卡片式布局，渐变主题，适合设计岗位',
+    description: '色块页眉与卡片分区，适合设计与创意相关岗位',
     category: 'creative',
     categoryLabel: '创意',
-    keywords: ['设计', '品牌', '视觉', '交互'],
-    recommendedOrder: 3,
+    keywords: ['设计', '品牌', '视觉', 'UI'],
+    recommendedOrder: 4,
   },
   {
     id: 'minimal',
     name: '极简主义',
-    description: '纯黑白，大留白，简洁专业',
+    description: '纯净留白，阅读负担低，适合正式简历投递场景',
     category: 'minimal',
     categoryLabel: '极简',
-    keywords: ['通用', '简洁', '校招', '实习'],
-    recommendedOrder: 4,
+    keywords: ['简洁', '应届生', '通用', '正式'],
+    recommendedOrder: 3,
   },
   {
     id: 'tech',
     name: '科技感',
-    description: '深色模式，绿色点缀，适合技术岗位',
+    description: '深色纸面、等宽标题，适合技术岗位展示',
     category: 'tech',
     categoryLabel: '技术',
-    keywords: ['后端', '算法', '架构', '工程'],
+    keywords: ['后端', '算法', '开发', '工程师'],
     recommendedOrder: 5,
+  },
+  {
+    id: 'ai-agent',
+    name: 'AI Agent 技术',
+    description: '参考 AI 工程师简历的紧凑单栏布局，适合 Agent、模型应用与全栈研发岗位',
+    category: 'tech',
+    categoryLabel: '技术',
+    keywords: ['AI', 'Agent', '大模型', '人工智能', '全栈', '研发'],
+    recommendedOrder: 6,
   },
 ];
 
 export const useTemplateStore = defineStore('template', {
   state: () => ({
-    templates: [
-      {
-        id: 'modern',
-        name: '现代简约',
-        description: '单栏布局，信息清晰，适合互联网与通用岗位投递',
-        category: 'modern' as const,
-        categoryLabel: '现代',
-        keywords: ['前端', '互联网', '产品', '运营'],
-        recommendedOrder: 1,
-      },
-      {
-        id: 'professional',
-        name: '商务专业',
-        description: '双栏结构，排版稳重，适合金融、咨询与职能岗位',
-        category: 'professional' as const,
-        categoryLabel: '商务',
-        keywords: ['金融', '咨询', '人事', '行政'],
-        recommendedOrder: 2,
-      },
-      {
-        id: 'creative',
-        name: '创意设计',
-        description: '强调视觉表达与作品感，适合设计与创意相关岗位',
-        category: 'creative' as const,
-        categoryLabel: '创意',
-        keywords: ['设计', '品牌', '视觉', 'UI'],
-        recommendedOrder: 4,
-      },
-      {
-        id: 'minimal',
-        name: '极简主义',
-        description: '纯净留白，阅读负担低，适合正式简历投递场景',
-        category: 'minimal' as const,
-        categoryLabel: '极简',
-        keywords: ['简洁', '应届生', '通用', '正式'],
-        recommendedOrder: 3,
-      },
-      {
-        id: 'tech',
-        name: '科技感',
-        description: '模块层次分明，项目与技能突出，适合技术岗位展示',
-        category: 'tech' as const,
-        categoryLabel: '技术',
-        keywords: ['后端', '算法', '开发', '工程师'],
-        recommendedOrder: 5,
-      },
-      {
-        id: 'ai-agent',
-        name: 'AI Agent 技术',
-        description: '参考 AI 工程师简历的紧凑单栏布局，适合 Agent、模型应用与全栈研发岗位',
-        category: 'tech' as const,
-        categoryLabel: '技术',
-        keywords: ['AI', 'Agent', '大模型', '人工智能', '全栈', '研发'],
-        recommendedOrder: 6,
-      },
-    ] as TemplateMetadata[],
+    builtinTemplates,
+    customTemplates: [] as CustomResumeTemplate[],
     currentTemplateId: 'modern',
+    loaded: false,
   }),
 
   getters: {
-    currentTemplate: (state) => {
-      return state.templates.find((t) => t.id === state.currentTemplateId);
+    templates(state): TemplateMetadata[] {
+      return [
+        ...state.customTemplates.map(customTemplateToMetadata),
+        ...state.builtinTemplates,
+      ];
+    },
+    currentTemplate(): TemplateMetadata | undefined {
+      return this.templates.find((template) => template.id === this.currentTemplateId);
     },
   },
 
   actions: {
     setCurrentTemplate(id: string) {
       this.currentTemplateId = id;
+    },
+
+    loadCustomTemplates() {
+      this.customTemplates = listCustomTemplates();
+      this.loaded = true;
+    },
+
+    saveCurrentResumeAsTemplate(
+      resume: ResumeData,
+      input: { name: string; description?: string },
+    ): CustomResumeTemplate {
+      const template = buildCustomTemplateFromResume(resume, input);
+      this.customTemplates = saveCustomTemplate(template);
+      this.loaded = true;
+      return template;
+    },
+
+    renameCustomTemplate(id: string, name: string) {
+      this.customTemplates = renameCustomTemplate(id, name);
+    },
+
+    deleteCustomTemplate(id: string) {
+      this.customTemplates = deleteCustomTemplate(id);
+    },
+
+    findCustomTemplate(id: string): CustomResumeTemplate | undefined {
+      return this.customTemplates.find((template) => template.id === id);
     },
   },
 });

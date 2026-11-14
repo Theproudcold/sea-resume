@@ -1,9 +1,16 @@
 <template>
   <section class="toolbar">
-    <div class="toolbar__row toolbar__row--categories" role="group" aria-label="模板分类">
+    <div ref="categoryRow" class="toolbar__row toolbar__row--categories" role="group" aria-label="模板分类">
+      <span
+        class="toolbar__thumb"
+        :class="{ 'is-ready': thumb.ready, 'is-sliding': thumb.slide }"
+        aria-hidden="true"
+        :style="thumbStyle"
+      />
       <button
         v-for="category in categories"
         :key="category.value"
+        :ref="(element) => setTagRef(category.value, element)"
         type="button"
         class="toolbar__tag"
         :class="{ 'is-active': category.value === activeCategory }"
@@ -34,24 +41,146 @@
 </template>
 
 <script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import type { TemplateSortKey } from '@/utils/template-gallery';
 import type { TemplateMetadata } from '@/types/resume';
 
-defineProps<{
+type CategoryValue = TemplateMetadata['category'] | 'all';
+
+const props = defineProps<{
   categories: Array<{
-    value: TemplateMetadata['category'] | 'all';
+    value: CategoryValue;
     label: string;
   }>;
-  activeCategory: TemplateMetadata['category'] | 'all';
+  activeCategory: CategoryValue;
   search: string;
   sortBy: TemplateSortKey;
 }>();
 
 defineEmits<{
-  'update:category': [value: TemplateMetadata['category'] | 'all'];
+  'update:category': [value: CategoryValue];
   'update:search': [value: string];
   'update:sort': [value: TemplateSortKey];
 }>();
+
+const categoryRow = ref<HTMLElement | null>(null);
+const tagElements = new Map<CategoryValue, HTMLButtonElement>();
+const thumb = reactive({
+  x: 0,
+  y: 0,
+  width: 0,
+  height: 0,
+  ready: false,
+  slide: false,
+});
+
+const thumbStyle = computed(() => ({
+  width: `${thumb.width}px`,
+  height: `${thumb.height}px`,
+  transform: `translate(${thumb.x}px, ${thumb.y}px)`,
+}));
+
+const setTagRef = (value: CategoryValue, element: unknown) => {
+  if (element instanceof HTMLButtonElement) {
+    tagElements.set(value, element);
+    return;
+  }
+  tagElements.delete(value);
+};
+
+let resizeObserver: ResizeObserver | null = null;
+let enableFrame = 0;
+let slideTimer = 0;
+let sliding = false;
+
+const slideDuration = () => {
+  const token = categoryRow.value
+    ? getComputedStyle(categoryRow.value).getPropertyValue('--dur-short').trim()
+    : '';
+  const value = Number.parseFloat(token);
+  const duration = !token || !Number.isFinite(value) ? 220 : token.endsWith('ms') ? value : value * 1000;
+  return duration + 40;
+};
+
+const enableSlide = () => {
+  cancelAnimationFrame(enableFrame);
+  enableFrame = requestAnimationFrame(() => {
+    thumb.slide = true;
+  });
+};
+
+const placeThumb = (animate: boolean) => {
+  const row = categoryRow.value;
+  const tag = tagElements.get(props.activeCategory);
+  if (!row || !tag) return;
+
+  const nextX = tag.offsetLeft;
+  const nextY = tag.offsetTop;
+  const nextWidth = tag.offsetWidth;
+  const nextHeight = tag.offsetHeight;
+  const changed = !thumb.ready
+    || thumb.x !== nextX
+    || thumb.y !== nextY
+    || thumb.width !== nextWidth
+    || thumb.height !== nextHeight;
+
+  if (!animate || !thumb.ready || !changed) {
+    if (!changed && thumb.ready) return;
+    sliding = false;
+    window.clearTimeout(slideTimer);
+    thumb.slide = false;
+    thumb.x = nextX;
+    thumb.y = nextY;
+    thumb.width = nextWidth;
+    thumb.height = nextHeight;
+    thumb.ready = true;
+    enableSlide();
+    return;
+  }
+
+  thumb.slide = true;
+  thumb.x = nextX;
+  thumb.y = nextY;
+  thumb.width = nextWidth;
+  thumb.height = nextHeight;
+  sliding = true;
+  window.clearTimeout(slideTimer);
+  slideTimer = window.setTimeout(() => {
+    sliding = false;
+    const current = tagElements.get(props.activeCategory);
+    if (!current || !thumb.ready) return;
+    const stale = current.offsetLeft !== thumb.x
+      || current.offsetTop !== thumb.y
+      || current.offsetWidth !== thumb.width
+      || current.offsetHeight !== thumb.height;
+    if (stale) placeThumb(false);
+  }, slideDuration());
+};
+
+onMounted(() => {
+  placeThumb(false);
+  if (categoryRow.value && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      if (sliding) return;
+      placeThumb(false);
+    });
+    resizeObserver.observe(categoryRow.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  cancelAnimationFrame(enableFrame);
+  window.clearTimeout(slideTimer);
+});
+
+watch(() => props.activeCategory, () => {
+  placeThumb(true);
+}, { flush: 'post' });
+
+watch(() => props.categories.map((category) => `${category.value}:${category.label}`).join('|'), () => {
+  placeThumb(false);
+}, { flush: 'post' });
 </script>
 
 <style scoped>
@@ -69,8 +198,9 @@ defineEmits<{
   min-width: 0;
 }
 
-/* Category choice: keys on a sunken tray; the chosen key is raised. */
+/* Category choice: keys on a sunken tray; one raised key slides between them. */
 .toolbar__row--categories {
+  position: relative;
   flex-wrap: wrap;
   gap: var(--space-3xs);
   justify-self: start;
@@ -79,7 +209,32 @@ defineEmits<{
   background: var(--color-sunken);
 }
 
+.toolbar__thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border-radius: var(--radius-s);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.toolbar__thumb.is-ready {
+  opacity: 1;
+}
+
+.toolbar__thumb.is-sliding {
+  transition:
+    transform var(--dur-short) var(--ease-out),
+    width var(--dur-short) var(--ease-out),
+    height var(--dur-short) var(--ease-out);
+}
+
 .toolbar__tag {
+  position: relative;
+  z-index: 1;
   min-width: 0;
   min-height: var(--control-height-s);
   padding: 0 var(--space-sm);
@@ -92,7 +247,7 @@ defineEmits<{
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
+  transition: color var(--dur-short) var(--ease-out), background-color var(--dur-micro) var(--ease-out);
 }
 
 @media (hover: hover) {
@@ -107,10 +262,10 @@ defineEmits<{
 }
 
 .toolbar__tag.is-active {
-  background: var(--color-paper-3);
+  background: transparent;
   color: var(--color-ink);
   font-weight: 600;
-  box-shadow: var(--shadow-card);
+  box-shadow: none;
 }
 
 .toolbar__tag:focus-visible {

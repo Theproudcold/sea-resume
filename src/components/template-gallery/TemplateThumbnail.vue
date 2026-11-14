@@ -1,6 +1,6 @@
 <template>
   <div ref="thumbnailRef" class="thumbnail">
-    <div v-if="templateComponent" class="thumbnail__viewport">
+    <div v-if="templateComponent && visible" class="thumbnail__viewport">
       <div class="thumbnail__stage resume-document" :style="{ '--scale': scale }">
         <component :is="templateComponent" :data="data" />
       </div>
@@ -15,6 +15,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { ResumeData } from '@/types/resume';
 import { getTemplateComponent } from '@/components/preview/template-registry';
+import { useWhenVisible } from '@/composables/useWhenVisible';
 
 const props = defineProps<{
   templateId: string;
@@ -24,6 +25,7 @@ const props = defineProps<{
 
 const A4_WIDTH_PX = 794;
 const thumbnailRef = ref<HTMLDivElement | null>(null);
+const visible = useWhenVisible(thumbnailRef);
 const scale = ref(0.36);
 let resizeObserver: ResizeObserver | null = null;
 
@@ -42,7 +44,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => resizeObserver?.disconnect());
 
-const templateComponent = computed(() => getTemplateComponent(props.templateId));
+const templateComponent = computed(() => getTemplateComponent(props.data.templateId || props.templateId));
 </script>
 
 <style scoped>

@@ -78,3 +78,30 @@ describe('ResumeCard cover preview', () => {
     expect(wrapper.find('.cover-preview').text()).toBe('修改后姓名');
   });
 });
+
+describe('ResumeCard 操作菜单', () => {
+  it('每一项都带图标，标签保持在同一列', async () => {
+    readResume.mockResolvedValue(resumeContent('真实简历姓名'));
+
+    const wrapper = mount(ResumeCard, {
+      props: { resume: resumeMeta },
+      global: {
+        stubs: {
+          ElDropdown: defineComponent({ template: '<div><slot name="dropdown" /></div>' }),
+          ElDropdownMenu: defineComponent({ template: '<ul><slot /></ul>' }),
+          ElDropdownItem: defineComponent({ template: '<li class="menu-item"><slot /></li>' }),
+          ElIcon: defineComponent({ template: '<i class="menu-icon"><slot /></i>' }),
+          ElButton: true,
+          ResumeCoverPreview: ResumeCoverStub,
+        },
+      },
+    });
+    await flushPromises();
+
+    const items = wrapper.findAll('li.menu-item');
+    expect(items.map((item) => item.text())).toEqual(['模拟面试', '重命名', '复制', '删除']);
+    for (const item of items) {
+      expect(item.find('.menu-icon').exists()).toBe(true);
+    }
+  });
+});

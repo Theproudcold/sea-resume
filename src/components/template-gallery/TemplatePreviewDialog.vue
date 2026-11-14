@@ -55,7 +55,10 @@ defineEmits<{
   apply: [];
 }>();
 
-const templateComponent = computed(() => (props.template ? getTemplateComponent(props.template.id) : null));
+const templateComponent = computed(() => {
+  if (!props.template) return null;
+  return getTemplateComponent(props.previewData.templateId || props.template.baseTemplateId || props.template.id);
+});
 </script>
 
 <style scoped>

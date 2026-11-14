@@ -11,10 +11,10 @@
       @keyup.space="$emit('click')"
     >
       <!-- 缩略图 -->
-      <div class="thumbnail" aria-hidden="true">
-        <ResumeCoverPreview v-if="resumeData" :data="resumeData" />
-        <div v-else class="placeholder">
-          {{ previewLoading ? '正在加载简历预览…' : '暂时无法显示预览' }}
+      <div ref="thumbnailRef" class="thumbnail" aria-hidden="true">
+        <ResumeCoverPreview v-if="resumeData && coverVisible" :data="resumeData" />
+        <div v-else class="placeholder" :class="{ 'is-loading': previewLoading || !coverVisible }" role="status">
+          {{ previewLoading || !coverVisible ? '' : '封面暂不可用' }}
         </div>
       </div>
 
@@ -34,11 +34,10 @@
         <el-button text :icon="MoreFilled" :aria-label="`${resume.title}的操作菜单`" />
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="edit">
-              <el-icon><Edit /></el-icon>
-              编辑
+            <el-dropdown-item command="interview">
+              <el-icon><ChatDotRound /></el-icon>
+              模拟面试
             </el-dropdown-item>
-            <el-dropdown-item command="interview">模拟面试</el-dropdown-item>
             <el-dropdown-item command="rename">
               <el-icon><EditPen /></el-icon>
               重命名
@@ -60,11 +59,12 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { MoreFilled, Edit, EditPen, CopyDocument, Delete } from '@element-plus/icons-vue';
+import { MoreFilled, EditPen, CopyDocument, Delete, ChatDotRound } from '@element-plus/icons-vue';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import ResumeCoverPreview from './ResumeCoverPreview.vue';
 import { formatDate } from '@/utils/helpers';
+import { useWhenVisible } from '@/composables/useWhenVisible';
 
 const props = defineProps<{
   resume: ResumeMeta;
@@ -80,11 +80,14 @@ const emit = defineEmits<{
   delete: [];
 }>();
 
+const thumbnailRef = ref<HTMLElement | null>(null);
+const coverVisible = useWhenVisible(thumbnailRef);
 const resumeData = ref<ResumeData | null>(null);
 const previewLoading = ref(false);
 let previewReadGeneration = 0;
 
-watch(() => [props.resume.id, props.resume.updatedAt] as const, async ([resumeId]) => {
+watch(() => [props.resume.id, props.resume.updatedAt, coverVisible.value] as const, async ([resumeId, , visible]) => {
+  if (!visible) return;
   const generation = ++previewReadGeneration;
   resumeData.value = null;
   previewLoading.value = true;
@@ -133,9 +136,6 @@ const formattedDate = computed(() => {
 
 const handleCommand = (command: string) => {
   switch (command) {
-    case 'edit':
-      emit('edit');
-      break;
     case 'interview':
       emit('interview');
       break;
@@ -215,9 +215,25 @@ const handleCommand = (command: string) => {
   align-items: center;
   justify-content: center;
   padding: var(--space-xs);
+  background: var(--color-paper-2);
   color: var(--color-muted);
   font-size: var(--text-xs);
   text-align: center;
+}
+
+.placeholder.is-loading {
+  background: linear-gradient(90deg, var(--color-paper-2), var(--color-paper-3), var(--color-paper-2));
+  background-size: 200% 100%;
+  animation: cover-loading 1.2s ease-in-out infinite;
+}
+
+@keyframes cover-loading {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .placeholder.is-loading { animation: none; }
 }
 
 .info {

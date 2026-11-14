@@ -37,6 +37,21 @@ describe('template-gallery helpers', () => {
     const byCategory = filterTemplates(templates, { category: 'professional', search: '' });
     expect(byCategory.map((item) => item.id)).toEqual(['professional']);
 
+    const customTemplates = filterTemplates([
+      ...templates,
+      {
+        id: 'mine',
+        name: '校招通用版',
+        description: '从当前简历保存',
+        category: 'custom',
+        categoryLabel: '我的',
+        keywords: ['自定义'],
+        recommendedOrder: -1,
+        source: 'custom',
+      },
+    ], { category: 'custom', search: '校招' });
+    expect(customTemplates.map((item) => item.id)).toEqual(['mine']);
+
     const byKeyword = filterTemplates(templates, { category: 'all', search: '设计' });
     expect(byKeyword.map((item) => item.id)).toEqual(['creative']);
   });

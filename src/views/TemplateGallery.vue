@@ -19,8 +19,10 @@
             v-for="template in displayTemplates"
             :key="template.id"
             :template="template"
-            :demo-data="demoResumeData"
+            :demo-data="cardPreviewData(template)"
             @preview="openPreview(template.id)"
+            @rename="renameCustomTemplate(template.id)"
+            @remove="removeCustomTemplate(template.id)"
           />
         </div>
 
@@ -48,7 +50,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { useResumeStore } from '@/stores/resume';
 import { useTemplateStore } from '@/stores/template';
 import { useWorkbenchStore } from '@/stores/workbench';
@@ -58,6 +60,7 @@ import TemplateGalleryHeader from '@/components/template-gallery/TemplateGallery
 import TemplateGalleryToolbar from '@/components/template-gallery/TemplateGalleryToolbar.vue';
 import TemplatePreviewDialog from '@/components/template-gallery/TemplatePreviewDialog.vue';
 import type { TemplateMetadata } from '@/types/resume';
+import { resumeFromCustomTemplate } from '@/utils/custom-template';
 import { buildTemplateResumeTitle, filterTemplates, sortTemplates, type TemplateSortKey } from '@/utils/template-gallery';
 import { getTemplateUsageMap, markTemplateUsed } from '@/utils/template-usage';
 
@@ -82,10 +85,20 @@ const activeResumeId = computed(() =>
 );
 
 const canApplyToCurrent = computed(() => Boolean(activeResumeId.value));
-const previewData = computed(() => ({
-  ...demoResumeData,
-  templateId: selectedTemplate.value?.id || demoResumeData.templateId,
-}));
+
+const cardPreviewData = (template: TemplateMetadata) => {
+  if (template.source !== 'custom') {
+    return { ...demoResumeData, templateId: template.id };
+  }
+  const custom = templateStore.findCustomTemplate(template.id);
+  return custom ? resumeFromCustomTemplate(custom) : { ...demoResumeData, templateId: 'modern' };
+};
+
+const previewData = computed(() => {
+  const template = selectedTemplate.value;
+  if (!template) return { ...demoResumeData };
+  return cardPreviewData(template);
+});
 
 const selectedTemplate = computed(
   () => templates.value.find((template) => template.id === selectedTemplateId.value) || null,
@@ -108,6 +121,11 @@ const displayTemplates = computed(() => {
 });
 
 onMounted(async () => {
+  try {
+    templateStore.loadCustomTemplates();
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '自定义模板读取失败');
+  }
   usageMap.value = getTemplateUsageMap();
 
   if (activeResumeId.value && data.value.id !== activeResumeId.value) {
@@ -140,10 +158,17 @@ const createResumeFromTemplate = async () => {
 
   try {
     const template = selectedTemplate.value;
-    const newId = await workbenchStore.createResume(
-      buildTemplateResumeTitle(template.name, new Date()),
-      template.id,
-    );
+    const custom = template.source === 'custom' ? templateStore.findCustomTemplate(template.id) : undefined;
+    const newId = custom
+      ? await workbenchStore.createResumeFromData(
+        resumeFromCustomTemplate(custom),
+        buildTemplateResumeTitle(template.name, new Date()),
+        custom.baseTemplateId,
+      )
+      : await workbenchStore.createResume(
+        buildTemplateResumeTitle(template.name, new Date()),
+        template.id,
+      );
     markTemplateUsed(template.id);
     syncUsageMap();
     closeDialogs();
@@ -163,14 +188,56 @@ const applyTemplateToCurrent = async () => {
     if (data.value.id !== activeResumeId.value) {
       await resumeStore.loadResume(activeResumeId.value);
     }
-    resumeStore.setTemplate(selectedTemplate.value.id);
-    markTemplateUsed(selectedTemplate.value.id);
+    const template = selectedTemplate.value;
+    const custom = template.source === 'custom' ? templateStore.findCustomTemplate(template.id) : undefined;
+    if (custom) {
+      resumeStore.applyTemplateSnapshot(resumeFromCustomTemplate(custom));
+    } else {
+      resumeStore.setTemplate(template.id);
+    }
+    markTemplateUsed(template.id);
     syncUsageMap();
     closeDialogs();
     ElMessage.success('模板已应用到当前简历');
     router.push(`/editor/${activeResumeId.value}`);
   } catch (error) {
     ElMessage.error('应用模板失败: ' + (error instanceof Error ? error.message : '未知错误'));
+  }
+};
+
+const renameCustomTemplate = async (templateId: string) => {
+  const template = templateStore.findCustomTemplate(templateId);
+  if (!template) return;
+  try {
+    const { value } = await ElMessageBox.prompt('给这个模板起个新名字。', '重命名模板', {
+      inputValue: template.name,
+      inputValidator: (input) => input.trim() ? true : '请填写模板名称',
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+    });
+    templateStore.renameCustomTemplate(templateId, value);
+    ElMessage.success('模板已重命名');
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
+    ElMessage.error(error instanceof Error ? error.message : '重命名失败');
+  }
+};
+
+const removeCustomTemplate = async (templateId: string) => {
+  const template = templateStore.findCustomTemplate(templateId);
+  if (!template) return;
+  try {
+    await ElMessageBox.confirm(
+      `删除「${template.name}」后，已经用它创建的简历不会受影响。`,
+      '删除自定义模板',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+    );
+    templateStore.deleteCustomTemplate(templateId);
+    if (selectedTemplateId.value === templateId) closeDialogs();
+    ElMessage.success('模板已删除');
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
+    ElMessage.error(error instanceof Error ? error.message : '删除失败');
   }
 };
 
