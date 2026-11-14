@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mount, flushPromises } from '@vue/test-utils';
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { defineComponent } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { ElMessageBox } from 'element-plus';
@@ -8,6 +8,7 @@ import InterviewConversation from '../InterviewConversation.vue';
 import InterviewReport from '../InterviewReport.vue';
 import InterviewHistory from '@/views/InterviewHistory.vue';
 import { buildResumeContext } from '@/services/ai/resumeContext';
+import { clearAiSessionApiKey, hasAiStoredApiKey, saveAiModelSettings, setAiSessionApiKey } from '@/services/ai/AiSettings';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { storageManager } from '@/services/storage/StorageManager';
 import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
@@ -25,31 +26,60 @@ function fixture() {
   const session: InterviewSession = { id: 'session-1', sourceResumeId: resume.id, createdAt: 'now', updatedAt: 'now', context: buildResumeContext(resume), settings: { targetRole: '工程师', jd: '', direction: '综合', level: '初级', mode: 'training', mainQuestionLimit: 5 }, provider: { baseUrl: 'https://test/v1', model: 'test' }, status: 'completed', pendingStage: null, coveragePlan: [], turns: [{ id: 'a1', mainNumber: 1, followup: false, question: { text: '请说明贡献', focus: '职责', kind: 'experience', itemIds: ['p1'] }, answer: '我实现缓存', submittedAt: 'now', feedback: { observations: [], referencePhrasing: '我实现缓存', organizationHint: 'COACH_HINT', knowledgeExplanation: 'GENERAL_KNOWLEDGE' } }], report: { incomplete: true, observations: [], followupReview: [], priorities: ['一', '二', '三'], facts: [{ id: 'fact1', answerId: 'a1', text: '我实现缓存' }], referencePhrasing: '我实现缓存', knowledgeExplanation: '知识并非经历' }, usage: { calls: 1, promptTokens: 0, completionTokens: 0 }, persistence: true, jsonMode: true, ending: true };
   return { resume, session };
 }
-beforeEach(() => { vi.restoreAllMocks(); vi.resetAllMocks(); localStorage.clear(); setActivePinia(createPinia()); vi.spyOn(ElMessageBox, 'confirm').mockImplementation(vi.fn().mockResolvedValue('confirm')); });
+beforeEach(() => { vi.restoreAllMocks(); vi.resetAllMocks(); localStorage.clear(); clearAiSessionApiKey(); setActivePinia(createPinia()); vi.spyOn(ElMessageBox, 'confirm').mockImplementation(vi.fn().mockResolvedValue('confirm')); });
+/** Buttons are addressed by their label: the report gained a practice action and index order is not a contract. */
+const byText = (wrapper: VueWrapper, text: string) => wrapper.findAll('button').find(button => button.text() === text)!;
 describe('interview UI safety and handoff', () => {
-  it('requires consent and in-memory key, previews data, resets confirmation on model change', async () => {
+  it('shows the saved service, requires consent and a key, previews data, and resets consent on key change', async () => {
+    saveAiModelSettings({ presetId: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', profileName: 'DeepSeek' });
     const wrapper = mount(InterviewConsent, { ...options, props: { preview: { context: 'public summary' } } });
-    expect(wrapper.find('button').attributes('disabled')).toBeDefined();
+    expect(wrapper.text()).toContain('DeepSeek'); expect(wrapper.text()).toContain('deepseek-chat');
+    expect(byText(wrapper, '确认服务与发送范围').attributes('disabled')).toBeDefined();
     await wrapper.find('input[type="password"]').setValue('session-secret');
-    await wrapper.find('input[type="checkbox"]').setValue(true); await wrapper.find('button').trigger('click');
-    expect(wrapper.emitted('confirmed')?.[0]?.[0]).toMatchObject({ apiKey: 'session-secret' });
+    await wrapper.find('[data-testid="interview-consent"]').setValue(true);
+    await byText(wrapper, '确认服务与发送范围').trigger('click');
+    expect(wrapper.emitted('confirmed')?.[0]?.[0]).toMatchObject({ apiKey: 'session-secret', model: 'deepseek-chat', baseUrl: 'https://api.deepseek.com/v1' });
     expect(wrapper.find('pre').text()).toContain('public summary'); expect(wrapper.find('pre').text()).not.toContain('session-secret');
-    await wrapper.findAll('input')[1]!.setValue('changed-model');
-    expect((wrapper.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false);
-    expect(wrapper.find('button').attributes('disabled')).toBeDefined(); expect(wrapper.emitted('changed')).toBeTruthy();
-    expect(localStorage.getItem('sea-resume_ai-model-settings')).toBeNull();
+    await byText(wrapper, '更换密钥').trigger('click');
+    await wrapper.find('input[type="password"]').setValue('changed-key');
+    expect((wrapper.find('[data-testid="interview-consent"]').element as HTMLInputElement).checked).toBe(false);
+    expect(byText(wrapper, '确认服务与发送范围').attributes('disabled')).toBeDefined(); expect(wrapper.emitted('changed')).toBeTruthy();
+    expect(localStorage.getItem('sea-resume_ai-provider-keys')).toBeNull();
     wrapper.unmount();
   });
-  it('confirms a local preset without a key and rejects remote no-auth', async () => {
+  it('uses a remembered key without asking again, and stores one when opted in', async () => {
+    saveAiModelSettings({ presetId: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' });
+    setAiSessionApiKey('remembered-secret', undefined, { remember: true });
+    const remembered = mount(InterviewConsent, { ...options, props: { preview: {} } });
+    expect(remembered.find('input[type="password"]').exists()).toBe(false);
+    expect(remembered.text()).toContain('已记住到本机');
+    await remembered.find('[data-testid="interview-consent"]').setValue(true);
+    await byText(remembered, '确认服务与发送范围').trigger('click');
+    expect(remembered.emitted('confirmed')?.[0]?.[0]).toMatchObject({ apiKey: 'remembered-secret' });
+    remembered.unmount();
+
+    clearAiSessionApiKey();
+    const fresh = mount(InterviewConsent, { ...options, props: { preview: {} } });
+    await fresh.find('input[type="password"]').setValue('fresh-secret');
+    await fresh.find('[data-testid="remember-key"]').setValue(true);
+    await fresh.find('[data-testid="interview-consent"]').setValue(true);
+    await byText(fresh, '确认服务与发送范围').trigger('click');
+    expect(hasAiStoredApiKey()).toBe(true);
+    expect(localStorage.getItem('sea-resume_ai-provider-keys')).toContain('fresh-secret');
+    fresh.unmount();
+  });
+  it('confirms a local no-auth provider without a key and points to settings when none is configured', async () => {
+    const empty = mount(InterviewConsent, { ...options, props: { preview: {} } });
+    await byText(empty, '打开设置中心配置模型').trigger('click');
+    expect(empty.emitted('configure')).toBeTruthy();
+    empty.unmount();
+
+    saveAiModelSettings({ presetId: 'ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3', authMode: 'none' });
     const wrapper = mount(InterviewConsent, { ...options, props: { preview: {} } });
-    await wrapper.find('select[aria-label="服务预设"]').setValue('ollama');
-    await wrapper.findAll('input')[1]!.setValue('llama3');
-    await wrapper.find('input[type="checkbox"]').setValue(true);
-    await wrapper.find('button').trigger('click');
+    expect(wrapper.find('input[type="password"]').exists()).toBe(false);
+    await wrapper.find('[data-testid="interview-consent"]').setValue(true);
+    await byText(wrapper, '确认服务与发送范围').trigger('click');
     expect(wrapper.emitted('confirmed')?.[0]?.[0]).toMatchObject({ baseUrl: 'http://localhost:11434/v1', authMode: 'none', apiKey: '' });
-    await wrapper.findAll('input')[0]!.setValue('https://remote.example/v1');
-    await wrapper.find('input[type="checkbox"]').setValue(true);
-    expect(wrapper.find('button').attributes('disabled')).toBeDefined();
     wrapper.unmount();
   });
   it('shows raw question / answer bubbles; real mode never renders coach content, no HTML execution', () => {
@@ -62,11 +92,11 @@ describe('interview UI safety and handoff', () => {
   it('requires target and explicit truth confirmation, rereads latest source at handoff, passes only raw facts to optimizer', async () => {
     const { resume, session } = fixture(); const read = vi.spyOn(storageManager, 'read').mockResolvedValue(resume);
     const wrapper = mount(InterviewReport, { ...options, props: { session } });
-    await wrapper.findAll('button')[0]!.trigger('click'); await flushPromises();
+    await byText(wrapper, '读取最新简历，确认回补事实').trigger('click'); await flushPromises();
     expect(read).toHaveBeenCalledWith('resume-1'); expect(wrapper.find('input[type="checkbox"]').attributes('disabled')).toBeDefined();
-    await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises(); expect(wrapper.find('[data-testid="optimizer"]').exists()).toBe(false);
+    await byText(wrapper, '仅将已确认事实交给优化与审查').trigger('click'); await flushPromises(); expect(wrapper.find('[data-testid="optimizer"]').exists()).toBe(false);
     await wrapper.find('select').setValue('p1'); await wrapper.find('input[type="checkbox"]').setValue(true);
-    await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises();
+    await byText(wrapper, '仅将已确认事实交给优化与审查').trigger('click'); await flushPromises();
     const optimizer = wrapper.findComponent({ name: 'ResumeOptimizationPanel' });
     expect(optimizer.exists()).toBe(true); expect(optimizer.props('resume').projects[0].description).toBe('最新内容');
     expect(optimizer.props('initialFacts')).toEqual([{ id: 'fact1', targetId: 'p1', text: '我实现缓存' }]);
@@ -76,10 +106,24 @@ describe('interview UI safety and handoff', () => {
   it('rejects a deleted target or a coach fact at the final handoff without mounting optimizer', async () => {
     const { resume, session } = fixture(); const read = vi.spyOn(storageManager, 'read').mockResolvedValue(resume);
     const wrapper = mount(InterviewReport, { ...options, props: { session } });
-    await wrapper.findAll('button')[0]!.trigger('click'); await flushPromises();
+    await byText(wrapper, '读取最新简历，确认回补事实').trigger('click'); await flushPromises();
     await wrapper.find('select').setValue('p1'); await wrapper.find('input[type="checkbox"]').setValue(true);
-    read.mockResolvedValueOnce({ ...resume, projects: [] }); await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises();
+    read.mockResolvedValueOnce({ ...resume, projects: [] }); await byText(wrapper, '仅将已确认事实交给优化与审查').trigger('click'); await flushPromises();
     expect(wrapper.text()).toContain('事实来源或目标已变化'); expect(wrapper.find('[data-testid="optimizer"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+  it('offers a targeted practice handoff carrying only the report practice points and tags', async () => {
+    const { session } = fixture();
+    session.report!.observations = [{ category: 'expression', tag: 'result', text: '补上验证方式', verification: 'needs-verification', evidence: [{ sourceId: 'a1', snippet: '我实现缓存' }] }];
+    session.report!.followupReview = [{ category: 'knowledge', tag: 'knowledge', text: '缓存一致性', verification: 'needs-verification', evidence: [{ sourceId: 'a1', snippet: '我实现缓存' }] }];
+    const wrapper = mount(InterviewReport, { ...options, props: { session } });
+    expect(wrapper.text()).toContain('针对弱项再练一轮');
+    await byText(wrapper, '针对弱项再练一轮').trigger('click');
+    expect(wrapper.emitted('practice')?.[0]?.[0]).toEqual({
+      sourceSessionId: 'session-1',
+      points: ['一', '二', '三', '补上验证方式', '缓存一致性'],
+      tags: ['result', 'knowledge'],
+    });
     wrapper.unmount();
   });
   it('history provides resume selection and explicit deletion / all-AI clear warning', async () => {
@@ -108,12 +152,12 @@ describe('interview UI safety and handoff', () => {
     const oldId = optimization.run.id;
     const confirm = vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel');
     const wrapper = mount(InterviewReport, { ...options, props: { session } });
-    await wrapper.findAll('button')[0]!.trigger('click'); await flushPromises();
+    await byText(wrapper, '读取最新简历，确认回补事实').trigger('click'); await flushPromises();
     await wrapper.find('select').setValue('p1'); await wrapper.find('input[type="checkbox"]').setValue(true);
-    await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises();
+    await byText(wrapper, '仅将已确认事实交给优化与审查').trigger('click'); await flushPromises();
     expect(optimization.run?.id).toBe(oldId); expect(wrapper.find('[data-testid="optimizer"]').exists()).toBe(false);
     confirm.mockImplementation(vi.fn().mockResolvedValue('confirm'));
-    await wrapper.findAll('button')[1]!.trigger('click'); await flushPromises();
+    await byText(wrapper, '仅将已确认事实交给优化与审查').trigger('click'); await flushPromises();
     expect(optimization.run).toBeNull(); expect(wrapper.find('[data-testid="optimizer"]').exists()).toBe(true);
     wrapper.unmount();
   });

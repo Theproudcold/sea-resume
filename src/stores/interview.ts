@@ -8,6 +8,8 @@ import { initializeInterview, nextInterviewQuestion, coachInterviewAnswer, repor
 import { AiCompatibilityError, emptyAiUsage, addAiUsage } from '@/services/ai/AiClient';
 import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
 import { generateId } from '@/utils/helpers';
+import { clearInterviewDraft } from '@/utils/interviewDraft';
+import { isValidInterviewFocus } from '@/utils/interviewWeakness';
 import { isAiProviderReady } from '@/services/ai/AiSettings';
 
 export const useInterviewStore = defineStore('interview', () => {
@@ -56,6 +58,8 @@ export const useInterviewStore = defineStore('interview', () => {
     persistenceGeneration++;
     session.value.persistence = enabled;
     storageError.value = '';
+    // Memory-only means memory-only: any stored draft of this interview goes away too.
+    if (!enabled) clearInterviewDraft(session.value.id);
     markChanged();
     if (enabled) await checkpoint();
   }
@@ -80,7 +84,7 @@ export const useInterviewStore = defineStore('interview', () => {
   function canRequest() {
     if (!session.value || busy.value) return false;
     if (!consented.value || !provider || provider.baseUrl !== session.value.provider.baseUrl || provider.model !== session.value.provider.model) {
-      error.value = '需要重新确认服务商、模型及发送范围（恢复后请重新输入 API Key）。';
+      error.value = '需要重新确认服务商、模型及发送范围（未记住密钥时请重新输入 API Key）。';
       return false;
     }
     return true;
@@ -88,7 +92,7 @@ export const useInterviewStore = defineStore('interview', () => {
   function addQuestion(question: InterviewQuestion, mainNumber: number, followup: boolean) {
     const s = session.value!;
     if (mainNumber > s.settings.mainQuestionLimit || s.turns.length >= s.settings.mainQuestionLimit * 2 || (followup && s.turns.some(t => t.mainNumber === mainNumber && t.followup))) throw new Error('已达到面试轮次上限。');
-    s.turns.push({ id: generateId(), question, mainNumber, followup });
+    s.turns.push({ id: generateId(), question, mainNumber, followup, askedAt: new Date().toISOString() });
     s.status = 'answering';
   }
   async function run(stage: InterviewStage) {
@@ -129,6 +133,7 @@ export const useInterviewStore = defineStore('interview', () => {
         const result = await reportInterview(requestProvider, s, options);
         if (!active()) return;
         s.report = result; s.status = 'completed';
+        clearInterviewDraft(s.id);
       }
       s.pendingStage = null; markChanged();
     } catch (cause) {
@@ -142,7 +147,7 @@ export const useInterviewStore = defineStore('interview', () => {
   }
   async function start(resume: ResumeData, settings: InterviewSettings, config: AiProviderConfig, options: { consent: boolean; persistence?: boolean; generalizeOrganizations?: boolean }) {
     if (busy.value) return;
-    if (![5, 8, 12].includes(settings.mainQuestionLimit) || !['training', 'real'].includes(settings.mode) || !['综合', '项目深挖', '岗位专业', '行为面试'].includes(settings.direction) || settings.jd.length > 15000 || settings.targetRole.length > 200 || settings.level.length > 200) { error.value = '面试设置无效或文本过长。'; return; }
+    if (![5, 8, 12].includes(settings.mainQuestionLimit) || !['training', 'real'].includes(settings.mode) || !['综合', '项目深挖', '岗位专业', '行为面试'].includes(settings.direction) || settings.jd.length > 15000 || settings.targetRole.length > 200 || settings.level.length > 200 || (settings.focus !== undefined && !isValidInterviewFocus(settings.focus))) { error.value = '面试设置无效或文本过长。'; return; }
     if (!confirmProvider(config, options.consent)) return;
     epoch++; revision = 0; dirty.value = true; storageError.value = '';
     const now = new Date().toISOString();
@@ -210,6 +215,7 @@ export const useInterviewStore = defineStore('interview', () => {
   }
   function reset() {
     ++epoch; controller?.abort(); controller = null; provider = null;
+    if (session.value) clearInterviewDraft(session.value.id);
     busy.value = false; consented.value = false; session.value = null;
     error.value = ''; compatibilityError.value = false; storageError.value = ''; dirty.value = false;
   }

@@ -5,7 +5,8 @@ import { requestAiJson, AiCompatibilityError, type AiRequestOptions } from '@/se
 import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { confirmedInterviewFacts, interviewerData, parseInterviewReport, exportInterviewMarkdown } from '@/services/ai/interview';
-import type { InterviewSettings, InterviewSession } from '@/types/interview';
+import { readInterviewDraft, writeInterviewDraft } from '@/utils/interviewDraft';
+import type { InterviewSettings, InterviewSession, InterviewWeaknessTag } from '@/types/interview';
 vi.mock('@/services/ai/AiClient', async importOriginal => ({ ...await importOriginal<typeof import('@/services/ai/AiClient')>(), requestAiJson: vi.fn() }));
 vi.mock('@/services/ai/AiWorkspaceRepository', () => ({ aiWorkspaceRepository: { save: vi.fn(), get: vi.fn(), list: vi.fn(), delete: vi.fn(), clear: vi.fn() } }));
 const client = vi.mocked(requestAiJson);
@@ -49,14 +50,27 @@ describe('interview orchestration with mocked JSON transport', () => {
     expect(JSON.stringify(store.session)).not.toMatch(/secret-key|private-phone|private-email|私密姓名/);
     expect(aiWorkspaceRepository.save).not.toHaveBeenCalled();
   });
+  it('sends a bounded practice focus without the internal source session id, and rejects a malformed one', async () => {
+    const store = useInterviewStore();
+    client.mockResolvedValueOnce(initialization);
+    await store.start(resume(), { ...settings, focus: { sourceSessionId: 'source-1', points: ['补上验证'], tags: ['result'] as InterviewWeaknessTag[] } }, config, { consent: true });
+    expect(client.mock.calls[0]![1]).toContain('专项练习');
+    expect(JSON.stringify(client.mock.calls[0]![2])).not.toContain('source-1');
+    expect(store.session!.settings.focus!.points).toEqual(['补上验证']);
+    const invalid = useInterviewStore();
+    await invalid.start(resume(), { ...settings, focus: { sourceSessionId: '', points: [], tags: [] } }, config, { consent: true });
+    expect(invalid.error).toContain('面试设置无效');
+    expect(client).toHaveBeenCalledTimes(1);
+  });
   it('real mode uses no coach until final report, manual continue, preserves raw unknown, marks early finish incomplete', async () => {
     const store = await start(); await store.submitAnswer('  不知道  ');
     expect(client).toHaveBeenCalledTimes(1); expect(store.currentTurn!.answer).toBe('  不知道  ');
     expect(store.currentTurn!.feedback).toBeUndefined();
     client.mockResolvedValueOnce({ action: 'main', question }); await store.continueInterview();
-    expect(client.mock.calls[1]![1]).toContain('You are the interviewer');
+    expect(client.mock.calls[1]![1]).toContain('角色：面试官，只决定下一题。');
+    expect(client.mock.calls[1]![1]).toContain('mainAllowed 为 true 时禁止 finish');
     client.mockResolvedValueOnce(report()); await store.finish();
-    expect(client.mock.calls[2]![1]).toContain('final interview coach');
+    expect(client.mock.calls[2]![1]).toContain('角色：终场面试教练');
     expect(store.session!.report!.incomplete).toBe(true); expect(store.session!.status).toBe('completed');
   });
   it('training gives feedback before manually continuing; interviewer never receives feedback or reference answers', async () => {
@@ -138,6 +152,13 @@ describe('interview orchestration with mocked JSON transport', () => {
     await store.setPersistence(false); expect(store.currentTurn!.answer).toBe('不会丢失');
     client.mockResolvedValueOnce({ action: 'main', question }); await store.continueInterview(); expect(store.session!.turns).toHaveLength(2);
   });
+  it('clears a stored draft as soon as the interview switches to memory-only', async () => {
+    const store = await start('real', true);
+    const turnId = store.currentTurn!.id;
+    writeInterviewDraft(store.session!.id, turnId, '仅本机的草稿', true);
+    await store.setPersistence(false);
+    expect(readInterviewDraft(store.session!.id, turnId)).toBe('');
+  });
   it('revokes a queued checkpoint before it starts writing', async () => {
     const store = await start('real', true);
     const save = vi.mocked(aiWorkspaceRepository.save);
@@ -186,7 +207,7 @@ describe('interview orchestration with mocked JSON transport', () => {
 describe('report validation and fact handoff provenance', () => {
   it('accepts only cited raw snippets, three priorities, and explicit confirmation of an existing target', async () => {
     const store = await start(); await store.submitAnswer('我实现缓存并验证命中率'); const answerId = store.currentTurn!.id;
-    const raw = { ...report(), facts: [{ answerId, text: '我实现缓存' }], referenceFacts: [{ sourceId: answerId, snippet: '我实现缓存' }], observations: [{ category: 'expression', text: '说明验证方式', verification: 'context-supported', evidence: [{ sourceId: answerId, snippet: '验证命中率' }] }] };
+    const raw = { ...report(), facts: [{ answerId, text: '我实现缓存' }], referenceFacts: [{ sourceId: answerId, snippet: '我实现缓存' }], observations: [{ category: 'expression', tag: 'result', text: '说明验证方式', verification: 'context-supported', evidence: [{ sourceId: answerId, snippet: '验证命中率' }] }] };
     store.session!.report = parseInterviewReport(raw, store.session!); expect(store.session!.report!.observations[0]!.verification).toBe('needs-verification');
     const factId = store.session!.report.facts[0]!.id;
     expect(confirmedInterviewFacts(store.session!, [{ factId, targetId: 'project-1', confirmed: false }], ['project-1'])).toEqual([]);
@@ -205,6 +226,21 @@ describe('report validation and fact handoff provenance', () => {
     expect(() => parseInterviewReport({ ...report(), referenceFacts: [{ sourceId: 'projects.project-1.description', snippet: '实现缓存' }] }, store.session!)).toThrow();
     store.currentTurn!.skipped = true; expect(() => parseInterviewReport({ ...report(), facts: [{ answerId, text: '真实内容' }] }, store.session!)).toThrow();
     store.currentTurn!.skipped = false; delete store.currentTurn!.submittedAt; expect(() => parseInterviewReport({ ...report(), facts: [{ answerId, text: '真实内容' }] }, store.session!)).toThrow();
+  });
+  it('requires a weakness tag that matches its category and rejects unknown tags', async () => {
+    const store = await start(); await store.submitAnswer('我实现缓存并验证命中率'); const answerId = store.currentTurn!.id;
+    const evidence = [{ sourceId: answerId, snippet: '验证命中率' }];
+    const withTag = (category: string, tag: unknown) => ({ ...report(), observations: [{ category, tag, text: '观察', verification: 'needs-verification', evidence }] });
+    for (const category of ['expression', 'knowledge', 'strength']) {
+      expect(() => parseInterviewReport(withTag(category, undefined), store.session!)).toThrow();
+    }
+    expect(() => parseInterviewReport(withTag('strength', 'structure'), store.session!)).toThrow();
+    expect(() => parseInterviewReport(withTag('knowledge', 'result'), store.session!)).toThrow();
+    expect(() => parseInterviewReport(withTag('expression', 'knowledge'), store.session!)).toThrow();
+    expect(() => parseInterviewReport(withTag('expression', 'invented'), store.session!)).toThrow();
+    expect(parseInterviewReport(withTag('strength', 'none'), store.session!).observations[0]!.tag).toBe('none');
+    expect(parseInterviewReport(withTag('expression', 'contribution'), store.session!).observations[0]!.tag).toBe('contribution');
+    expect(parseInterviewReport(withTag('knowledge', 'knowledge'), store.session!).observations[0]!.tag).toBe('knowledge');
   });
   it('validates question item references, lengths, coverage plan, and no output score fields', async () => {
     const store = useInterviewStore();

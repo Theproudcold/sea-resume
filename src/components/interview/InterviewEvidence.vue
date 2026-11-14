@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { InterviewObservation } from '@/types/interview';
+import { observationTagLabel } from '@/utils/interviewWeakness';
 defineProps<{ observations: InterviewObservation[] }>();
 const labels = { strength: '优点', expression: '表达问题', knowledge: '知识缺口' };
 </script>
 <template>
   <article v-for="(item, index) in observations" :key="index" class="observation" :data-category="item.category">
-    <div class="observation-heading"><strong>{{ labels[item.category] }}</strong><span>需核实</span></div>
+    <div class="observation-heading"><strong>{{ labels[item.category] }}</strong><span v-if="observationTagLabel(item)" class="observation-tag">{{ observationTagLabel(item) }}</span><span>需核实</span></div>
     <p>{{ item.text }}</p>
     <details><summary>查看原回答与简历证据</summary><blockquote v-for="(reference, i) in item.evidence" :key="i"><small>{{ reference.sourceId }}</small><p>{{ reference.snippet }}</p></blockquote></details>
   </article>
@@ -40,6 +41,7 @@ const labels = { strength: '优点', expression: '表达问题', knowledge: '知
 .observation[data-category=strength] strong { border-color: var(--color-success); color: var(--color-success); }
 .observation[data-category=knowledge] strong { border-color: var(--color-warning); background: var(--color-warning-wash); color: var(--color-ink); }
 .observation-heading > span { color: var(--color-muted); }
+.observation-tag { margin-left: auto; margin-right: var(--space-xs); color: var(--color-ink-2); }
 
 p {
   margin: var(--space-xs) 0;

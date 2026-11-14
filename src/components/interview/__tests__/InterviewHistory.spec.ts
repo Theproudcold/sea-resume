@@ -13,7 +13,7 @@ import { downloadInterview } from '@/services/ai/interview';
 import { buildResumeContext } from '@/services/ai/resumeContext';
 import { createOptimizationRun } from '@/services/ai/resumeOptimization';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
-import type { InterviewSession } from '@/types/interview';
+import type { InterviewSession, InterviewWeaknessTag } from '@/types/interview';
 
 const { push, confirm } = vi.hoisted(() => ({ push: vi.fn(), confirm: vi.fn() }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }));
@@ -100,6 +100,33 @@ describe('InterviewHistory', () => {
     await button('Markdown').trigger('click'); await flushPromises();
     expect(downloadInterview).toHaveBeenLastCalledWith(session, 'markdown');
     await wrapper.get('.category-bar button:nth-child(2)').trigger('click'); expect(wrapper.text()).toContain('待确认建议');
+  });
+
+  it('summarizes saved interviews into recurring weaknesses, answer rate and recent practice', async () => {
+    const { session } = fixture();
+    const observation = { category: 'expression' as const, tag: 'result' as InterviewWeaknessTag, text: '补上验证方式', verification: 'needs-verification' as const, evidence: [] };
+    const report = { incomplete: false, observations: [observation], followupReview: [], priorities: [], facts: [], referencePhrasing: '', knowledgeExplanation: '' };
+    const turn = (skipped: boolean) => ({ id: `q${skipped}`, mainNumber: 1, followup: false, question: { text: 'q', focus: 'f', kind: 'experience' as const, itemIds: [] }, submittedAt: 'now', answer: skipped ? '' : '我是这样做的', skipped });
+    sessions = [
+      { ...session, id: 'first', updatedAt: '2026-03-02T11:30:00Z', report, turns: [turn(false), turn(true)] },
+      { ...session, id: 'second', updatedAt: '2026-03-05T09:00:00Z', report, settings: { ...session.settings, focus: { sourceSessionId: 'first', points: ['补上验证方式'], tags: ['result' as InterviewWeaknessTag] } }, turns: [turn(false)] },
+    ];
+    await render();
+    expect(wrapper.text()).toContain('训练概览');
+    expect(wrapper.text()).toContain('复发弱项');
+    expect(wrapper.text()).toContain('结果与验证');
+    expect(wrapper.text()).toContain('2 场 · 2 条观察');
+    expect(wrapper.get('.overview-stats').text()).toContain('已答问题');
+    expect(wrapper.get('.overview-stats').text()).toContain('2');
+    expect(wrapper.get('.overview-stats').text()).toContain('1');
+    expect(wrapper.get('.overview-stats').text()).toContain('67%');
+    expect(wrapper.text()).toContain('专项 · 1 个重点');
+    expect(wrapper.get('.recent-list li').text()).toContain('前端工程师');
+  });
+
+  it('hides the overview when no interview has been saved', async () => {
+    await render();
+    expect(wrapper.text()).not.toContain('训练概览');
   });
 
   it('shows an unsaved in-memory interview with recovery/export and permits clearing it', async () => {

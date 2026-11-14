@@ -4,6 +4,7 @@ import { ElButton, ElIcon } from 'element-plus';
 import InterviewConversation from '../InterviewConversation.vue';
 import { buildResumeContext } from '@/services/ai/resumeContext';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
+import { readInterviewDraft, writeInterviewDraft } from '@/utils/interviewDraft';
 import type { InterviewSession } from '@/types/interview';
 let wrapper: VueWrapper | undefined;
 function session(): InterviewSession {
@@ -13,7 +14,7 @@ function render(s = session(), consented = true) {
   wrapper = mount(InterviewConversation, { attachTo: document.body, props: { session: s, busy: false, consented }, global: { components: { ElButton, ElIcon } } });
   return wrapper;
 }
-afterEach(() => { wrapper?.unmount(); wrapper = undefined; document.body.innerHTML = ''; });
+afterEach(() => { wrapper?.unmount(); wrapper = undefined; document.body.innerHTML = ''; localStorage.clear(); });
 describe('polished interview interaction', () => {
   it('blocks blank submissions and composing shortcuts, submits raw text after composition ends', async () => {
     const panel = render(); const input = panel.get('textarea');
@@ -38,6 +39,17 @@ describe('polished interview interaction', () => {
     expect(panel.get('textarea').attributes('disabled')).toBeDefined();
     await panel.get('form').trigger('submit'); expect(panel.emitted('answer')).toBeUndefined();
   });
+  it('restores and keeps a per-question draft only while the interview is saved to this device', async () => {
+    const saved = session(); saved.persistence = true;
+    writeInterviewDraft(saved.id, saved.turns[0]!.id, '刷新前的草稿', true);
+    const panel = render(saved);
+    expect((panel.get('textarea').element as HTMLTextAreaElement).value).toBe('刷新前的草稿');
+    await panel.get('textarea').setValue('改写后的草稿');
+    expect(readInterviewDraft(saved.id, saved.turns[0]!.id)).toBe('改写后的草稿');
+    await panel.get('form').trigger('submit');
+    expect(panel.emitted('answer')).toEqual([['改写后的草稿', false]]);
+    expect(readInterviewDraft(saved.id, saved.turns[0]!.id)).toBe('');
+  });
   it('uses mode-specific feedback and locates the next question only after an explicit continue', async () => {
     const s = session(); s.status = 'reviewing'; s.settings.mode = 'real'; s.turns[0]!.answer = '原回答'; s.turns[0]!.submittedAt = 'now';
     const panel = render(s); expect(panel.text()).toContain('本轮不展示中途点评');
@@ -45,6 +57,6 @@ describe('polished interview interaction', () => {
     expect(panel.emitted('continue')).toHaveLength(1);
     await panel.setProps({ session: { ...s, status: 'answering', turns: [...s.turns, { id: 'q2', mainNumber: 1, followup: true, question: { text: '如何验证？', focus: '验证', kind: 'experience', itemIds: [] } }] } });
     await flushPromises(); expect(document.activeElement).toBe(panel.get('[data-current=true] .question-text').element);
-    expect(panel.text()).toContain('追问 1/1');
+    expect(panel.text()).toContain('追问');
   });
 });

@@ -10,6 +10,7 @@ import { useInterviewStore } from '@/stores/interview';
 import { useAiWorkspaceStore } from '@/stores/aiWorkspace';
 import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
 import { downloadInterview } from '@/services/ai/interview';
+import { summarizeInterviewProgress } from '@/utils/interviewProgress';
 import type { InterviewSession } from '@/types/interview';
 
 const router = useRouter();
@@ -30,6 +31,7 @@ const locked = computed(() => busy.value || confirming.value);
 const memorySession = computed(() => interview.session && !records.value.some(record => record.id === interview.session?.id) ? interview.session : null);
 const memoryOptimization = computed(() => optimization.run && !optimizationRecords.value.some(record => record.id === optimization.run?.id) ? optimization.run : null);
 const hasData = computed(() => !!(records.value.length || optimizationRecords.value.length || interview.session || optimization.run));
+const progress = computed(() => summarizeInterviewProgress(records.value));
 const statusLabels: Record<InterviewSession['status'], string> = {
   ready: '待开始', running: '进行中', answering: '待回答', reviewing: '待复盘', paused: '已暂停', interrupted: '已中断', failed: '请求未完成', completed: '已完成',
 };
@@ -157,6 +159,37 @@ onMounted(load);
       </article>
       <div v-if="memoryOptimization" class="notice notice--warning" role="status">当前还有一条未保存到列表的简历优化会话。清空全部 AI 记录也会关闭它。</div>
 
+      <section v-if="records.length" class="overview-panel" aria-labelledby="overview-title">
+        <div class="section-heading">
+          <div><h2 id="overview-title">训练概览</h2><p>只统计已保存的面试记录，在本机计算，不调用模型，也不评分。</p></div>
+          <span class="local-label"><FolderOpened aria-hidden="true" /> 共 {{ progress.sessions }} 场</span>
+        </div>
+        <dl class="overview-stats">
+          <div><dt>完整报告</dt><dd>{{ progress.completed }} / {{ progress.sessions }}</dd></div>
+          <div><dt>已答问题</dt><dd>{{ progress.answeredQuestions }}</dd></div>
+          <div><dt>跳过</dt><dd>{{ progress.skippedQuestions }}</dd></div>
+          <div><dt>作答率</dt><dd>{{ Math.round(progress.answeredRatio * 100) }}%</dd></div>
+          <div><dt>专项练习</dt><dd>{{ progress.focusSessions }}</dd></div>
+        </dl>
+        <div class="overview-block">
+          <h3>复发弱项</h3>
+          <ul v-if="progress.recurring.length" class="recurring-list">
+            <li v-for="item in progress.recurring" :key="item.tag"><strong>{{ item.label }}</strong><span>{{ item.sessions }} 场 · {{ item.observations }} 条观察</span></li>
+          </ul>
+          <p v-else class="overview-empty">还没有跨场次重复出现的弱项。多练几场后，这里会标出反复出现的表达与知识问题。</p>
+        </div>
+        <div class="overview-block">
+          <h3>最近练习</h3>
+          <ul class="recent-list">
+            <li v-for="item in progress.recent" :key="item.id">
+              <span class="recent-title">{{ item.label }}</span>
+              <span class="recent-meta">答 {{ item.answered }} · 跳过 {{ item.skipped }} · 表达 {{ item.expression }} · 知识 {{ item.knowledge }}</span>
+              <time :datetime="item.updatedAt">{{ formatTime(item.updatedAt) }}</time>
+            </li>
+          </ul>
+        </div>
+      </section>
+
       <section class="records-panel" aria-labelledby="records-title" :aria-busy="busy">
         <div class="section-heading"><div><h2 id="records-title">本机记录</h2><p>仅展示你选择“保存到本机”的记录</p></div><span class="local-label"><FolderOpened aria-hidden="true" /> 当前浏览器</span></div>
         <div class="category-bar" role="group" aria-label="记录类型">
@@ -172,7 +205,7 @@ onMounted(load);
           <article v-for="record in records" :key="record.id" class="record-card">
             <div class="record-heading">
               <div class="record-title"><h3>{{ record.settings.targetRole || '通用面试' }}</h3><span class="status" :class="{ 'status--success': record.report && !record.report.incomplete, 'status--warning': record.report?.incomplete || record.status === 'failed' }">{{ statusLabel(record) }}</span></div>
-              <span class="mode-label"><span>{{ record.settings.mode === 'real' ? '真实模拟' : '训练模式' }}</span><span>{{ record.settings.direction }}</span></span>
+              <span class="mode-label"><span>{{ record.settings.mode === 'real' ? '真实模拟' : '训练模式' }}</span><span>{{ record.settings.direction }}</span><span v-if="record.settings.focus" class="focus-label">专项 · {{ record.settings.focus.points.length }} 个重点</span></span>
             </div>
             <p class="record-source">{{ resumeTitle(record.sourceResumeId) }}</p>
             <div class="record-meta"><span class="record-progress">主问题 <strong>{{ record.turns[record.turns.length - 1]?.mainNumber ?? 0 }}</strong> / {{ record.settings.mainQuestionLimit }}</span><time :datetime="record.updatedAt">更新于 {{ formatTime(record.updatedAt) }}</time></div>
@@ -195,7 +228,7 @@ onMounted(load);
 
       <details class="privacy-details">
         <summary><Lock aria-hidden="true" /><span>关于本机保存与隐私</span><span class="details-hint">查看说明</span></summary>
-        <ul><li>记录仅保存在当前浏览器，不随简历文件夹迁移，也不纳入简历全量备份。重要内容请单独导出。</li><li>API Key 不保存在记录中。刷新后需重新输入 Key 并确认发送范围，不会自动请求模型。</li></ul>
+        <ul><li>记录仅保存在当前浏览器，不随简历文件夹迁移，也不纳入简历全量备份。重要内容请单独导出。</li><li>API Key 不写入面试记录；若在设置中心选择了记住密钥，会单独保存在本机浏览器。刷新后仍需确认发送范围，不会自动请求模型。</li></ul>
       </details>
       <section class="ui-danger-zone data-management" aria-labelledby="data-title">
         <div><h2 id="data-title" class="ui-danger-zone__title">AI 数据管理</h2><p class="ui-danger-zone__description">清空本浏览器的全部 AI 记录并关闭内存会话，不影响简历和 API 服务配置。操作不可恢复，请先导出。</p><p v-if="initialized && !hasData" class="nothing-to-clear">当前没有可清空的 AI 记录或内存会话。</p></div>
@@ -337,6 +370,67 @@ p, h2, h3, time, .record-id { min-width: 0; overflow-wrap: break-word; }
   color: var(--color-ink-2);
   font-size: var(--text-sm);
 }
+
+/* Overview: the record card recipe with counts as figures. */
+.overview-panel {
+  min-width: 0;
+  padding: var(--space-lg);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-card);
+}
+
+.overview-panel .section-heading { padding: 0 0 var(--space-md); }
+.overview-panel h3 { font-size: var(--text-md); }
+.overview-block > h3 { margin-bottom: var(--space-xs); }
+
+.overview-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-md);
+  margin: 0 0 var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: var(--rule-hair) solid var(--color-rule);
+}
+
+.overview-stats > div { display: grid; gap: var(--space-2xs); min-width: 0; }
+.overview-stats dt { color: var(--color-muted); font-family: var(--font-display); font-size: var(--text-xs); font-weight: 500; }
+.overview-stats dd { margin: 0; color: var(--color-ink); font-size: var(--text-xl); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.overview-block + .overview-block { margin-top: var(--space-md); }
+
+.recurring-list, .recent-list { margin: 0; padding: 0; list-style: none; }
+
+.recurring-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-md);
+  padding: var(--space-xs) 0;
+  border-top: var(--rule-hair) solid var(--color-rule);
+  font-size: var(--text-sm);
+}
+
+.recurring-list strong { color: var(--color-ink); font-weight: 600; }
+.recurring-list span { color: var(--color-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+
+.recent-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2xs) var(--space-md);
+  padding: var(--space-xs) 0;
+  border-top: var(--rule-hair) solid var(--color-rule);
+}
+
+.recent-title { color: var(--color-ink); font-size: var(--text-sm); font-weight: 500; overflow-wrap: anywhere; }
+.recent-meta { grid-column: 1; color: var(--color-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.recent-list time { grid-row: 1 / span 2; grid-column: 2; color: var(--color-muted); font-size: var(--text-xs); }
+
+.overview-empty { color: var(--color-muted); font-size: var(--text-sm); }
+
+.focus-label { color: var(--color-accent); }
 
 /* Records: a card whose rows split on hairlines. */
 .records-panel {
@@ -637,6 +731,8 @@ p, h2, h3, time, .record-id { min-width: 0; overflow-wrap: break-word; }
   .start-form { grid-template-columns: minmax(0, 1fr); }
   .start-form .start-button { grid-column: 1; justify-self: stretch; }
   .section-heading { padding: var(--space-md); }
+  .overview-panel { padding: var(--space-md); }
+  .overview-panel .section-heading { padding: 0 0 var(--space-md); }
   .local-label { display: none; }
   .category-bar { display: flex; margin-inline: var(--space-md); }
   .category-bar button { flex: 1 1 0; }

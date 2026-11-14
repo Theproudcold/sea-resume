@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { InterviewSession } from '@/types/interview';
+import type { InterviewFocus, InterviewSession } from '@/types/interview';
 import type { ResumeData } from '@/types/resume';
 import type { OptimizationFact } from '@/types/ai';
 import { storageManager } from '@/services/storage/StorageManager';
 import { confirmedInterviewFacts } from '@/services/ai/interview';
+import { weaknessFocusFromReport } from '@/utils/interviewWeakness';
 import InterviewEvidence from './InterviewEvidence.vue';
 import ResumeOptimizationPanel from '@/components/ai/ResumeOptimizationPanel.vue';
 import { useAiWorkspaceStore } from '@/stores/aiWorkspace';
 import { confirmAiAction } from '@/utils/aiDialogs';
 const props = defineProps<{ session: InterviewSession }>();
-const emit = defineEmits<{ configure: []; applied: [resumeId: string] }>();
+const emit = defineEmits<{ configure: []; applied: [resumeId: string]; practice: [focus: InterviewFocus] }>();
 const latestResume = ref<ResumeData | null>(null);
 const selections = ref<Record<string, { targetId: string; confirmed: boolean }>>({});
 const initialFacts = ref<OptimizationFact[]>([]);
@@ -18,6 +19,13 @@ const reviewing = ref(false);
 const loading = ref(false);
 const error = ref('');
 const optimization = useAiWorkspaceStore();
+const practiceFocus = computed(() => weaknessFocusFromReport(props.session));
+/** Show the question the fact came from, not an internal answer id. */
+function answerLabel(answerId: string): string {
+  const turn = props.session.turns.find(item => item.id === answerId);
+  return turn ? `主问题 ${turn.mainNumber}${turn.followup ? ' · 追问' : ''}` : '原回答不可用';
+}
+function startPractice() { if (practiceFocus.value) emit('practice', practiceFocus.value); }
 const targets = computed(() => latestResume.value ? [...(latestResume.value.hiddenSections?.includes('experience') ? [] : latestResume.value.experiences).filter(item => item.visible !== false).map(item => ({ id: item.id, label: `经历 · ${item.company} / ${item.position}` })), ...(latestResume.value.hiddenSections?.includes('projects') ? [] : latestResume.value.projects).filter(item => item.visible !== false).map(item => ({ id: item.id, label: `项目 · ${item.name}` }))] : []);
 async function prepare() {
   if (loading.value) return;
@@ -56,6 +64,10 @@ async function review() {
     <details open><summary><span>优点、表达问题与知识缺口</span><span class="summary-note">证据摘要</span></summary><InterviewEvidence :observations="session.report.observations" /><p v-if="!session.report.observations.length">没有足够回答证据，不作能力判断。</p></details>
     <details><summary>重点追问回顾</summary><InterviewEvidence :observations="session.report.followupReview" /></details>
     <h3>三项优先练习</h3><ol><li v-for="(priority, i) in session.report.priorities" :key="i">{{ priority }}</li></ol>
+    <div v-if="practiceFocus" class="practice-row">
+      <p>把这次复盘的重点带进下一场：只围绕你勾选的方向提问，主问题上限仍是 {{ session.settings.mainQuestionLimit }} 道，追问规则不变。</p>
+      <el-button type="primary" plain @click="startPractice">针对弱项再练一轮</el-button>
+    </div>
     <details><summary><span>参考表达</span><span class="summary-note">只重组真实回答</span></summary><p>{{ session.report.referencePhrasing || '没有可重组的回答事实' }}</p></details>
     <details><summary><span>知识讲解</span><span class="summary-note">非个人经历，需核实</span></summary><p>{{ session.report.knowledgeExplanation || '无' }}</p></details>
     <h3>用于补充简历</h3><p>只能选择实际回答的引用片段，逐项确认真实性和已有目标。表达 / 知识建议不能变为经历；之后仍须优化、审查、逐条采纳，默认另存版本。</p>
@@ -63,7 +75,7 @@ async function review() {
     <p v-if="error" role="alert" class="report-error">{{ error }}</p>
     <template v-if="latestResume && !reviewing">
       <div v-for="fact in session.report.facts" :key="fact.id" class="fact">
-        <blockquote>{{ fact.text }}<small>原回答：{{ fact.answerId }}</small></blockquote>
+        <blockquote>{{ fact.text }}<small>来自 {{ answerLabel(fact.answerId) }}</small></blockquote>
         <template v-if="selections[fact.id]">
           <label>关联已有经历 / 项目<select v-model="selections[fact.id]!.targetId" @change="selections[fact.id]!.confirmed = false"><option value="">请选择</option><option v-for="target in targets" :key="target.id" :value="target.id">{{ target.label }}</option></select></label>
           <label class="check"><input v-model="selections[fact.id]!.confirmed" type="checkbox" :disabled="!selections[fact.id]!.targetId" />我确认这是我的真实职责、行动或结果，与所选目标相符</label>
@@ -190,6 +202,23 @@ ol > li::before {
   line-height: 1;
 }
 
+/* Targeted practice: one quiet plate between the priorities and the disclosures. */
+.practice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+  margin-top: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-card);
+  background: var(--color-paper-2);
+}
+
+.practice-row p { margin: 0; color: var(--color-ink-2); font-size: var(--text-sm); }
+.practice-row :deep(.el-button) { flex-shrink: 0; margin: 0; }
+
 .fact {
   margin-top: var(--space-md);
   padding: var(--space-md) 0;
@@ -247,5 +276,6 @@ select:focus-visible { outline: none; border-color: var(--color-accent); box-sha
   ol { grid-template-columns: minmax(0, 1fr); }
   ol > li + li { margin-top: 0; margin-left: 0; }
   .report > :deep(.el-button) { width: 100%; }
+  .practice-row :deep(.el-button) { width: 100%; }
 }
 </style>

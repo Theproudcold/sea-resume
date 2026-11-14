@@ -12,11 +12,14 @@ import { useWorkbenchStore } from '@/stores/workbench';
 import { useStorageStore } from '@/stores/storage';
 import { useAiWorkspaceStore } from '@/stores/aiWorkspace';
 import { storageManager } from '@/services/storage/StorageManager';
+import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
 import { buildResumeContext } from '@/services/ai/resumeContext';
-import { downloadInterview, interviewerData } from '@/services/ai/interview';
+import { downloadInterview, interviewerData, interviewSettingsPayload } from '@/services/ai/interview';
+import { answeredDurationMs, formatClock, formatDuration, sessionElapsedMs } from '@/utils/interviewTiming';
+import { weaknessFocusFromReport, weaknessTagLabel } from '@/utils/interviewWeakness';
 import type { ResumeData } from '@/types/resume';
 import type { AiProviderConfig } from '@/types/ai';
-import type { InterviewSettings } from '@/types/interview';
+import type { InterviewFocus, InterviewSession, InterviewSettings, InterviewWeaknessTag } from '@/types/interview';
 import AiWorkflowSteps from '@/components/ai/AiWorkflowSteps.vue';
 import { confirmAiAction } from '@/utils/aiDialogs';
 const route = useRoute(); const router = useRouter();
@@ -27,12 +30,35 @@ const config = ref<AiProviderConfig | null>(null);
 const loading = ref(false); const pageError = ref(''); const draftDirty = ref(false);
 const generalize = ref(true); const persistence = ref(false);
 const providerDialog = ref(false);
+const providerRevision = ref(0);
 const consentForm = ref<InstanceType<typeof InterviewConsent>>();
 const settings = reactive<InterviewSettings>({ targetRole: '', jd: '', level: '未指定', direction: '综合', mode: 'training', mainQuestionLimit: 8 });
-const preview = computed(() => store.session ? interviewerData(store.session) : { context: resume.value ? buildResumeContext(resume.value, { generalizeOrganizations: generalize.value }) : null, settings });
-const statusLabels = { ready: '待开始', running: '请求中', answering: '等待回答', reviewing: '待手动继续', paused: '已暂停', interrupted: '已中断，等待恢复', failed: '步骤失败', completed: '已完成' };
+// Targeted practice: a report can hand over its practice points, and the user decides which to keep.
+const focusSource = ref<{ sessionId: string; points: string[]; tags: InterviewWeaknessTag[] } | null>(null);
+const focusSelected = ref<string[]>([]);
+const focusNotice = ref('');
+watch(focusSelected, value => {
+  settings.focus = focusSource.value && value.length
+    ? { sourceSessionId: focusSource.value.sessionId, points: [...value], tags: [...focusSource.value.tags] }
+    : undefined;
+}, { deep: true });
+const preview = computed(() => store.session ? interviewerData(store.session) : { context: resume.value ? buildResumeContext(resume.value, { generalizeOrganizations: generalize.value }) : null, settings: interviewSettingsPayload(settings) });
+const statusLabels = { ready: '准备', running: '出题中', answering: '等待你的回答', reviewing: '等待你的回答', paused: '已暂停', interrupted: '已暂停', failed: '这一步没有完成', completed: '已完成' };
 const processedMain = computed(() => store.session?.turns.filter(turn => !turn.followup && turn.submittedAt).length || 0);
 const progressPercent = computed(() => store.session ? Math.round(processedMain.value / store.session.settings.mainQuestionLimit * 100) : 0);
+// Local rhythm readout: elapsed time is shown here only and is never part of a model request.
+const now = ref(Date.now());
+const elapsedLabel = computed(() => {
+  if (!store.session) return '';
+  const ms = sessionElapsedMs(store.session, now.value);
+  return ms === null ? '' : formatClock(ms);
+});
+const answeredMs = computed(() => store.session ? answeredDurationMs(store.session) : 0);
+const answeredLabel = computed(() => answeredMs.value > 0 ? formatDuration(answeredMs.value) : '');
+let clock: ReturnType<typeof setInterval> | undefined;
+function startClock() { if (!clock) clock = setInterval(() => { now.value = Date.now(); }, 1000); }
+function stopClock() { if (clock) { clearInterval(clock); clock = undefined; } }
+watch(() => store.session?.status, status => { if (status && status !== 'completed') startClock(); else stopClock(); });
 let loadEpoch = 0;
 async function loadResume() {
   const token = ++loadEpoch; resume.value = null; config.value = null; consentForm.value?.reset();
@@ -40,6 +66,24 @@ async function loadResume() {
   try { const result = await storageManager.read(resumeId.value); if (token !== loadEpoch) return; if (!result) throw new Error('所选简历不存在。'); resume.value = result; settings.targetRole = result.basic.title || ''; }
   catch (cause) { pageError.value = cause instanceof Error ? cause.message : '读取简历失败'; }
 }
+/** Loads the finished interview named by ?focusSessionId and carries its practice points into the setup. */
+async function loadFocus() {
+  focusSource.value = null; focusSelected.value = []; focusNotice.value = '';
+  const sourceId = String(route.query.focusSessionId ?? '');
+  if (!sourceId) return;
+  try {
+    const record = await aiWorkspaceRepository.get<InterviewSession>('interview', sourceId);
+    if (!record) throw new Error('找不到上一场面试记录');
+    const focus = weaknessFocusFromReport(record);
+    if (!focus) throw new Error('上一场报告没有可带走的练习重点');
+    focusSource.value = { sessionId: focus.sourceSessionId, points: focus.points, tags: focus.tags };
+    focusSelected.value = [...focus.points];
+    if (record.settings.targetRole) settings.targetRole = record.settings.targetRole;
+    if (record.settings.level) settings.level = record.settings.level;
+    settings.direction = record.settings.direction;
+  } catch (cause) { focusNotice.value = `${cause instanceof Error ? cause.message : '读取上一场复盘失败'}，将按常规开始。`; }
+}
+function clearFocus() { focusSource.value = null; focusSelected.value = []; focusNotice.value = ''; }
 async function enter() {
   loading.value = true; pageError.value = ''; draftDirty.value = false;
   try {
@@ -47,7 +91,9 @@ async function enter() {
     await workbench.init();
     const id = String(route.params.sessionId ?? 'new');
     if (id === 'new') {
-      store.reset(); resumeId.value = String(route.query.resumeId ?? workbench.resumeList[0]?.id ?? ''); await loadResume();
+      store.reset(); focusSource.value = null; focusSelected.value = []; focusNotice.value = '';
+      resumeId.value = String(route.query.resumeId ?? workbench.resumeList[0]?.id ?? ''); await loadResume();
+      await loadFocus();
     } else if (store.session?.id !== id) await store.restore(id);
   } catch (cause) { pageError.value = cause instanceof Error ? cause.message : '初始化失败'; }
   finally { loading.value = false; }
@@ -74,8 +120,12 @@ function beforeUnload(event: BeforeUnloadEvent) {
   if (optimization.busy) optimization.cancel();
 }
 onMounted(() => { window.addEventListener('beforeunload', beforeUnload); void enter(); });
-onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload); store.pause(); store.revokeConsent(); });
+onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload); stopClock(); store.pause(); store.revokeConsent(); });
 function applied(id: string) { ElMessage.success('已按优化审核结果采纳，可用新版本开始面试。'); void router.push(`/interview/new?resumeId=${encodeURIComponent(id)}`); }
+function startPractice(focus: InterviewFocus) {
+  const sourceResumeId = store.session?.sourceResumeId || resumeId.value;
+  void router.push({ path: '/interview/new', query: { resumeId: sourceResumeId, focusSessionId: focus.sourceSessionId } });
+}
 </script>
 <template>
   <div class="interview-page">
@@ -84,25 +134,41 @@ function applied(id: string) { ElMessage.success('已按优化审核结果采纳
       <div v-if="loading" class="page-notice" role="status">正在读取本机数据…</div>
       <el-alert v-if="pageError || store.error" type="error" :closable="false" show-icon :title="pageError || store.error" />
       <el-alert v-if="storage.initializationWarning" type="warning" :closable="false" :title="storage.initializationWarning" />
+      <p v-if="focusNotice" class="focus-notice" role="status">{{ focusNotice }}</p>
       <template v-if="!loading && !store.session">
         <header class="page-intro"><span class="eyebrow">面试练习室</span><h1>从你的真实经历，开始一场对话</h1><p>先选简历与面试方向，再确认模型和发送范围。一次一题，按自己的节奏练习。</p></header>
         <div class="setup-layout">
           <div class="setup-main">
             <section class="card setup-card">
-              <div class="section-heading"><span class="section-number">01</span><div><h2>开始设置</h2><p>岗位信息帮助面试官更有针对性地提问。</p></div></div>
+              <div class="section-heading"><span class="section-number">01</span><div><h2>选简历和岗位</h2><p>岗位信息帮助面试官更有针对性地提问。</p></div></div>
               <div class="fields">
                 <label>来源简历<select v-model="resumeId" aria-label="来源简历" @change="loadResume"><option value="">选择简历</option><option v-for="item in workbench.resumeList" :key="item.id" :value="item.id">{{ item.title }}</option></select></label>
                 <label>目标岗位<input v-model="settings.targetRole" maxlength="200" placeholder="例如：前端开发工程师" /></label>
                 <label>目标级别<input v-model="settings.level" maxlength="200" /></label>
                 <label>方向<select v-model="settings.direction" aria-label="面试方向"><option>综合</option><option>项目深挖</option><option>岗位专业</option><option>行为面试</option></select></label>
-                <label>模式<select v-model="settings.mode" aria-label="模式"><option value="training">训练：答后点评，再手动继续</option><option value="real">真实模拟：结束后统一反馈</option></select></label>
-                <label>主问题数<select v-model="settings.mainQuestionLimit" aria-label="主问题数"><option :value="5">5</option><option :value="8">8</option><option :value="12">12</option></select></label>
               </div>
-              <label>JD（可选，不提供时不会推断目标公司标准）<textarea v-model="settings.jd" rows="4" maxlength="15000" placeholder="粘贴岗位要求；留空也可围绕简历进行面试。" /></label>
-              <div class="setup-options"><label class="check"><input v-model="generalize" type="checkbox" />泛化公司与学校名称（正文请自行检查）</label><label class="check"><input v-model="persistence" type="checkbox" />保存到本机（默认仅内存）</label></div>
             </section>
-            <InterviewConsent ref="consentForm" :preview="preview" @confirmed="confirmed" @changed="invalidate" />
-            <div class="start-row"><p>{{ config ? '发送范围已确认，可以开始。' : '完成模型与发送确认后，即可开始面试。' }}</p><el-button type="primary" size="large" :disabled="!resume || !config || store.busy" @click="start">冻结快照并开始</el-button></div>
+            <section class="card setup-card">
+              <div class="section-heading"><span class="section-number">02</span><div><h2>选练习方式</h2><p>训练模式答完就看反馈；真实模拟留到结束再看。</p></div></div>
+              <label>模式<select v-model="settings.mode" aria-label="模式"><option value="training">训练：答后点评，再手动继续</option><option value="real">真实模拟：结束后统一反馈</option></select></label>
+            </section>
+            <section v-if="focusSource" class="card focus-card">
+              <div class="section-heading"><span class="section-chip">专项</span><div><h2>弱项专项练习</h2><p>来自上一场复盘；只带进入你勾选的重点。</p></div></div>
+              <p v-if="focusSource.tags.length" class="focus-tags"><span v-for="tag in focusSource.tags" :key="tag">{{ weaknessTagLabel(tag) }}</span></p>
+              <label v-for="point in focusSource.points" :key="point" class="check"><input v-model="focusSelected" type="checkbox" :value="point" />{{ point }}</label>
+              <div class="focus-actions"><p>{{ focusSelected.length ? `已选 ${focusSelected.length} 个重点，题目上限与追问规则不变。` : '未选择任何重点，将按常规面试开始。' }}</p><el-button text @click="clearFocus">取消专项</el-button></div>
+            </section>
+            <section class="card setup-card">
+              <div class="section-heading"><span class="section-number">03</span><div><h2>确认发送范围</h2><p>开始前看清会发出去的内容。</p></div></div>
+              <InterviewConsent ref="consentForm" :preview="preview" :revision="providerRevision" @confirmed="confirmed" @changed="invalidate" @configure="providerDialog = true" />
+              <details class="quiet-details">
+                <summary>更多设置</summary>
+                <label>主问题数<select v-model="settings.mainQuestionLimit" aria-label="主问题数"><option :value="5">5</option><option :value="8">8</option><option :value="12">12</option></select></label>
+                <label>JD（可选，不提供时不会推断目标公司标准）<textarea v-model="settings.jd" rows="4" maxlength="15000" placeholder="粘贴岗位要求；留空也可围绕简历进行面试。" /></label>
+                <div class="setup-options"><label class="check"><input v-model="generalize" type="checkbox" />泛化公司与学校名称（正文请自行检查）</label><label class="check"><input v-model="persistence" type="checkbox" />保存到本机（默认仅内存）</label></div>
+              </details>
+            </section>
+            <div class="start-row"><p>{{ config ? '发送范围已确认，可以开始。' : '完成模型与发送确认后，即可开始面试。' }}</p><el-button type="primary" size="large" :disabled="!resume || !config || store.busy" @click="start">开始面试</el-button></div>
           </div>
           <aside class="setup-guide card">
             <span class="eyebrow">本次练习</span><h2>{{ settings.mode === 'training' ? '边练边调整' : '接近真实面试的节奏' }}</h2><p>{{ settings.mode === 'training' ? '每次回答后查看教练反馈，整理思路后再继续。' : '过程中不展示教练点评，结束后统一回看与复盘。' }}</p>
@@ -115,53 +181,158 @@ function applied(id: string) { ElMessage.success('已按优化审核结果采纳
       </template>
       <template v-else-if="store.session">
         <section class="card session-progress">
-          <div class="session-heading"><div><div class="session-tags"><span class="eyebrow">{{ store.session.settings.mode === 'real' ? '真实模拟' : '训练模式' }}</span><span>{{ store.session.settings.direction }}</span></div><h1>{{ store.session.settings.targetRole || '通用面试' }}</h1></div><span class="status-pill" :class="`is-${store.session.status}`" role="status"><span aria-hidden="true" />{{ statusLabels[store.session.status] }}</span></div>
-          <div class="progress-caption"><span>主问题 {{ store.currentTurn?.mainNumber ?? 0 }} / {{ store.session.settings.mainQuestionLimit }} <strong v-if="store.currentTurn?.followup">· 追问 1/1</strong></span><span>已处理 {{ processedMain }} 道主问题（含跳过）</span></div>
+          <div class="session-heading"><div><div class="session-tags"><span class="eyebrow">{{ store.session.settings.mode === 'real' ? '真实模拟' : '训练模式' }}</span><span>{{ store.session.settings.direction }}</span><span v-if="store.session.settings.focus" class="focus-chip">专项 · {{ store.session.settings.focus.points.length }} 个重点</span></div><h1>{{ store.session.settings.targetRole || '通用面试' }}</h1></div><span class="status-pill" :class="`is-${store.session.status}`" role="status"><span aria-hidden="true" />{{ statusLabels[store.session.status] }}</span></div>
+          <div class="progress-caption"><span>第 {{ store.currentTurn?.mainNumber || processedMain || 1 }} 题，共 {{ store.session.settings.mainQuestionLimit }} 题<strong v-if="store.currentTurn?.followup"> · 追问</strong></span><span v-if="elapsedLabel">已进行 {{ elapsedLabel }}</span><span v-if="answeredLabel">累计答题 {{ answeredLabel }}</span></div>
           <div class="progress-track" role="progressbar" aria-label="主问题处理进度" :aria-valuenow="processedMain" :aria-valuemax="store.session.settings.mainQuestionLimit" :aria-valuemin="0"><span :style="{ width: `${progressPercent}%` }" /></div>
           <div class="session-controls">
             <AiWorkflowSteps :steps="['准备', '问答', '复盘']" :current="store.session.report ? 2 : 1" :complete="!!store.session.report" label="面试流程" />
-            <div class="actions"><el-button v-if="store.session.status !== 'completed' && !['paused', 'interrupted'].includes(store.session.status)" @click="store.pause">暂停 / 取消请求</el-button><el-button v-if="['paused', 'interrupted'].includes(store.session.status)" type="primary" plain @click="store.resume">恢复阶段（不自动请求）</el-button><el-button v-if="store.session.status === 'failed'" :disabled="store.busy || !store.consented" type="primary" plain @click="store.retry">仅重试 {{ store.session.pendingStage }} 步骤</el-button><el-button v-if="store.session.status !== 'completed'" :disabled="!store.consented || (store.busy && store.session.pendingStage === 'report')" @click="confirmFinish">结束并生成报告</el-button></div>
+            <div class="actions"><el-button v-if="store.session.status !== 'completed' && !['paused', 'interrupted'].includes(store.session.status)" @click="store.pause">暂停</el-button><el-button v-if="['paused', 'interrupted'].includes(store.session.status)" type="primary" plain @click="store.resume">继续（不自动提问）</el-button><el-button v-if="store.session.status === 'failed'" :disabled="store.busy || !store.consented" type="primary" plain @click="store.retry">重试这一步</el-button><el-button v-if="store.session.status !== 'completed'" :disabled="!store.consented || (store.busy && store.session.pendingStage === 'report')" @click="confirmFinish">结束并生成报告</el-button></div>
           </div>
           <el-button v-if="store.compatibilityError" text type="primary" @click="store.enableCompatibilityMode">选择兼容模式（省略 response_format），然后手动重试</el-button>
         </section>
         <div class="session-layout" :class="{ 'needs-consent': !store.consented }">
           <div class="session-main">
-            <InterviewReport v-if="store.session.report" :session="store.session" @configure="providerDialog = true" @applied="applied" />
+            <InterviewReport v-if="store.session.report" :session="store.session" @configure="providerDialog = true" @applied="applied" @practice="startPractice" />
             <details v-if="store.session.report" class="transcript"><summary>查看本轮问答记录 · {{ store.session.turns.length }} 条问题</summary><InterviewConversation :session="store.session" :busy="store.busy" :consented="store.consented" @draft="value => draftDirty = value" /></details>
             <InterviewConversation v-else :session="store.session" :busy="store.busy" :consented="store.consented" @answer="store.submitAnswer" @continue="store.continueInterview" @draft="value => draftDirty = value" />
           </div>
           <aside class="session-sidebar">
-            <details v-if="store.session.status !== 'completed'" class="access-panel card" :open="!store.consented"><summary>模型与发送范围 <span>{{ store.consented ? '已确认' : '需要确认' }}</span></summary><InterviewConsent :preview="preview" :frozen-provider="store.session.provider" :disabled="store.busy" @confirmed="confirmed" @changed="invalidate" /></details>
-            <section class="card session-tools"><div class="section-heading"><div><h2>本次练习</h2><p>{{ store.session.provider.model }}</p></div></div><dl class="practice-facts"><div><dt>请求次数</dt><dd>{{ store.session.usage.calls }}</dd></div><div><dt>输入 tokens</dt><dd>{{ store.session.usage.promptTokens.toLocaleString() }}</dd></div><div><dt>输出 tokens</dt><dd>{{ store.session.usage.completionTokens.toLocaleString() }}</dd></div></dl><p class="microcopy">服务未返回 usage 时为 0，不估算费用。</p><div class="save-state" :class="{ 'is-saved': store.session.persistence && !store.unsaved }">{{ store.session.persistence && !store.unsaved ? '✓ 检查点已保存到本机' : '当前有仅内存 / 未保存内容' }}</div><el-button @click="store.setPersistence(true)">{{ store.session.persistence ? '保存当前检查点' : '选择保存到本机' }}</el-button><p v-if="store.storageError" class="error" role="alert">{{ store.storageError }}<el-button text @click="store.setPersistence(false)">仅内存继续</el-button></p><div class="export-actions"><el-button text @click="downloadInterview(store.session, 'json')">导出 JSON</el-button><el-button text @click="downloadInterview(store.session, 'markdown')">导出 Markdown</el-button></div></section>
+            <details v-if="store.session.status !== 'completed'" class="access-panel card" :open="!store.consented"><summary>模型与发送范围 <span>{{ store.consented ? '已确认' : '需要确认' }}</span></summary><InterviewConsent :preview="preview" :frozen-provider="store.session.provider" :revision="providerRevision" :disabled="store.busy" @confirmed="confirmed" @changed="invalidate" @configure="providerDialog = true" /></details>
+            <section class="card session-tools"><div class="section-heading"><div><h2>本次练习</h2><p>{{ store.session.provider.model }}</p></div></div><details class="quiet-details"><summary>请求用量</summary><dl class="practice-facts"><div><dt>请求次数</dt><dd>{{ store.session.usage.calls }}</dd></div><div><dt>输入 tokens</dt><dd>{{ store.session.usage.promptTokens.toLocaleString() }}</dd></div><div><dt>输出 tokens</dt><dd>{{ store.session.usage.completionTokens.toLocaleString() }}</dd></div></dl><p class="microcopy">服务未返回 usage 时为 0，不估算费用。</p></details><div class="save-state" :class="{ 'is-saved': store.session.persistence && !store.unsaved }">{{ store.session.persistence && !store.unsaved ? '✓ 检查点已保存到本机' : '当前有仅内存 / 未保存内容' }}</div><el-button @click="store.setPersistence(true)">{{ store.session.persistence ? '保存当前检查点' : '选择保存到本机' }}</el-button><p v-if="store.storageError" class="error" role="alert">{{ store.storageError }}<el-button text @click="store.setPersistence(false)">仅内存继续</el-button></p><div class="export-actions"><el-button text @click="downloadInterview(store.session, 'json')">导出 JSON</el-button><el-button text @click="downloadInterview(store.session, 'markdown')">导出 Markdown</el-button></div></section>
             <details class="card resume-summary"><summary>本次简历快照</summary><p class="microcopy">原简历的后续编辑不会改变本次面试。</p><p>{{ store.session.context.basic.summary || store.session.context.basic.title || '未填写个人简介' }}</p><ul><li v-for="item in store.session.context.projects" :key="item.id">{{ item.name }}<span>{{ item.role }}</span></li><li v-for="item in store.session.context.experiences" :key="item.id">{{ item.company }}<span>{{ item.position }}</span></li></ul><details class="quiet-details"><summary>查看完整发送数据</summary><pre>{{ JSON.stringify(store.session.context, null, 2) }}</pre></details></details>
           </aside>
         </div>
       </template>
       <footer class="storage-note">记录仅在当前浏览器保存，不随简历目录迁移，也不包含在简历全量备份中。可在面试记录页导出或删除。</footer>
     </main>
-    <el-dialog v-model="providerDialog" title="配置 AI 服务与会话密钥" width="var(--ui-dialog-width-lg)"><AiProviderSettingsPanel /></el-dialog>
+    <el-dialog v-model="providerDialog" title="配置 AI 服务与会话密钥" width="min(980px, calc(100vw - 32px))"><AiProviderSettingsPanel @saved="providerRevision++" /></el-dialog>
   </div>
 </template>
 
 <style scoped>
-.interview-page { min-height: 100vh; background: var(--ui-bg-page); color: var(--ui-text-main); }
-main { max-width: var(--ui-content-max-width); width: 100%; margin: 0 auto; padding: var(--ui-space-8) var(--ui-page-gutter); display: grid; gap: var(--ui-space-6); }
-.card { min-width: 0; background: var(--ui-bg-surface); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); padding: var(--ui-space-6); }
-.page-intro h1, .session-heading h1 { font-size: var(--ui-font-xl); font-weight: 650; line-height: 1.4; margin: var(--ui-space-2) 0; overflow-wrap: anywhere; } .page-intro p { color: var(--ui-text-secondary); margin: 0; }
-.eyebrow { font-size: var(--ui-font-xs); color: var(--ui-primary); font-weight: 600; letter-spacing: .05em; }
-h2 { font-size: var(--ui-font-lg); font-weight: 600; margin: 0; } p { font-size: var(--ui-font-md); line-height: 1.75; overflow-wrap: anywhere; }
-.setup-layout, .session-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--ui-space-6); align-items: start; }.setup-main, .session-main, .session-sidebar { min-width: 0; display: grid; gap: var(--ui-space-4); }.setup-guide, .session-sidebar { position: sticky; top: var(--ui-space-6); }
-.section-heading { display: flex; align-items: center; gap: var(--ui-space-3); margin-bottom: var(--ui-space-6); }.section-heading p { margin: var(--ui-space-1) 0 0; color: var(--ui-text-muted); font-size: var(--ui-font-sm); }.section-number { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; font-size: var(--ui-font-sm); font-weight: 600; color: var(--ui-primary); background: color-mix(in srgb, var(--ui-primary) 7%, var(--ui-bg-surface)); border-radius: var(--ui-radius-md); }
-.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-4); } label { display: grid; gap: var(--ui-space-2); margin-bottom: var(--ui-space-4); font-size: var(--ui-font-sm); color: var(--ui-text-secondary); font-weight: 500; } .fields label { margin: 0; }.fields + label { margin-top: var(--ui-space-4); }
-input, select, textarea { width: 100%; min-width: 0; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); padding: var(--ui-space-2) var(--ui-space-3); min-height: var(--ui-control-height); font: inherit; background: var(--ui-bg-surface); color: var(--ui-text-main); } textarea { resize: vertical; line-height: 1.7; }.check { display: flex; align-items: flex-start; font-weight: 400; margin: 0; }.check input { width: auto; min-height: auto; margin-top: var(--ui-space-1); accent-color: var(--ui-primary); }.setup-options { display: grid; gap: var(--ui-space-3); padding-top: var(--ui-space-4); border-top: 1px solid var(--ui-border); }
-.setup-guide > h2 { margin-top: var(--ui-space-2); }.setup-guide > p { color: var(--ui-text-secondary); font-size: var(--ui-font-sm); }.setup-guide :deep(.workflow) { margin: var(--ui-space-6) 0; }.practice-facts { margin: 0; display: grid; gap: var(--ui-space-3); font-size: var(--ui-font-sm); }.practice-facts > div { display: flex; justify-content: space-between; gap: var(--ui-space-3); }.practice-facts dt { color: var(--ui-text-muted); }.practice-facts dd { margin: 0; text-align: right; font-weight: 550; font-variant-numeric: tabular-nums; }.guide-footnote { border-top: 1px solid var(--ui-border); padding-top: var(--ui-space-4); margin-top: var(--ui-space-6); }
-.start-row { display: flex; justify-content: space-between; gap: var(--ui-space-4); align-items: center; padding: var(--ui-space-2) 0; }.start-row p { margin: 0; color: var(--ui-text-muted); font-size: var(--ui-font-sm); }
-.session-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--ui-space-4); }.session-tags { display: flex; align-items: center; gap: var(--ui-space-3); font-size: var(--ui-font-xs); color: var(--ui-text-muted); }.status-pill { display: inline-flex; align-items: center; gap: var(--ui-space-2); padding: var(--ui-space-1) var(--ui-space-3); border-radius: var(--ui-radius-lg); background: var(--ui-bg-subtle); color: var(--ui-text-secondary); font-size: var(--ui-font-xs); white-space: nowrap; }.status-pill > span { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }.is-running, .is-answering { color: var(--ui-primary); }.is-failed { color: var(--ui-danger); }.is-completed { color: var(--ui-success); }
-.progress-caption { display: flex; justify-content: space-between; gap: var(--ui-space-3); margin: var(--ui-space-4) 0 var(--ui-space-2); font-size: var(--ui-font-xs); color: var(--ui-text-muted); }.progress-caption strong { color: var(--ui-primary); font-weight: 500; }.progress-track { height: 4px; border-radius: var(--ui-radius-sm); background: var(--ui-bg-hover); overflow: hidden; }.progress-track > span { display: block; height: 100%; background: var(--ui-primary); transition: width var(--ui-duration-normal) ease; }
-.session-controls { display: flex; justify-content: space-between; gap: var(--ui-space-6); align-items: center; margin-top: var(--ui-space-4); }.session-controls > :first-child { flex: 1; max-width: 320px; }.actions { display: flex; flex-wrap: wrap; gap: var(--ui-space-2); }.actions :deep(.el-button) { margin: 0; }.session-tools .section-heading { margin-bottom: var(--ui-space-4); }.session-tools > :deep(.el-button) { width: 100%; }.export-actions { display: flex; justify-content: space-between; margin-top: var(--ui-space-3); }.export-actions :deep(.el-button) { margin: 0; padding-inline: var(--ui-space-1); }
-.microcopy, .quiet-details p { font-size: var(--ui-font-xs); color: var(--ui-text-muted); line-height: 1.7; }.save-state { margin: var(--ui-space-4) 0 var(--ui-space-3); font-size: var(--ui-font-xs); color: var(--ui-warning); }.save-state.is-saved { color: var(--ui-success); }.error { color: var(--ui-danger); }
-summary { cursor: pointer; font-size: var(--ui-font-sm); line-height: var(--ui-line-height); }.quiet-details { margin-top: var(--ui-space-4); color: var(--ui-text-secondary); }.access-panel > summary { font-weight: 550; }.access-panel > summary > span { color: var(--ui-text-muted); font-size: var(--ui-font-xs); font-weight: 400; margin-left: var(--ui-space-2); }.access-panel { padding: var(--ui-space-4); }.access-panel :deep(.consent-card) { border: 0; padding: var(--ui-space-4) 0 0; }.access-panel :deep(.fields) { grid-template-columns: minmax(0, 1fr); }.access-panel :deep(.consent-heading) { display: none; }.access-panel :deep(.el-button) { max-width: 100%; white-space: normal; height: auto; min-height: var(--ui-control-height); margin: var(--ui-space-2) 0 0; }
-.resume-summary ul { margin: var(--ui-space-3) 0; padding: 0; list-style: none; }.resume-summary li { font-size: var(--ui-font-sm); padding: var(--ui-space-2) 0; border-bottom: 1px solid var(--ui-border); overflow-wrap: anywhere; }.resume-summary li span { display: block; font-size: var(--ui-font-xs); color: var(--ui-text-muted); }.resume-summary > p { font-size: var(--ui-font-sm); }.transcript > summary { padding: var(--ui-space-4); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-surface); }.transcript[open] > summary { margin-bottom: var(--ui-space-3); } pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font-size: var(--ui-font-xs); }.storage-note { padding: var(--ui-space-4) 0; text-align: center; color: var(--ui-text-muted); font-size: var(--ui-font-xs); line-height: 1.7; }.page-notice { color: var(--ui-text-muted); }
-@media (max-width: 1024px) { .setup-layout, .session-layout { grid-template-columns: minmax(0, 1fr); }.setup-guide, .session-sidebar { position: static; }.session-sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); }.access-panel { grid-column: 1 / -1; }.access-panel :deep(.fields) { grid-template-columns: repeat(2, minmax(0, 1fr)); }.needs-consent .session-sidebar { order: -1; }.session-controls { align-items: flex-start; flex-wrap: wrap; }.session-controls > :first-child { flex-basis: 100%; } }
-@media (max-width: 768px) { main { padding-top: var(--ui-space-6); gap: var(--ui-space-4); }.card { padding: var(--ui-space-4); }.page-intro h1, .session-heading h1 { font-size: var(--ui-font-title); }.fields, .session-sidebar { grid-template-columns: minmax(0, 1fr); }.session-heading { align-items: flex-start; }.progress-caption { flex-wrap: wrap; }.start-row { align-items: stretch; flex-direction: column; }.start-row :deep(.el-button) { width: 100%; }.actions :deep(.el-button) { padding-inline: var(--ui-space-3); white-space: normal; min-height: var(--ui-control-height); height: auto; }.access-panel :deep(.fields) { grid-template-columns: minmax(0, 1fr); } }
+/* Cobalt tokens only: the interview shell uses the same surfaces, keys and hairlines as every other page. */
+.interview-page { min-height: 100vh; min-height: 100dvh; background: var(--color-paper); color: var(--color-ink); }
+
+main { display: grid; gap: var(--space-lg); width: 100%; max-width: 1280px; margin: 0 auto; padding: var(--space-xl) var(--space-lg); }
+
+.card { min-width: 0; padding: var(--space-lg); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-card); background: var(--color-paper-3); box-shadow: var(--shadow-card); }
+
+.page-intro h1, .session-heading h1 { min-width: 0; margin: var(--space-2xs) 0; font-size: var(--text-2xl); font-weight: 600; letter-spacing: var(--tracking-display); line-height: 1.4; overflow-wrap: anywhere; text-wrap: balance; }
+.page-intro p { margin: 0; color: var(--color-ink-2); }
+.eyebrow { color: var(--color-accent); font-family: var(--font-display); font-size: var(--text-xs); font-weight: 600; letter-spacing: .05em; }
+h2 { min-width: 0; margin: 0; font-size: var(--text-lg); font-weight: 600; letter-spacing: var(--tracking-display); }
+p { font-size: var(--text-md); line-height: 1.75; overflow-wrap: anywhere; }
+
+.setup-layout, .session-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-lg); align-items: start; }
+.setup-main, .session-main, .session-sidebar { display: grid; gap: var(--space-md); min-width: 0; }
+.setup-guide, .session-sidebar { position: sticky; top: var(--space-lg); }
+
+.section-heading { display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-lg); }
+.section-heading p { margin: var(--space-2xs) 0 0; color: var(--color-muted); font-size: var(--text-sm); }
+.section-number { display: grid; flex-shrink: 0; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-input); background: var(--color-accent-wash); color: var(--color-accent); font-family: var(--font-display); font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-md); }
+label { display: grid; gap: var(--space-xs); margin-bottom: var(--space-md); color: var(--color-ink-2); font-size: var(--text-sm); font-weight: 500; }
+.fields label { margin: 0; }
+.fields + label { margin-top: var(--space-md); }
+
+input, select, textarea { width: 100%; min-width: 0; min-height: var(--control-height); padding: var(--space-2xs) var(--space-sm); border: var(--rule-hair) solid var(--color-rule-2); border-radius: var(--radius-input); background: var(--color-paper-3); color: var(--color-ink); font: inherit; font-weight: 400; transition: box-shadow var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out); }
+textarea { resize: vertical; line-height: 1.7; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-wash); }
+.check { display: flex; align-items: flex-start; margin: 0; font-weight: 400; line-height: 1.6; }
+.check input { width: auto; min-height: auto; margin-top: var(--space-2xs); accent-color: var(--color-accent); }
+.setup-options { display: grid; gap: var(--space-sm); padding-top: var(--space-md); border-top: var(--rule-hair) solid var(--color-rule); }
+
+/* Targeted practice: a distinct card before consent, never a numbered setup step. */
+.focus-card { display: grid; gap: var(--space-xs); }
+.focus-card .section-heading { margin-bottom: var(--space-xs); }
+.section-chip { display: inline-grid; flex-shrink: 0; place-items: center; min-width: 36px; min-height: 36px; padding: 0 var(--space-2xs); border: var(--rule-hair) solid var(--color-accent); border-radius: var(--radius-input); color: var(--color-accent); font-family: var(--font-display); font-size: var(--text-xs); font-weight: 600; }
+.focus-tags { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin: 0 0 var(--space-xs); }
+.focus-tags span { padding: 0 var(--space-xs); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-input); color: var(--color-ink-2); font-family: var(--font-display); font-size: var(--text-xs); font-weight: 500; line-height: 1.7; }
+.focus-card .check { padding: var(--space-2xs) 0; }
+.focus-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs); padding-top: var(--space-xs); border-top: var(--rule-hair) solid var(--color-rule); }
+.focus-actions p { margin: 0; color: var(--color-muted); font-size: var(--text-xs); }
+.focus-notice { margin: 0; padding: var(--space-xs) var(--space-md); border: var(--rule-hair) solid color-mix(in oklab, var(--color-warning) 40%, transparent); border-radius: var(--radius-card); background: var(--color-warning-wash); color: var(--color-ink); font-size: var(--text-sm); font-weight: 500; }
+.focus-chip { padding: 0 var(--space-2xs); border: var(--rule-hair) solid var(--color-accent); border-radius: var(--radius-s); color: var(--color-accent); font-weight: 500; }
+
+.setup-guide > h2 { margin-top: var(--space-2xs); }
+.setup-guide > p { color: var(--color-ink-2); font-size: var(--text-sm); }
+.setup-guide :deep(.workflow) { margin: var(--space-lg) 0; }
+.practice-facts { display: grid; gap: var(--space-sm); margin: 0; font-size: var(--text-sm); }
+.practice-facts > div { display: flex; justify-content: space-between; gap: var(--space-sm); }
+.practice-facts dt { color: var(--color-muted); }
+.practice-facts dd { margin: 0; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+.guide-footnote { margin-top: var(--space-lg); padding-top: var(--space-md); border-top: var(--rule-hair) solid var(--color-rule); }
+
+.start-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); padding: var(--space-2xs) 0; }
+.start-row p { margin: 0; color: var(--color-muted); font-size: var(--text-sm); }
+
+.session-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-md); }
+.session-tags { display: flex; align-items: center; gap: var(--space-sm); color: var(--color-muted); font-size: var(--text-xs); }
+.status-pill { display: inline-flex; align-items: center; gap: var(--space-xs); padding: 0 var(--space-xs); border-radius: var(--radius-input); background: var(--color-paper-2); color: var(--color-ink-2); font-family: var(--font-display); font-size: var(--text-xs); font-weight: 500; line-height: 1.7; white-space: nowrap; }
+.status-pill > span { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.is-running, .is-answering { color: var(--color-accent); }
+.is-failed { color: var(--color-error); }
+.is-completed { color: var(--color-success); }
+
+.progress-caption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2xs) var(--space-md); margin: var(--space-md) 0 var(--space-xs); color: var(--color-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.progress-caption strong { color: var(--color-accent); font-weight: 500; }
+.progress-track { height: 4px; overflow: hidden; border-radius: var(--radius-s); background: var(--color-paper-2); }
+.progress-track > span { display: block; height: 100%; background: var(--color-accent); transition: width var(--dur-short) var(--ease-out); }
+
+.session-controls { display: flex; align-items: center; justify-content: space-between; gap: var(--space-lg); margin-top: var(--space-md); }
+.session-controls > :first-child { flex: 1; max-width: 320px; }
+.actions { display: flex; flex-wrap: wrap; gap: var(--space-xs); }
+.actions :deep(.el-button) { margin: 0; }
+.session-tools .section-heading { margin-bottom: var(--space-md); }
+.session-tools > :deep(.el-button) { width: 100%; }
+.export-actions { display: flex; justify-content: space-between; margin-top: var(--space-sm); }
+.export-actions :deep(.el-button) { margin: 0; padding-inline: var(--space-2xs); }
+
+.microcopy, .quiet-details p { color: var(--color-muted); font-size: var(--text-xs); line-height: 1.7; }
+.save-state { margin: var(--space-md) 0 var(--space-sm); color: var(--color-warning); font-size: var(--text-xs); font-weight: 500; }
+.save-state.is-saved { color: var(--color-success); }
+.error { color: var(--color-error); }
+
+summary { cursor: pointer; font-size: var(--text-sm); line-height: 1.6; }
+.quiet-details { margin-top: var(--space-md); color: var(--color-ink-2); }
+.access-panel > summary { font-weight: 500; }
+.access-panel > summary > span { margin-left: var(--space-xs); color: var(--color-muted); font-size: var(--text-xs); font-weight: 400; }
+.access-panel { padding: var(--space-md); }
+.access-panel :deep(.consent-card) { padding: var(--space-md) 0 0; border: 0; }
+.access-panel :deep(.service-picker) { max-width: 100%; }
+.access-panel :deep(.consent-heading) { display: none; }
+.access-panel :deep(.el-button) { max-width: 100%; height: auto; min-height: var(--control-height); margin: var(--space-xs) 0 0; white-space: normal; }
+
+.resume-summary ul { margin: var(--space-sm) 0; padding: 0; list-style: none; }
+.resume-summary li { padding: var(--space-xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.resume-summary li span { display: block; color: var(--color-muted); font-size: var(--text-xs); }
+.resume-summary > p { font-size: var(--text-sm); }
+.transcript > summary { padding: var(--space-md); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-card); background: var(--color-paper-3); }
+.transcript[open] > summary { margin-bottom: var(--space-sm); }
+pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-outlier); font-size: var(--text-xs); }
+.storage-note { padding: var(--space-md) 0; color: var(--color-muted); font-size: var(--text-xs); line-height: 1.7; text-align: center; }
+.page-notice { color: var(--color-muted); }
+
+@media (max-width: 1024px) {
+  .setup-layout, .session-layout { grid-template-columns: minmax(0, 1fr); }
+  .setup-guide, .session-sidebar { position: static; }
+  .session-sidebar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .access-panel { grid-column: 1 / -1; }
+  .needs-consent .session-sidebar { order: -1; }
+  .session-controls { align-items: flex-start; flex-wrap: wrap; }
+  .session-controls > :first-child { flex-basis: 100%; }
+}
+
+@media (max-width: 768px) {
+  main { gap: var(--space-md); padding-top: var(--space-lg); }
+  .card { padding: var(--space-md); }
+  .page-intro h1, .session-heading h1 { font-size: var(--text-xl); }
+  .fields, .session-sidebar { grid-template-columns: minmax(0, 1fr); }
+  .session-heading { align-items: flex-start; }
+  .progress-caption { flex-wrap: wrap; }
+  .start-row { align-items: stretch; flex-direction: column; }
+  .start-row :deep(.el-button) { width: 100%; }
+  .actions :deep(.el-button) { height: auto; min-height: var(--control-height); padding-inline: var(--space-sm); white-space: normal; }
+}
 </style>

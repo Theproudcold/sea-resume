@@ -5,6 +5,12 @@ export type InterviewMode = 'training' | 'real';
 export type InterviewDirection = '综合' | '项目深挖' | '岗位专业' | '行为面试';
 export type InterviewStage = 'initialize' | 'coach' | 'next' | 'report';
 export type InterviewStatus = 'ready' | 'running' | 'answering' | 'reviewing' | 'paused' | 'interrupted' | 'failed' | 'completed';
+/** Carried over from a finished report to bias a targeted practice session. */
+export interface InterviewFocus {
+  sourceSessionId: string;
+  points: string[];
+  tags: InterviewWeaknessTag[];
+}
 export interface InterviewSettings {
   targetRole: string;
   jd: string;
@@ -12,6 +18,7 @@ export interface InterviewSettings {
   direction: InterviewDirection;
   mode: InterviewMode;
   mainQuestionLimit: 5 | 8 | 12;
+  focus?: InterviewFocus;
 }
 export interface InterviewQuestion {
   text: string;
@@ -19,9 +26,16 @@ export interface InterviewQuestion {
   kind: 'experience' | 'knowledge' | 'behavior';
   itemIds: string[];
 }
+/** Fixed weakness taxonomy so practice targets stay comparable across sessions. */
+export const INTERVIEW_WEAKNESS_TAGS = ['structure', 'contribution', 'specificity', 'result', 'relevance', 'knowledge', 'none'] as const;
+export type InterviewWeaknessTag = typeof INTERVIEW_WEAKNESS_TAGS[number];
+export const INTERVIEW_EXPRESSION_TAGS = ['structure', 'contribution', 'specificity', 'result', 'relevance'] as const;
+export type InterviewExpressionTag = typeof INTERVIEW_EXPRESSION_TAGS[number];
 export interface InterviewEvidence { sourceId: string; snippet: string }
 export interface InterviewObservation {
   category: 'strength' | 'expression' | 'knowledge';
+  /** Absent on records saved before the taxonomy existed. */
+  tag?: InterviewWeaknessTag;
   text: string;
   verification: 'context-supported' | 'needs-verification';
   evidence: InterviewEvidence[];
@@ -38,6 +52,8 @@ export interface InterviewTurn {
   mainNumber: number;
   followup: boolean;
   question: InterviewQuestion;
+  /** When the question was shown; local timing only, never sent to the model. */
+  askedAt?: string;
   answer?: string;
   skipped?: boolean;
   submittedAt?: string;

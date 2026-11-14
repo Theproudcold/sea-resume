@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { ArrowDown, Right } from '@element-plus/icons-vue';
-import type { InterviewSession } from '@/types/interview';
+import type { InterviewSession, InterviewTurn } from '@/types/interview';
+import { clearInterviewTurnDraft, readInterviewDraft, writeInterviewDraft } from '@/utils/interviewDraft';
+import { formatDuration, turnAnswerMs } from '@/utils/interviewTiming';
 import InterviewEvidence from './InterviewEvidence.vue';
 const props = defineProps<{ session: InterviewSession; busy: boolean; consented: boolean }>();
 const emit = defineEmits<{ answer: [text: string, skipped: boolean]; continue: []; draft: [dirty: boolean] }>();
@@ -11,6 +13,8 @@ const conversation = ref<HTMLElement>();
 const current = computed(() => props.session.turns[props.session.turns.length - 1]);
 const canAnswer = computed(() => props.session.status === 'answering' && !props.session.ending && !props.busy && props.consented);
 const requestLabel = computed(() => ({ initialize: '面试官正在准备第一题', next: '面试官正在根据原回答组织下一题', coach: '教练正在整理本题反馈', report: '正在整理面试报告' }[props.session.pendingStage || 'next']));
+/** Drafts survive a refresh only while this interview is kept on this device. */
+const draftEnabled = computed(() => props.session.persistence && !props.session.ending);
 let followNext = false;
 let submitting = false;
 function locateCurrent(focus = false) {
@@ -18,16 +22,26 @@ function locateCurrent(focus = false) {
   target?.scrollIntoView?.({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   if (focus) target?.focus({ preventScroll: true });
 }
-watch(() => current.value?.id, async (_id, previous) => {
-  answer.value = ''; composing.value = false;
-  if (previous && followNext) { await nextTick(); locateCurrent(true); }
+function answerDuration(turn: InterviewTurn): string {
+  const ms = turnAnswerMs(turn);
+  return ms === null ? '' : formatDuration(ms);
+}
+watch([() => props.session.id, () => current.value?.id], async ([, turnId], previous) => {
+  answer.value = draftEnabled.value && turnId ? readInterviewDraft(props.session.id, turnId) : '';
+  composing.value = false;
+  if (previous?.[1] && followNext) { await nextTick(); locateCurrent(true); }
   followNext = false;
+}, { immediate: true });
+watch(answer, value => {
+  emit('draft', !!value.trim());
+  const turn = current.value;
+  if (draftEnabled.value && turn && !turn.submittedAt) writeInterviewDraft(props.session.id, turn.id, value, true);
 });
-watch(answer, value => emit('draft', !!value.trim()));
 watch(() => current.value?.submittedAt, value => { if (value) answer.value = ''; });
 function submit(skipped = false, event?: KeyboardEvent) {
   if (!canAnswer.value || submitting || composing.value || event?.isComposing || (!skipped && (!answer.value.trim() || answer.value.length > 10000))) return;
   submitting = true;
+  if (current.value) clearInterviewTurnDraft(props.session.id, current.value.id);
   emit('answer', answer.value, skipped);
   void nextTick(() => { submitting = false; });
 }
@@ -46,18 +60,18 @@ function continueInterview() {
     <div class="turn-list">
       <article v-for="turn in session.turns" :key="turn.id" class="turn" :data-current="turn.id === current?.id">
         <div class="message interviewer">
-          <div class="message-meta"><strong>面试官</strong><span>第 {{ turn.mainNumber }} 题</span><span v-if="turn.followup" class="question-kind">追问 1/1</span><span v-else class="question-kind">主问题</span></div>
+          <div class="message-meta"><strong>面试官</strong><span>第 {{ turn.mainNumber }} 题</span><span v-if="turn.followup" class="question-kind">追问</span></div>
           <div class="message-body">
             <p class="question-text" tabindex="-1">{{ turn.question.text }}</p>
             <details class="question-context"><summary>考察点与问题背景</summary><p>{{ turn.question.focus }}</p><p v-if="turn.question.kind === 'knowledge'">知识假设，不代表你的个人经历。</p></details>
           </div>
         </div>
         <div v-if="turn.submittedAt" class="message candidate">
-          <div class="message-meta"><strong>你的原回答</strong><span v-if="turn.skipped">已跳过</span><span v-else>原文保留</span></div>
+          <div class="message-meta"><strong>你的回答</strong><span v-if="turn.skipped">已跳过</span><span v-if="answerDuration(turn)">用时 {{ answerDuration(turn) }}</span></div>
           <div class="message-body"><p>{{ turn.skipped ? '已跳过（未生成回答）' : turn.answer }}</p></div>
         </div>
         <details v-if="session.settings.mode === 'training' && turn.feedback" class="feedback" :open="turn.id === current?.id && session.status === 'reviewing'">
-          <summary><span>训练点评</span><span class="summary-note">基于证据的摘要（非内部推理）</span></summary>
+          <summary><span>训练点评</span><span class="summary-note">只根据你这次的回答</span></summary>
           <div class="feedback-body">
             <InterviewEvidence :observations="turn.feedback.observations" />
             <div class="feedback-tip"><h3>答题组织提示</h3><p>{{ turn.feedback.organizationHint || '先说清自己的职责，再说明行动与验证方式。' }}</p></div>
@@ -67,17 +81,17 @@ function continueInterview() {
         </details>
       </article>
     </div>
-    <div v-if="busy" class="request-status" role="status"><span class="request-dot" aria-hidden="true" /><div><strong>{{ requestLabel }}</strong><p>仅在当前步骤完成后继续；可在顶部暂停，不会自动重试。</p></div></div>
+    <div v-if="busy" class="request-status" role="status"><span class="request-dot" aria-hidden="true" /><div><strong>{{ requestLabel }}</strong><p>这一步完成前不会继续。可以在顶部暂停，不会自动重试。</p></div></div>
     <form v-if="session.status === 'answering' && !session.ending" class="composer" @submit.prevent="submit()">
       <div class="composer-heading"><label for="interview-answer">你的回答（可回答“不知道”，或明确跳过）</label><span aria-live="off">{{ answer.length.toLocaleString() }} / 10,000</span></div>
       <textarea id="interview-answer" v-model="answer" rows="4" maxlength="10000" :disabled="!canAnswer" aria-describedby="answer-hint" placeholder="从你的职责、具体行动和结果说起。不必完美，保持真实。" @compositionstart="composing = true" @compositionend="composing = false" @keydown.enter.ctrl.prevent="submit(false, $event)" @keydown.enter.meta.prevent="submit(false, $event)" />
-      <div class="composer-footer"><p id="answer-hint"><template v-if="consented"><span>Ctrl / ⌘ + Enter 提交</span><span>普通 Enter 换行</span></template><template v-else>请先确认本次模型与发送范围，再开始作答。</template></p><div class="actions"><el-button :disabled="!canAnswer" @click="submit(true)">跳过此题</el-button><el-button native-type="submit" type="primary" :disabled="!canAnswer || !answer.trim()" :icon="Right">提交原回答</el-button></div></div>
+      <div class="composer-footer"><p id="answer-hint"><template v-if="consented"><span>Ctrl / ⌘ + Enter 提交</span><span>普通 Enter 换行</span><span v-if="draftEnabled">草稿暂存在本机</span></template><template v-else>请先确认本次模型与发送范围，再开始作答。</template></p><div class="actions"><el-button :disabled="!canAnswer" @click="submit(true)">跳过此题</el-button><el-button native-type="submit" type="primary" :disabled="!canAnswer || !answer.trim()" :icon="Right">提交回答</el-button></div></div>
     </form>
     <div v-if="session.status === 'reviewing'" class="continue-card">
-      <div><h3>{{ session.ending ? '这轮问答已结束' : '回答已保留，按你的节奏继续' }}</h3><p>{{ session.ending ? '生成报告后可查看重点反馈，并确认是否回补简历。' : session.settings.mode === 'training' ? '可以先查看本题点评。下一题仍只依据你的原回答。' : '本轮不展示中途点评，结束后统一生成报告。' }}</p></div>
+      <div><h3>{{ session.ending ? '这轮问答已结束' : '回答已保留，按你的节奏继续' }}</h3><p>{{ session.ending ? '生成报告后可查看重点反馈，并确认是否回补简历。' : session.settings.mode === 'training' ? '可以先查看本题点评。下一题仍只依据你刚提交的回答。' : '本轮不展示中途点评，结束后统一生成报告。' }}</p></div>
       <el-button type="primary" :disabled="busy || !consented" :icon="Right" @click="continueInterview">{{ session.ending ? '生成报告' : '继续下一题 / 追问' }}</el-button>
     </div>
-    <div v-if="['paused', 'interrupted', 'failed'].includes(session.status)" class="paused-note"><strong>{{ session.status === 'failed' ? '这一步尚未完成' : '面试已暂停' }}</strong><p>已提交的原回答仍在。请使用顶部的恢复或重试操作，不会自动重新请求。</p></div>
+    <div v-if="['paused', 'interrupted', 'failed'].includes(session.status)" class="paused-note"><strong>{{ session.status === 'failed' ? '这一步尚未完成' : '面试已暂停' }}</strong><p>已经提交的回答还在。用顶部的继续或重试，不会自动重新提问。</p></div>
   </section>
 </template>
 

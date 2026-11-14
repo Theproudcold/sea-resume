@@ -1,54 +1,139 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import type { AiProviderConfig } from '@/types/ai';
-import { AI_PROVIDER_PRESETS, loadAiModelSettings, loadAiProviderProfiles, getAiSessionApiKey, setAiSessionApiKey, normalizeAiProviderOptions, isAiProviderReady, toAiProviderConfig } from '@/services/ai/AiSettings';
-const props = defineProps<{ preview: unknown; frozenProvider?: { baseUrl: string; model: string }; disabled?: boolean }>();
-const emit = defineEmits<{ confirmed: [config: AiProviderConfig]; changed: [] }>();
-const profiles = loadAiProviderProfiles().filter(p => p.enabled);
-const saved = loadAiModelSettings();
-const profileId = ref(saved?.profileId ?? '');
-const baseUrl = ref(props.frozenProvider?.baseUrl ?? saved?.baseUrl ?? 'https://api.deepseek.com/v1');
-const model = ref(props.frozenProvider?.model ?? saved?.model ?? 'deepseek-chat');
-const apiKey = ref(getAiSessionApiKey(profileId.value));
-const providerOptions = ref(normalizeAiProviderOptions(saved ?? {}));
-const currentSettings = computed(() => ({ baseUrl: baseUrl.value, model: model.value, ...providerOptions.value }));
-const ready = computed(() => isAiProviderReady(currentSettings.value, apiKey.value));
+import {
+  getAiSessionApiKey,
+  hasAiSessionApiKey,
+  hasAiStoredApiKey,
+  isAiProviderReady,
+  loadAiModelSettings,
+  loadAiProviderProfiles,
+  normalizeAiProviderOptions,
+  setAiSessionApiKey,
+  setAiStoredApiKey,
+  toAiProviderConfig,
+  type AiProviderProfile,
+} from '@/services/ai/AiSettings';
+
+const props = defineProps<{ preview: unknown; frozenProvider?: { baseUrl: string; model: string }; disabled?: boolean; revision?: number }>();
+const emit = defineEmits<{ confirmed: [config: AiProviderConfig]; changed: []; configure: [] }>();
+
+// Service and model are configured once in the settings panel; this step only picks
+// among saved providers, fills in a missing key, and records consent.
+const profiles = ref<AiProviderProfile[]>([]);
+const selectedProfileId = ref('');
+const apiKey = ref('');
+const rememberKey = ref(false);
+const editingKey = ref(false);
 const consent = ref(false);
 const confirmed = ref(false);
-watch([baseUrl, model, apiKey, providerOptions], () => { consent.value = false; confirmed.value = false; emit('changed'); }, { deep: true });
+const keyVersion = ref(0);
+
+const selectedProfile = computed(() => profiles.value.find(profile => profile.profileId === selectedProfileId.value) ?? null);
+const providerOptions = computed(() => normalizeAiProviderOptions(selectedProfile.value ?? {}));
+const needsKey = computed(() => !!selectedProfile.value && providerOptions.value.authMode !== 'none');
+const keyPresent = computed(() => { keyVersion.value; return !!selectedProfile.value && hasAiSessionApiKey(selectedProfile.value.profileId); });
+const keyStored = computed(() => { keyVersion.value; return !!selectedProfile.value && hasAiStoredApiKey(selectedProfile.value.profileId); });
+const showKeyInput = computed(() => needsKey.value && (editingKey.value || !keyPresent.value));
+const effectiveKey = computed(() => apiKey.value.trim() || (selectedProfile.value ? getAiSessionApiKey(selectedProfile.value.profileId) : ''));
+const ready = computed(() => !!selectedProfile.value && isAiProviderReady({ ...selectedProfile.value, ...providerOptions.value, enabled: true }, effectiveKey.value));
+
+function reload() {
+  const saved = loadAiModelSettings();
+  const previousId = selectedProfileId.value;
+  const frozen = props.frozenProvider;
+  profiles.value = loadAiProviderProfiles().filter(profile => profile.enabled);
+  const preferred = (frozen ? profiles.value.find(profile => profile.baseUrl === frozen.baseUrl && profile.model === frozen.model) : undefined)
+    ?? profiles.value.find(profile => profile.profileId === saved?.profileId)
+    ?? profiles.value.find(profile => profile.profileId === previousId)
+    ?? profiles.value[0];
+  selectedProfileId.value = preferred?.profileId ?? '';
+  apiKey.value = '';
+  editingKey.value = false;
+  rememberKey.value = !!preferred && hasAiStoredApiKey(preferred.profileId);
+  consent.value = false;
+  confirmed.value = false;
+  keyVersion.value += 1;
+}
+
+function invalidate() {
+  consent.value = false;
+  confirmed.value = false;
+  emit('changed');
+}
+
 function selectProfile() {
-  const profile = profiles.find(p => p.profileId === profileId.value);
-  if (profile) { baseUrl.value = profile.baseUrl; model.value = profile.model; apiKey.value = getAiSessionApiKey(profile.profileId); providerOptions.value = normalizeAiProviderOptions(profile); }
+  apiKey.value = '';
+  editingKey.value = false;
+  rememberKey.value = hasAiStoredApiKey(selectedProfileId.value);
+  keyVersion.value += 1;
+  invalidate();
 }
-function preset(event: Event) {
-  const selected = AI_PROVIDER_PRESETS.find(p => p.id === (event.target as HTMLSelectElement).value);
-  if (selected) { profileId.value = ''; baseUrl.value = selected.baseUrl; model.value = selected.model; apiKey.value = ''; providerOptions.value = normalizeAiProviderOptions(selected); }
+
+function editKey() {
+  editingKey.value = true;
+  apiKey.value = '';
+  invalidate();
 }
+
 function confirm() {
-  if (!consent.value || !ready.value) return;
-  setAiSessionApiKey(apiKey.value, profileId.value || undefined);
+  const profile = selectedProfile.value;
+  if (!profile || !consent.value || !ready.value || props.disabled) return;
+  const key = effectiveKey.value;
+  if (needsKey.value) {
+    if (key) setAiSessionApiKey(key, profile.profileId);
+    if (rememberKey.value && key) setAiStoredApiKey(key, profile.profileId);
+    else if (!rememberKey.value) setAiStoredApiKey('', profile.profileId);
+  }
+  keyVersion.value += 1;
+  editingKey.value = false;
+  apiKey.value = '';
   confirmed.value = true;
-  emit('confirmed', toAiProviderConfig(currentSettings.value, apiKey.value));
+  emit('confirmed', toAiProviderConfig({ ...profile, ...providerOptions.value, enabled: true }, key));
 }
-defineExpose({ reset: () => { consent.value = false; confirmed.value = false; emit('changed'); } });
+
+reload();
+watch(() => props.revision, () => { reload(); invalidate(); });
+// Clearing consent must not snap the chosen service back, so reset does not reload saved settings.
+defineExpose({ reset: () => { editingKey.value = false; invalidate(); } });
 </script>
 <template>
   <section class="consent-card">
-    <header class="consent-heading"><span class="section-number" aria-hidden="true">02</span><div><h2>发送范围与服务确认</h2><p>你决定内容发送到哪里，以及何时开始。</p></div></header>
-    <div class="fields">
-      <label v-if="profiles.length">已有服务<select v-model="profileId" :disabled="disabled" @change="selectProfile"><option value="">自定义</option><option v-for="p in profiles" :key="p.profileId" :value="p.profileId">{{ p.profileName }}</option></select></label>
-      <label>预设<select :disabled="disabled" aria-label="服务预设" @change="preset"><option value="">选择预设</option><option v-for="p in AI_PROVIDER_PRESETS" :key="p.id" :value="p.id">{{ p.label }}</option></select></label>
-      <label>服务地址<input v-model="baseUrl" :disabled="disabled" maxlength="2048" /></label>
-      <label>模型<input v-model="model" :disabled="disabled" maxlength="200" /></label>
-      <label>鉴权方式<select v-model="providerOptions.authMode" :disabled="disabled"><option value="bearer">Bearer API Key</option><option value="none">无鉴权（仅本机 loopback）</option></select></label>
-      <label v-if="providerOptions.authMode !== 'none'">本次 API Key<input v-model="apiKey" :disabled="disabled" type="password" autocomplete="off" /></label>
-      <label>JSON 模式<select v-model="providerOptions.jsonMode" :disabled="disabled"><option :value="true">启用</option><option :value="false">关闭（仍校验 JSON）</option></select></label>
-      <label>请求超时（毫秒）<input v-model.number="providerOptions.timeoutMs" :disabled="disabled" type="number" min="1000" max="600000" /></label>
+    <header class="consent-heading"><div><h2>发送范围与服务确认</h2><p>你决定内容发送到哪里，以及何时开始。</p></div></header>
+    <div v-if="!profiles.length" class="empty-provider">
+      <p>还没有可用的模型服务。模型与地址只需在设置中心配置一次，之后每场练习在这里确认发送范围即可。</p>
+      <el-button :disabled="disabled" @click="emit('configure')">打开设置中心配置模型</el-button>
     </div>
-    <div class="sending-destination"><span>本次发送至</span><strong>{{ model || '未填写模型' }}</strong><code>{{ baseUrl || '未填写服务地址' }}</code></div>
-    <details class="privacy-details"><summary>隐私边界与密钥保存方式</summary><p>仅发送白名单快照、岗位 / JD 和后续实际回答。隐藏内容、照片、生日和结构化联系方式不发送；正文仍可能含敏感信息，请检查。Key 仅在内存，刷新需重新输入。</p></details>
+    <template v-else>
+      <div class="service-summary">
+        <label class="service-picker">本次服务
+          <select v-model="selectedProfileId" :disabled="disabled" aria-label="本次服务" @change="selectProfile">
+            <option v-for="profile in profiles" :key="profile.profileId" :value="profile.profileId">{{ profile.profileName }}</option>
+          </select>
+        </label>
+        <dl class="service-facts">
+          <div><dt>模型</dt><dd>{{ selectedProfile?.model || '未填写模型' }}</dd></div>
+          <div><dt>服务地址</dt><dd><code>{{ selectedProfile?.baseUrl || '未填写服务地址' }}</code></dd></div>
+          <div><dt>鉴权方式</dt><dd>{{ providerOptions.authMode === 'none' ? '无鉴权（仅本机）' : 'Bearer API Key' }}</dd></div>
+          <div><dt>密钥</dt><dd>{{ !needsKey ? '无需密钥' : keyStored ? '已记住到本机' : keyPresent ? '本次会话已配置' : '需要输入' }}</dd></div>
+        </dl>
+        <el-button text :disabled="disabled" @click="emit('configure')">更换服务 / 模型</el-button>
+      </div>
+      <template v-if="needsKey">
+        <div v-if="showKeyInput" class="key-row">
+          <label>本次 API Key<input v-model="apiKey" :disabled="disabled" type="password" autocomplete="off" :placeholder="keyPresent ? '留空则继续使用已配置的密钥' : '输入这家服务商的 API Key'" @input="invalidate" /></label>
+          <label class="check"><input v-model="rememberKey" data-testid="remember-key" type="checkbox" :disabled="disabled" @change="invalidate" />记住密钥到本机，刷新后无需重新输入（明文存储，仅建议私人设备）</label>
+        </div>
+        <div v-else class="key-ready">
+          <span>API Key 已就绪{{ keyStored ? '（已记住到本机）' : '（仅本次会话）' }}</span>
+          <el-button text :disabled="disabled" @click="editKey">更换密钥</el-button>
+        </div>
+      </template>
+      <div class="sending-destination"><span>本次发送至</span><strong>{{ selectedProfile?.model || '未填写模型' }}</strong><code>{{ selectedProfile?.baseUrl || '未填写服务地址' }}</code></div>
+    </template>
+    <details class="privacy-details"><summary>隐私边界与密钥保存方式</summary><p>仅发送白名单快照、岗位 / JD 和后续实际回答。隐藏内容、照片、生日和结构化联系方式不发送；正文仍可能含敏感信息，请检查。Key 默认仅在内存；勾选记住后会以明文保存在本机浏览器，可随时在设置中心清除。</p></details>
     <details><summary>预览实际发送数据（不含 Key）</summary><pre>{{ JSON.stringify(preview, null, 2) }}</pre></details>
-    <label class="check"><input v-model="consent" type="checkbox" :disabled="disabled" />我已检查发送范围，同意发送至此服务。更换服务/模型后重新确认。</label>
+    <label class="check"><input v-model="consent" data-testid="interview-consent" type="checkbox" :disabled="disabled" @change="confirmed = false" />我已检查发送范围，同意发送至此服务。更换服务 / 模型后重新确认。</label>
     <div class="consent-actions"><el-button :disabled="disabled || !consent || !ready" @click="confirm">{{ confirmed ? '已确认，可继续' : '确认服务与发送范围' }}</el-button><el-button text :disabled="disabled" @click="consent = false; confirmed = false; emit('changed')">撤回同意</el-button></div>
   </section>
 </template>
@@ -93,12 +178,6 @@ h2 {
 
 .consent-heading p { margin: var(--space-2xs) 0 0; color: var(--color-muted); }
 
-.fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-md);
-}
-
 label {
   display: grid;
   gap: var(--space-2xs);
@@ -134,6 +213,22 @@ p {
   line-height: 1.7;
   overflow-wrap: break-word;
 }
+
+.empty-provider { display: grid; gap: var(--space-sm); justify-items: start; }
+.empty-provider p { margin: 0; }
+
+/* The configured service is shown, not re-edited: editing happens once in the settings panel. */
+.service-summary { display: grid; gap: var(--space-sm); }
+.service-picker { max-width: 320px; }
+.service-facts { display: grid; gap: var(--space-xs); margin: 0; padding: var(--space-sm) var(--space-md); background: var(--color-paper-2); font-size: var(--text-sm); }
+.service-facts > div { display: flex; justify-content: space-between; gap: var(--space-sm); }
+.service-facts dt { color: var(--color-muted); }
+.service-facts dd { margin: 0; min-width: 0; font-weight: 500; overflow-wrap: anywhere; text-align: right; }
+.service-facts code { color: var(--color-ink-2); font-size: var(--text-xs); font-weight: 400; }
+.service-summary :deep(.el-button) { justify-self: start; }
+
+.key-row { display: grid; gap: var(--space-xs); margin-top: var(--space-md); }
+.key-ready { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-xs); margin-top: var(--space-md); color: var(--color-ink-2); font-size: var(--text-sm); }
 
 .sending-destination {
   display: grid;
@@ -200,7 +295,6 @@ pre {
 }
 
 @media (max-width: 768px) {
-  .fields { grid-template-columns: minmax(0, 1fr); }
   .consent-heading { align-items: flex-start; }
 }
 </style>
