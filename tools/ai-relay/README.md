@@ -1,14 +1,14 @@
-# Sea Resume 可选 MCP 启动包
+# Sea Resume 可选 MCP 启动包（离线／源码安装）
 
-此目录是独立的本地工具，不是网站后端。需要 Node.js >=22.13。
+常规接入不需要这个目录：网站构建时会用 rolldown 把 `@mcp-b/webmcp-local-relay@6.0.3` 连同依赖打成单文件 `ai-relay/relay.mjs`，面板给出一行命令或一句提示词即可接入。此目录保留两行 ESM 启动器与锁文件，供离线、审计或从源码运行的场景使用。需要 Node.js >=22.13。
 
 1. 在此目录运行 `npm ci --ignore-scripts`。
-2. 在网页的「更多 → 外部 AI」授权当前简历。
-3. 将 `start.mjs` 的绝对路径填入网页，复制生成的 Codex CLI / Claude Code 配置命令。
-4. 在 CLI 中启用 MCP，再在网页点击「启用 MCP 桥接」，保持面板打开。
+2. 在网页的「更多 → 外部 AI」授权当前简历，并展开「其他 MCP 客户端 / 离线安装」。
+3. 把 `start.mjs` 的绝对路径填入面板，复制生成的 Codex CLI / Claude Code 或 JSON 配置。
+4. 由 CLI 启动 MCP，再在网页点击「启用 MCP 桥接」，保持面板打开。
 5. 调用 `sea_resume_get_context`，按协议调用 `sea_resume_propose_changes`。只能由用户在网页确认保存。
 
-启动器只转交上游 `@mcp-b/webmcp-local-relay@6.0.3` CLI；不实现自己的 MCP 协议。`package-lock.json` 和 `overrides.zod=4.4.3` 避免上游同时装入不兼容的 Zod 版本，不能删掉锁文件或改用裸 `npx ...@latest`。
+启动器只转交上游 CLI；不实现自己的 MCP 协议。`package-lock.json` 和 `overrides.zod=4.4.3` 保证整棵树只有一个兼容 Zod，避免上游同时装入 4.4.3 与 4.6.7 后工具列表为空；根 `pnpm.overrides.zod` 与这里保持一致。不能删掉锁文件或改用裸 `npx ...@latest`。
 
 必须保留配置中的 `--host 127.0.0.1` 和明确的 `--widget-origin`。不要使用 `*`，不要向局域网开放。来源限制不是本地进程鉴权；同来源网页、其他已连接的 MCP 客户端和本机进程仍在信任边界内。不要同时接入不信任的 Agent。首次安装需要联网，后续工具通信走本机。
 

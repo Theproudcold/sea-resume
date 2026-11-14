@@ -24,7 +24,7 @@ function safeStringList(value: unknown, field: string): string[] {
 }
 
 /** Parse and enforce the fixed operation allowlist; never evaluates model output. */
-export function parseResumeAiDraft(input: unknown): ResumeAiDraft {
+export function parseResumeAiDraft(input: unknown, options?: { allowEmpty?: boolean }): ResumeAiDraft {
   let parsed = input;
   if (typeof parsed === 'string') {
     const stripped = parsed.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
@@ -32,8 +32,13 @@ export function parseResumeAiDraft(input: unknown): ResumeAiDraft {
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('AI 返回结构无效。');
   const object = parsed as Record<string, unknown>;
-  if (!Array.isArray(object.operations) || object.operations.length === 0 || object.operations.length > 40) {
+  const explanation = typeof object.explanation === 'string' ? object.explanation.slice(0, 1000) : '';
+  if (!Array.isArray(object.operations) || object.operations.length > 40) {
     throw new Error('AI 没有返回可执行的简历修改，或操作数量超出限制。');
+  }
+  if (object.operations.length === 0) {
+    if (!options?.allowEmpty || !explanation.trim()) throw new Error('AI 没有返回可执行的简历修改，或操作数量超出限制。');
+    return { explanation, operations: [] };
   }
   const operations = object.operations.map((entry): ResumeAiOperation => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('AI 操作格式无效。');
@@ -56,8 +61,7 @@ export function parseResumeAiDraft(input: unknown): ResumeAiDraft {
     const normalizedValue = listField ? safeStringList(operation.value, field) : safeString(operation.value, field);
     return { type, field, ...(type === 'set_basic' ? {} : { id }), value: normalizedValue } as ResumeAiOperation;
   });
-  const explanation = typeof object.explanation === 'string' ? object.explanation.slice(0, 1000) : '请审阅以下修改建议。';
-  return { explanation, operations };
+  return { explanation: explanation || '请审阅以下修改建议。', operations };
 }
 
 /** Apply validated operations to a copy; failures never partially mutate the live Pinia store. */

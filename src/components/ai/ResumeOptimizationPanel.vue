@@ -27,7 +27,7 @@
     <details><summary>发送预览（不含 API Key / 私有字段）</summary><pre data-testid="sending-preview">{{ sendingPreview }}</pre></details>
     <label class="check"><input v-model="consent" type="checkbox" :disabled="workspace.busy || applying" data-testid="consent" />我确认以上发送范围及当前服务 / 模型，允许本次固定流程发送。</label>
     <label class="check"><input :checked="workspace.saveLocally" type="checkbox" @change="workspace.setPersistence(checked($event))" />保存到本机（可选，未勾选仅内存保留）</label>
-    <p class="muted">AI 记录仅在当前浏览器，不随简历目录迁移，不纳入全量简历备份。恢复需重新配置会话 API Key 和确认发送范围。</p>
+    <p class="muted">AI 记录仅在当前浏览器，不随简历目录迁移，不纳入全量简历备份。恢复后仍需确认发送范围；未记住密钥时需重新输入 API Key。</p>
     <p v-if="workspace.unsaved || answerDirty" class="notice">存在未保存的优化内容 / 补充输入，关闭或刷新可能丢失；可选择保存到本机。</p>
     <div class="actions">
       <button v-if="!workspace.run" type="button" data-testid="start" :disabled="!canSend" @click="start">开始分析</button>

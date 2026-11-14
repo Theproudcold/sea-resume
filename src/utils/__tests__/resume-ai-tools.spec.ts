@@ -10,6 +10,9 @@ describe('resume AI tools', () => {
     expect(draft.operations).toHaveLength(1);
     expect(() => parseResumeAiDraft({ operations: [{ type: 'run_javascript', code: 'alert(1)' }] })).toThrow('不允许');
     expect(() => parseResumeAiDraft({ operations: [{ type: 'set_basic', field: 'id', value: 'another' }] })).toThrow('不允许');
+    expect(() => parseResumeAiDraft({ explanation: '没有可改的内容。', operations: [] })).toThrow('没有返回可执行');
+    expect(parseResumeAiDraft({ explanation: '没有可改的内容。', operations: [] }, { allowEmpty: true })).toEqual({ explanation: '没有可改的内容。', operations: [] });
+    expect(() => parseResumeAiDraft({ explanation: '   ', operations: [] }, { allowEmpty: true })).toThrow('没有返回可执行');
   });
 
   it('allows the AI Agent template in AI template operations', () => {

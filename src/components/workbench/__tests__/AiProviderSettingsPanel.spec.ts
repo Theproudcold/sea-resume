@@ -1,7 +1,7 @@
 import { defineComponent, h } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearAiModelSettings, clearAiSessionApiKey, loadAiProviderProfiles, saveAiModelSettings } from '@/services/ai/AiSettings';
+import { clearAiModelSettings, clearAiSessionApiKey, getAiStoredApiKey, hasAiStoredApiKey, loadAiProviderProfiles, saveAiModelSettings, setAiSessionApiKey } from '@/services/ai/AiSettings';
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
 
@@ -10,6 +10,14 @@ const ButtonStub = defineComponent({
   emits: ['click'],
   setup(props, { emit, slots }) {
     return () => h('button', { disabled: props.disabled, onClick: () => emit('click') }, slots.default?.());
+  },
+});
+
+const CheckboxStub = defineComponent({
+  props: { modelValue: Boolean },
+  emits: ['update:modelValue'],
+  setup(props, { emit }) {
+    return () => h('input', { type: 'checkbox', checked: props.modelValue, onChange: (event: Event) => emit('update:modelValue', (event.target as HTMLInputElement).checked) });
   },
 });
 
@@ -29,6 +37,7 @@ const stubs = {
   'el-input': PassthroughStub,
   'el-input-number': PassthroughStub,
   'el-alert': PassthroughStub,
+  'el-checkbox': CheckboxStub,
 };
 
 beforeEach(() => {
@@ -106,5 +115,28 @@ describe('AiProviderSettingsPanel', () => {
     expect(loadAiProviderProfiles()).toHaveLength(2);
     expect(loadAiProviderProfiles()[1]).toMatchObject({ authMode: 'none', jsonMode: false, timeoutMs: 180000 });
     wrapper.unmount();
+  });
+  it('remembers the session key only when asked, and forgets it when unchecked', async () => {
+    saveAiModelSettings({ presetId: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' });
+    setAiSessionApiKey('panel-secret');
+    const saveButton = (wrapper: ReturnType<typeof mount>) => wrapper.findAll('button').find(button => button.text() === '保存配置')!;
+
+    const wrapper = mount(AiProviderSettingsPanel, { global: { stubs } });
+    await wrapper.find('.provider-row-main').trigger('click');
+    expect(hasAiStoredApiKey()).toBe(false);
+    await wrapper.find('input[type="checkbox"]').setValue(true);
+    await saveButton(wrapper).trigger('click');
+    expect(hasAiStoredApiKey()).toBe(true);
+    expect(getAiStoredApiKey()).toBe('panel-secret');
+    wrapper.unmount();
+
+    const second = mount(AiProviderSettingsPanel, { global: { stubs } });
+    await second.find('.provider-row-main').trigger('click');
+    expect((second.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
+    await second.find('input[type="checkbox"]').setValue(false);
+    await saveButton(second).trigger('click');
+    expect(hasAiStoredApiKey()).toBe(false);
+    expect(getAiStoredApiKey()).toBe('');
+    second.unmount();
   });
 });

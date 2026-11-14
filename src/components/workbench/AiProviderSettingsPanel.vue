@@ -55,7 +55,7 @@
       <el-alert v-if="profiles.length && !enabledCount" class="empty-enabled-alert" type="info" :closable="false" show-icon title="目前没有启用的服务商。启用一家服务商后，AI 助手和 PDF 导入才可使用。" />
       <el-alert class="privacy-note" type="info" :closable="false" show-icon>
         <template #title>隐私说明</template>
-        <p>服务商地址、模型选择和启用状态保存在本机。API Key 不会写入本地配置；简历只在你主动发起 AI 操作并确认后发送。</p>
+        <p>服务商地址、模型选择和启用状态保存在本机。API Key 默认只在页面内存；勾选「记住密钥到本机」后会以明文保存在本机浏览器存储，可在服务商详情中清除。导出配置与备份都不包含 API Key。</p>
       </el-alert>
     </section>
 
@@ -132,15 +132,16 @@
         </el-form-item>
         <el-form-item label="JSON 模式"><el-switch v-model="selectedProfile.jsonMode" /><p class="field-note">关闭仅省略 response_format，返回内容仍须通过 JSON 校验。</p></el-form-item>
         <el-form-item label="请求超时（毫秒）"><el-input-number v-model="selectedProfile.timeoutMs" :min="1000" :max="600000" :step="1000" /></el-form-item>
-        <el-form-item v-if="selectedProfile.authMode !== 'none'" label="API Key（仅当前会话）">
+        <el-form-item v-if="selectedProfile.authMode !== 'none'" label="API Key">
           <el-input
             v-model="apiKeyDraft"
             type="password"
             show-password
             autocomplete="new-password"
-            :placeholder="hasSelectedKey ? '当前会话已配置；留空则保持不变' : '输入此服务商的 API Key'"
+            :placeholder="hasSelectedKey ? '当前已配置；留空则保持不变' : '输入此服务商的 API Key'"
           />
-          <p class="field-note">{{ hasSelectedKey ? '密钥仅供这家服务商使用，刷新或关闭页面后需要重新输入。' : '密钥保存在当前页面内存，不会写入浏览器存储。' }}</p>
+          <el-checkbox v-model="rememberKeyDraft" class="remember-key-check">记住密钥到本机（刷新后无需重新输入）</el-checkbox>
+          <p class="field-note">{{ rememberKeyDraft ? '密钥以明文保存在本机浏览器，仅建议在私人设备上使用；不会写入导出配置或备份。' : '密钥默认只保存在当前页面内存，刷新或关闭页面后需要重新输入。' }}</p>
         </el-form-item>
       </el-form>
 
@@ -174,9 +175,11 @@ import {
   getActiveAiProviderId,
   getAiSessionApiKey,
   hasAiSessionApiKey,
+  hasAiStoredApiKey,
   loadAiProviderProfiles,
   saveAiProviderProfiles,
   setAiSessionApiKey,
+  setAiStoredApiKey,
   type AiProviderPresetId,
   type AiProviderProfile,
 } from '@/services/ai/AiSettings';
@@ -188,6 +191,7 @@ const defaultProviderId = ref(getActiveAiProviderId() ?? '');
 const selectedProfile = ref<AiProviderProfile | null>(null);
 const selectedHasKeyVersion = ref(0);
 const apiKeyDraft = ref('');
+const rememberKeyDraft = ref(false);
 const modelError = ref('');
 const fetchingModels = ref(false);
 const view = ref<'list' | 'catalog' | 'detail'>('list');
@@ -230,6 +234,7 @@ function openDetails(profileId: string) {
   selectedProfile.value = { ...profile, models: [...profile.models] };
   isNewProfile.value = false;
   apiKeyDraft.value = '';
+  rememberKeyDraft.value = hasAiStoredApiKey(profile.profileId);
   modelError.value = '';
   selectedHasKeyVersion.value += 1;
   view.value = 'detail';
@@ -239,6 +244,7 @@ function backToProviderList() {
   selectedProfile.value = null;
   isNewProfile.value = false;
   apiKeyDraft.value = '';
+  rememberKeyDraft.value = false;
   modelError.value = '';
   selectedHasKeyVersion.value += 1;
   view.value = 'list';
@@ -268,6 +274,7 @@ function addProvider(presetId: AiProviderPresetId) {
   selectedProfile.value = makeProfile(presetId);
   isNewProfile.value = true;
   apiKeyDraft.value = '';
+  rememberKeyDraft.value = false;
   modelError.value = '';
   selectedHasKeyVersion.value += 1;
   view.value = 'detail';
@@ -322,8 +329,16 @@ function saveSettings(makeDefault = false) {
       ? profile.profileId
       : defaultProviderId.value || undefined;
     persistProfiles(nextProfiles, activeId);
-    if (apiKeyDraft.value.trim()) setAiSessionApiKey(apiKeyDraft.value, profile.profileId);
+    const draftKey = apiKeyDraft.value.trim();
+    if (draftKey) setAiSessionApiKey(draftKey, profile.profileId);
+    if (rememberKeyDraft.value) {
+      const remembered = draftKey || getAiSessionApiKey(profile.profileId);
+      if (remembered) setAiStoredApiKey(remembered, profile.profileId);
+    } else {
+      setAiStoredApiKey('', profile.profileId);
+    }
     apiKeyDraft.value = '';
+    rememberKeyDraft.value = false;
     selectedHasKeyVersion.value += 1;
     isNewProfile.value = false;
     ElMessage.success(makeDefault ? '服务商配置已保存并设为默认' : '服务商配置已保存');
@@ -354,7 +369,7 @@ async function removeProvider() {
     return;
   }
   try {
-    await ElMessageBox.confirm(`确定删除「${profile.profileName}」的本地配置吗？API Key 也会从当前会话清除。`, '删除服务商', {
+    await ElMessageBox.confirm(`确定删除「${profile.profileName}」的本地配置吗？本机记住的 API Key 也会一并删除。`, '删除服务商', {
       confirmButtonText: '删除配置', cancelButtonText: '取消', type: 'warning',
     });
     clearAiSessionApiKey(profile.profileId);
@@ -422,7 +437,7 @@ async function importConfigFile(event: Event) {
     selectedProfile.value = { ...firstImported, models: [...firstImported.models] };
     isNewProfile.value = false;
     view.value = 'detail';
-    ElMessage.success(`已导入 ${imported.length} 家服务商；Bearer 服务需填写会话 API Key。`);
+    ElMessage.success(`已导入 ${imported.length} 家服务商；Bearer 服务需填写 API Key，可勾选记住到本机。`);
     emit('saved');
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '导入服务商配置失败。');
@@ -478,6 +493,7 @@ async function importConfigFile(event: Event) {
 .model-picker-row { display: flex; align-items: center; gap: 10px; width: 100%; }
 .model-picker { flex: 1; min-width: 0; }
 .field-note { margin: 6px 0 0; color: var(--ui-text-muted); font-size: var(--ui-font-xs); line-height: var(--ui-line-height); }
+.remember-key-check { margin-top: 6px; height: auto; white-space: normal; }
 .field-note code { padding: 1px 4px; border-radius: 4px; background: var(--ui-bg-subtle); }
 .model-error, .detail-hint { margin: -2px 0 12px; }
 .detail-footer { display: flex; align-items: center; gap: 10px; padding-top: 4px; }

@@ -20,9 +20,28 @@ describe('AI provider privacy', () => {
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const payload = JSON.parse(String(init.body)) as { messages: Array<{ content: string }> };
-    const userPayload = JSON.parse(payload.messages[1]?.content || '{}') as { selectedResume: { basic: Record<string, unknown> } };
-    expect(userPayload.selectedResume.basic.birthDate).toBeUndefined();
+    const userPayload = JSON.parse(payload.messages[1]?.content || '{}') as { request: string; resume: { basic: Record<string, unknown> }; templateId: string; sectionOrder: string[] };
+    expect(userPayload.request).toBe('update title');
+    expect(userPayload.resume.basic).not.toHaveProperty('birthDate');
+    expect(userPayload.resume.basic).not.toHaveProperty('name');
+    expect(JSON.stringify(userPayload)).not.toContain('1990-01-02');
+    expect(userPayload.templateId).toBe(resume.templateId);
+    expect(userPayload.sectionOrder).toEqual(resume.sectionOrder);
+    expect(payload.messages[0]?.content).toContain('operations 为 0 到 40 条');
     expect(resume.basic.birthDate).toBe('1990-01-02');
+  });
+  it('returns an empty edit with the model explanation instead of discarding it', async () => {
+    const resume = parseResumeMarkdown('# Mei').resume;
+    const content = JSON.stringify({ explanation: '原文没有可量化的结果，未作修改。', operations: [] });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })));
+
+    await expect(requestResumeAiDraft({ baseUrl: 'https://api.example.com/v1', apiKey: 'session-key', model: 'model-1' }, resume, '补上业绩数字')).resolves.toEqual({
+      explanation: '原文没有可量化的结果，未作修改。',
+      operations: [],
+    });
   });
   it('fetches and sorts models from an OpenAI-compatible models endpoint', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [{ id: 'model-z' }, { id: 'model-a' }] }), {

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
-import { clearAiModelSettings, clearAiSessionApiKey, getActiveAiProviderId, getAiSessionApiKey, hasAiSessionApiKey, loadAiModelSettings, loadAiProviderProfiles, saveAiModelSettings, saveAiProviderProfiles, setAiSessionApiKey } from '../AiSettings';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearAiModelSettings, clearAiSessionApiKey, clearAiStoredApiKey, getActiveAiProviderId, getAiSessionApiKey, getAiStoredApiKey, hasAiSessionApiKey, hasAiStoredApiKey, loadAiModelSettings, loadAiProviderProfiles, saveAiModelSettings, saveAiProviderProfiles, setAiSessionApiKey, setAiStoredApiKey } from '../AiSettings';
 import { isAiProviderReady, toAiProviderConfig, normalizeAiProviderOptions } from '../AiSettings';
+
+const STORED_KEYS = 'sea-resume_ai-provider-keys';
 
 beforeEach(() => {
   localStorage.clear();
@@ -20,6 +22,7 @@ describe('AI model settings', () => {
     });
     expect(localStorage.getItem('sea-resume_ai-model-settings')).not.toContain('secret');
     expect(localStorage.getItem('sea-resume_ai-model-settings')).not.toContain('apiKey');
+    expect(localStorage.getItem(STORED_KEYS)).toBeNull();
   });
 
   it('keeps API keys in session memory and can clear them', () => {
@@ -29,6 +32,55 @@ describe('AI model settings', () => {
     expect(localStorage.getItem('sea-resume_ai-model-settings')).toBeNull();
     clearAiSessionApiKey();
     expect(hasAiSessionApiKey()).toBe(false);
+  });
+
+  it('persists a key only after an explicit per-provider opt-in', () => {
+    saveAiProviderProfiles([
+      { profileId: 'deepseek-one', profileName: 'DeepSeek', presetId: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', enabled: true, models: [] },
+    ], 'deepseek-one');
+    setAiSessionApiKey('remembered-secret', 'deepseek-one', { remember: true });
+    expect(hasAiStoredApiKey('deepseek-one')).toBe(true);
+    expect(getAiStoredApiKey('deepseek-one')).toBe('remembered-secret');
+    expect(localStorage.getItem(STORED_KEYS)).toContain('remembered-secret');
+    // Profiles and the exportable settings mirror stay secret-free.
+    expect(localStorage.getItem('sea-resume_ai-provider-profiles')).not.toContain('remembered-secret');
+    expect(localStorage.getItem('sea-resume_ai-model-settings')).not.toContain('remembered-secret');
+
+    // Unchecking forgets the stored copy; the session key keeps working until the page reloads.
+    setAiSessionApiKey('remembered-secret', 'deepseek-one', { remember: false });
+    expect(hasAiStoredApiKey('deepseek-one')).toBe(false);
+    expect(localStorage.getItem(STORED_KEYS)).toBeNull();
+    expect(getAiSessionApiKey('deepseek-one')).toBe('remembered-secret');
+  });
+
+  it('survives a page reload by reading remembered keys from storage', async () => {
+    vi.resetModules();
+    const first = await import('../AiSettings');
+    first.saveAiProviderProfiles([
+      { profileId: 'reload-one', profileName: 'Reload', presetId: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', enabled: true, models: [] },
+    ], 'reload-one');
+    first.setAiSessionApiKey('reload-secret', 'reload-one', { remember: true });
+
+    vi.resetModules();
+    const second = await import('../AiSettings');
+    expect(second.getAiSessionApiKey('reload-one')).toBe('reload-secret');
+    expect(second.hasAiSessionApiKey('reload-one')).toBe(true);
+    expect(second.isAiProviderReady(second.loadAiModelSettings())).toBe(true);
+
+    second.clearAiSessionApiKey('reload-one');
+    expect(second.hasAiStoredApiKey('reload-one')).toBe(false);
+    expect(localStorage.getItem(STORED_KEYS)).toBeNull();
+  });
+
+  it('ignores tampered remembered-key storage and rejects overlong keys', () => {
+    localStorage.setItem(STORED_KEYS, '{broken');
+    expect(hasAiStoredApiKey()).toBe(false);
+    localStorage.setItem(STORED_KEYS, JSON.stringify({ bad: 12, 'ok-id': '  valid-key  ' }));
+    expect(getAiStoredApiKey('ok-id')).toBe('valid-key');
+    expect(hasAiStoredApiKey('bad')).toBe(false);
+    expect(() => setAiStoredApiKey('x'.repeat(4097), 'ok-id')).toThrow('过长');
+    clearAiStoredApiKey();
+    expect(localStorage.getItem(STORED_KEYS)).toBeNull();
   });
 
   it('stores multiple service profiles and keeps their session keys isolated', () => {

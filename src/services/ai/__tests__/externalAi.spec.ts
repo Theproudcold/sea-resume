@@ -5,7 +5,7 @@ import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { ExternalAiSession } from '../ExternalAiSession';
 import { assertProposalBaseline, createChangeProposal, parseChangeProposal, resumeRevision } from '../changeProposal';
 import { createExternalContextArchive, readExternalProposal } from '../externalAiFiles';
-import { externalTools, relayConfiguration } from '../externalAiBridge';
+import { externalTools, relayAgentPrompt, relayBundleUrl, relayConfiguration, relaySetupCommand } from '../externalAiBridge';
 import { applyResumeAiOperations, parseResumeAiDraft } from '../resumeTools';
 
 const fixture = () => {
@@ -146,5 +146,26 @@ describe('MCP business tools', () => {
     expect(config.args[0]).toBe('/Users/test/sea-resume-ai-relay/start.mjs');
     expect(config.args.slice(-6)).toEqual(['--host', '127.0.0.1', '--widget-origin', 'https://resume.example.com', '--max-payload', '500000']);
     expect(() => relayConfiguration('https://example.com/path')).toThrow();
+  });
+  it('turns the pinned single-file relay into one terminal line and one sentence for the CLI', () => {
+    const origin = 'https://resume.example.com';
+    const baseUrl = '/sea-resume/';
+    const url = relayBundleUrl(origin, baseUrl);
+    expect(url).toBe('https://resume.example.com/sea-resume/ai-relay/relay.mjs');
+    const codex = relaySetupCommand('codex', origin, baseUrl);
+    expect(codex).toContain(`curl -fsSL '${url}' -o "$HOME/.sea-resume-ai-relay/relay.mjs"`);
+    expect(codex).toContain('codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" --host 127.0.0.1 --widget-origin https://resume.example.com --max-payload 500000');
+    expect(codex).not.toContain('npm ci');
+    const claude = relaySetupCommand('claude', origin, baseUrl, 'powershell');
+    expect(claude).toContain('Invoke-WebRequest -UseBasicParsing');
+    expect(claude).toContain('; claude mcp add --transport stdio sea-resume -- node "$HOME\\.sea-resume-ai-relay\\relay.mjs"');
+    expect(claude).not.toContain('&&');
+    const prompt = relayAgentPrompt('codex', origin, baseUrl);
+    expect(prompt).toContain(codex);
+    expect(prompt).toContain('sea_resume_get_context');
+    expect(prompt).toContain('sea_resume_propose_changes');
+    expect(prompt).toContain('只能由我在网页确认');
+    expect(prompt).toContain('baseRevision 必须原样复制');
+    for (const call of [() => relayBundleUrl('https://example.com/path', baseUrl), () => relaySetupCommand('codex', 'https://example.com/path', baseUrl), () => relayAgentPrompt('claude', 'ftp://example.com', baseUrl)]) expect(call).toThrow();
   });
 });

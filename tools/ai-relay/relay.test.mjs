@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -14,12 +14,13 @@ test('relay lock keeps a single compatible Zod version', async () => {
   assert.deepEqual(versions, ['4.4.3']);
 });
 
-test('upstream stdio relay initializes and lists tools without a browser', { timeout: 15000 }, async t => {
-  const probe = createServer();
-  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
-  const port = probe.address().port;
-  await new Promise(resolve => probe.close(resolve));
-  const child = spawn(process.execPath, [fileURLToPath(new URL('./start.mjs', import.meta.url)), '--host', '127.0.0.1', '--port', String(port), '--widget-origin', 'http://localhost:3000'], { stdio: ['pipe', 'pipe', 'pipe'] });
+/** Start a launcher over MCP stdio on a free loopback port; no model is called. */
+async function probe(t, launcher) {
+  const reservation = createServer();
+  await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
+  const port = reservation.address().port;
+  await new Promise(resolve => reservation.close(resolve));
+  const child = spawn(process.execPath, [launcher, '--host', '127.0.0.1', '--port', String(port), '--widget-origin', 'http://localhost:3000'], { stdio: ['pipe', 'pipe', 'pipe'] });
   const pending = new Map(); let sequence = 0; let buffer = ''; let stderr = '';
   child.stderr.on('data', chunk => { stderr += chunk; });
   t.after(() => { child.kill(); for (const call of pending.values()) clearTimeout(call.timer); });
@@ -45,8 +46,22 @@ test('upstream stdio relay initializes and lists tools without a browser', { tim
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await request('initialize', { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'sea-resume-relay-check', version: '1' } });
-  assert.equal(initialized.serverInfo.version, '6.0.3');
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const listed = await request('tools/list', {});
+  return { initialized, listed, stderr };
+}
+
+test('upstream stdio relay initializes and lists tools without a browser', { timeout: 15000 }, async t => {
+  const { initialized, listed } = await probe(t, fileURLToPath(new URL('./start.mjs', import.meta.url)));
+  assert.equal(initialized.serverInfo.version, '6.0.3');
+  assert.ok(listed.tools.some(tool => tool.name === 'webmcp_call_tool'));
+});
+
+test('built single-file relay keeps the same tools', { timeout: 15000 }, async t => {
+  const bundle = fileURLToPath(new URL('../../dist/ai-relay/relay.mjs', import.meta.url));
+  try { await access(bundle); } catch { return; }
+  const { initialized, listed } = await probe(t, bundle);
+  assert.equal(initialized.serverInfo.version, '6.0.3');
+  assert.equal(listed.tools.length, 4);
   assert.ok(listed.tools.some(tool => tool.name === 'webmcp_call_tool'));
 });

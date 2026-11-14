@@ -11,35 +11,43 @@
       </template>
       <template v-else>
         <div class="session-heading"><el-tag type="success">当前简历已授权 · 剩余 {{ remainingMinutes }} 分钟</el-tag><el-button type="danger" text @click="revoke">撤销授权</el-button></div>
-        <section aria-labelledby="external-files-title">
-          <h3 id="external-files-title">文件交换 · 无需 MCP</h3>
-          <p>下载并解压工作区，在该目录启动 Codex CLI 或 Claude Code。让它读取 context/resume.json，按 AGENTS.md / CLAUDE.md 生成 proposals/*.json，再导入审核。请保持本面板打开。</p>
+        <section aria-labelledby="external-connect-title">
+          <h3 id="external-connect-title">一句话接入 · MCP 实时桥接</h3>
+          <p>接入包在构建时已打成单个文件并随本站托管，固定来源和版本、只连接本机。网站不启动 CLI，也不保存 CLI 的密钥；首次可能需要允许浏览器访问本地网络。</p>
+          <ol class="steps">
+            <li>先点「启用 MCP 桥接」，并保持本面板打开。</li>
+            <li>复制一行命令到终端；或复制「给 AI 的一句话」，直接粘给 Codex CLI / Claude Code，让它自己接入。</li>
+          </ol>
           <div class="action-row">
-            <el-button :loading="busy" @click="exportContext">下载 AI 工作区</el-button>
-            <el-button :disabled="busy" @click="fileInput?.click()">导入修改草稿</el-button>
-            <input ref="fileInput" hidden type="file" accept=".json,application/json" aria-label="导入外部 AI 修改草稿" @change="importProposal" />
-          </div>
-        </section>
-        <section aria-labelledby="external-mcp-title">
-          <h3 id="external-mcp-title">MCP 实时桥接 · 可选</h3>
-          <p>需要 Node.js 22+。下方配置固定来源和版本，只连接本机；可能需要允许浏览器访问本地网络。网站不启动 CLI，也不保存 CLI 的密钥。</p>
-          <p><a :href="`${baseUrl}ai-relay/relay-install.zip`" download="sea-resume-ai-relay.zip">下载 MCP 启动包</a>，解压后在目录中运行 <code>npm ci --ignore-scripts</code>（首次需联网）。保留锁文件，避免上游依赖冲突。仅需 Node.js，无需扩展。</p>
-          <el-collapse>
-            <el-collapse-item title="查看 Codex CLI / Claude Code 配置" name="config">
-              <el-form-item label="解压后 start.mjs 的绝对路径"><el-input v-model="launcherPath" placeholder="/Users/你的目录/sea-resume-ai-relay/start.mjs" /></el-form-item>
-              <p>将下方占位路径替换为真实绝对路径。命令按 POSIX shell 生成；Windows 请使用 MCP 客户端 JSON 配置，并确保 node 可执行程序在 PATH 中。</p>
-              <p>Codex CLI：在终端执行配置命令，随后由 CLI 启动本地 relay</p><pre>{{ codexCommand }}</pre>
-              <p>Claude Code：在终端执行</p><pre>{{ claudeCommand }}</pre>
-              <p>其他 MCP 客户端：加入下方配置，完成后重启客户端</p><pre>{{ clientConfiguration }}</pre>
-              <p>配置来源仅限 {{ origin }}；不要将 --widget-origin 改为 *。同一来源的其他页面属于同一信任范围。</p>
-            </el-collapse-item>
-          </el-collapse>
-          <div class="action-row">
-            <el-button v-if="!bridgeStarted" :loading="connecting" :disabled="busy" @click="connectBridge">启用 MCP 桥接</el-button>
+            <el-button v-if="!bridgeStarted" type="primary" :loading="connecting" :disabled="busy" @click="connectBridge">启用 MCP 桥接</el-button>
             <el-button v-else @click="disconnectBridge">停止 MCP 桥接</el-button>
             <el-tag :type="bridgeStarted ? 'warning' : 'info'">{{ bridgeStarted ? '桥接已启动，等待 CLI 调用' : '桥接未启动' }}</el-tag>
           </div>
-          <p v-if="bridgeStarted">让 CLI 调用 sea_resume_get_context → sea_resume_propose_changes。是否已连接请在 CLI 的 MCP 工具列表确认；仅加载桥接不代表 relay 已连接。被阻止时可继续使用文件交换。</p>
+          <div class="picker-row">
+            <el-radio-group v-model="client" size="small" aria-label="选择 CLI">
+              <el-radio-button value="codex">Codex CLI</el-radio-button>
+              <el-radio-button value="claude">Claude Code</el-radio-button>
+            </el-radio-group>
+            <el-radio-group v-model="shell" size="small" aria-label="选择系统">
+              <el-radio-button value="posix">macOS / Linux</el-radio-button>
+              <el-radio-button value="powershell">Windows</el-radio-button>
+            </el-radio-group>
+          </div>
+          <pre aria-label="接入命令">{{ setupCommand }}</pre>
+          <div class="action-row">
+            <el-button @click="copy(setupCommand, '终端命令')">复制终端命令</el-button>
+            <el-button @click="copy(agentPrompt, '给 AI 的接入指令')">复制给 AI 的一句话</el-button>
+          </div>
+          <p v-if="bridgeStarted">让 CLI 调用 sea_resume_get_context → sea_resume_propose_changes。是否已连接请在 CLI 的 MCP 工具列表确认；仅加载桥接不代表 relay 已连接。</p>
+          <el-collapse>
+            <el-collapse-item title="其他 MCP 客户端 / 离线安装" name="config">
+              <p>没有 curl 时可直接下载 <a :href="bundleUrl" download="relay.mjs">relay.mjs</a>（单文件，无需安装依赖）。网络受限时可用<a :href="`${baseUrl}ai-relay/relay-install.zip`" download="sea-resume-ai-relay.zip">完整启动包</a>，解压后在目录中运行 <code>npm ci --ignore-scripts</code>，保留锁文件避免上游依赖冲突。</p>
+              <el-form-item label="relay.mjs 的绝对路径"><el-input v-model="launcherPath" placeholder="/Users/你的目录/.sea-resume-ai-relay/relay.mjs" /></el-form-item>
+              <p>其他 MCP 客户端：加入下方配置并重启客户端。JSON 不展开 <code>~</code>，请填写真实绝对路径；Windows 需确保 <code>node</code> 在 PATH 中。</p>
+              <pre>{{ clientConfiguration }}</pre>
+              <p>配置来源仅限 {{ origin }}；不要将 --widget-origin 改为 *。同一来源的其他页面属于同一信任范围。</p>
+            </el-collapse-item>
+          </el-collapse>
         </section>
         <section aria-labelledby="external-proposals-title">
           <h3 id="external-proposals-title">修改草稿（{{ session.entries.length }}）</h3>
@@ -61,6 +69,16 @@
             </div>
           </article>
         </section>
+        <el-collapse>
+          <el-collapse-item title="文件交换 · 不运行本地命令时" name="files">
+            <p>下载并解压工作区，在该目录启动 Codex CLI 或 Claude Code。让它读取 context/resume.json，按 AGENTS.md / CLAUDE.md 生成 proposals/*.json，再导入审核。请保持本面板打开。</p>
+            <div class="action-row">
+              <el-button :loading="busy" @click="exportContext">下载 AI 工作区</el-button>
+              <el-button :disabled="busy" @click="fileInput?.click()">导入修改草稿</el-button>
+              <input ref="fileInput" hidden type="file" accept=".json,application/json" aria-label="导入外部 AI 修改草稿" @change="importProposal" />
+            </div>
+          </el-collapse-item>
+        </el-collapse>
       </template>
       <el-alert v-if="errorMessage" type="error" :closable="false" :title="errorMessage" show-icon />
       <p class="session-note">授权及草稿状态仅在本次页面会话保存。文件副本和已发送给 CLI 的内容无法通过撤销授权收回。AI 修改保存后可用编辑器“撤销”恢复。</p>
@@ -74,7 +92,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { useResumeStore } from '@/stores/resume';
 import type { ResumeAiOperation } from '@/types/ai';
 import { ExternalAiSession, type ProposalStatus } from '@/services/ai/ExternalAiSession';
-import { relayConfiguration, startExternalAiBridge } from '@/services/ai/externalAiBridge';
+import { relayAgentPrompt, relayBundleUrl, relayConfiguration, relaySetupCommand, startExternalAiBridge, type RelayClient, type RelayShell } from '@/services/ai/externalAiBridge';
 import { createExternalContextArchive, downloadContextArchive, readExternalProposal } from '@/services/ai/externalAiFiles';
 
 const props = defineProps<{ visible: boolean }>();
@@ -92,12 +110,14 @@ const authorized = computed(() => !!session.resumeId && session.expiresAt > now.
 const remainingMinutes = computed(() => Math.max(0, Math.ceil((session.expiresAt - now.value) / 60000)));
 const origin = location.origin;
 const baseUrl = import.meta.env.BASE_URL;
-const launcherPath = ref('/绝对路径/sea-resume-ai-relay/start.mjs');
+const client = ref<RelayClient>('codex');
+const shell = ref<RelayShell>('posix');
+const launcherPath = ref('/绝对路径/.sea-resume-ai-relay/relay.mjs');
+const bundleUrl = computed(() => relayBundleUrl(origin, baseUrl));
+const setupCommand = computed(() => relaySetupCommand(client.value, origin, baseUrl, shell.value));
+const agentPrompt = computed(() => relayAgentPrompt(client.value, origin, baseUrl, shell.value));
 const config = computed(() => relayConfiguration(origin, launcherPath.value));
 const clientConfiguration = computed(() => JSON.stringify({ mcpServers: { 'sea-resume': config.value } }, null, 2));
-const quotedArgs = computed(() => config.value.args.map(arg => `'${arg.replace(/'/g, "'\\''")}'`).join(' '));
-const codexCommand = computed(() => `codex mcp add sea-resume -- node ${quotedArgs.value}`);
-const claudeCommand = computed(() => `claude mcp add --transport stdio sea-resume -- node ${quotedArgs.value}`);
 const statusLabels: Record<ProposalStatus, string> = { pending: '待确认', applying: '保存中', applied: '已应用', rejected: '已拒绝', conflict: '版本冲突' };
 let stopBridge: (() => void) | undefined;
 let connectionController: AbortController | undefined;
@@ -112,6 +132,13 @@ function disconnectBridge() { connectionController?.abort(); stopBridge?.(); sto
 function revoke() { disconnectBridge(); session.revoke(); consent.value = false; }
 function authorize() { if (!consent.value) return; session.authorize(); now.value = Date.now(); errorMessage.value = ''; }
 function report(error: unknown) { errorMessage.value = error instanceof Error ? error.message : '操作失败。'; }
+async function copy(value: string, label: string) {
+  try {
+    if (!navigator.clipboard) throw new Error('剪贴板不可用');
+    await navigator.clipboard.writeText(value);
+    ElMessage.success(`已复制${label}，粘贴到终端或 CLI 对话框即可。`);
+  } catch { report(new Error('复制失败，请手动选中文本复制。')); }
+}
 async function beforeClose(done: () => void) {
   if (busy.value || session.entries.some(entry => entry.status === 'applying')) return;
   if (session.entries.some(entry => entry.status === 'pending')) {
@@ -171,9 +198,14 @@ function currentValue(operation: ResumeAiOperation) {
 .external-ai-panel h3 { margin: 0 0 8px; font-size: 16px; }
 .external-ai-panel section { border-top: 1px solid var(--color-rule); padding-top: 18px; }
 .external-ai-panel :deep(.el-checkbox) { white-space: normal; height: auto; align-items: flex-start; }
-.session-heading, .action-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.external-ai-panel :deep(.el-collapse) { border-top: none; }
+.external-ai-panel :deep(.el-collapse-item__header) { border-bottom: none; }
+.session-heading, .action-row, .picker-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .session-heading { justify-content: space-between; }
 .action-row { margin-top: 12px; }
+.picker-row { margin: 12px 0 4px; }
+.steps { margin: 8px 0; padding-left: 20px; }
+.steps li { margin: 6px 0; line-height: 1.65; }
 .action-row :deep(.el-button + .el-button) { margin-left: 0; }
 pre { overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--color-paper-2); border-radius: var(--radius-input); font-size: 12px; }
 .proposal-card { border: 1px solid var(--color-rule); border-radius: var(--radius-card); padding: 14px; margin-top: 12px; }

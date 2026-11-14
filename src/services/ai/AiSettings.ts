@@ -40,9 +40,12 @@ export const AI_PROVIDER_PRESETS: AiProviderPreset[] = [
 const SETTINGS_KEY = 'sea-resume_ai-model-settings';
 const PROVIDERS_KEY = 'sea-resume_ai-provider-profiles';
 const ACTIVE_PROVIDER_KEY = 'sea-resume_ai-active-provider';
+/** Opt-in, per-provider credentials. Kept in a dedicated key so exports and backups never carry it. */
+const STORED_KEYS_KEY = 'sea-resume_ai-provider-keys';
 const DEFAULT_PROFILE_ID = 'provider-default';
 const MAX_PROFILES = 30;
 const MAX_MODELS_PER_PROFILE = 1000;
+const MAX_API_KEY_LENGTH = 4096;
 const presetIds = new Set<AiProviderPresetId>(AI_PROVIDER_PRESETS.map((preset) => preset.id));
 const sessionApiKeys = new Map<string, string>();
 
@@ -216,31 +219,91 @@ export function clearAiModelSettings(): void {
   localStorage.removeItem(PROVIDERS_KEY);
   localStorage.removeItem(ACTIVE_PROVIDER_KEY);
   sessionApiKeys.clear();
+  clearAiStoredApiKey();
 }
 
 function resolveProfileId(profileId?: string): string {
   return profileId || getActiveAiProviderId() || DEFAULT_PROFILE_ID;
 }
 
-/** Keep credentials in page memory only; each configured provider has its own session key. */
-export function getAiSessionApiKey(profileId?: string): string {
-  return sessionApiKeys.get(resolveProfileId(profileId)) ?? '';
+/** Reads the opt-in credential map, tolerating unavailable or tampered storage. */
+function readStoredApiKeys(): Map<string, string> {
+  const keys = new Map<string, string>();
+  try {
+    const saved = localStorage.getItem(STORED_KEYS_KEY);
+    if (!saved) return keys;
+    const value: unknown = JSON.parse(saved);
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return keys;
+    for (const [id, key] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof id !== 'string' || !id || id.length > 120) continue;
+      if (typeof key !== 'string' || !key.trim() || key.length > MAX_API_KEY_LENGTH) continue;
+      keys.set(id, key.trim());
+      if (keys.size >= MAX_PROFILES) break;
+    }
+  } catch {
+    // Treat unreadable storage as "nothing remembered".
+  }
+  return keys;
 }
 
-export function setAiSessionApiKey(apiKey: string, profileId?: string): void {
+function writeStoredApiKeys(keys: Map<string, string>): void {
+  try {
+    if (!keys.size) localStorage.removeItem(STORED_KEYS_KEY);
+    else localStorage.setItem(STORED_KEYS_KEY, JSON.stringify(Object.fromEntries(keys)));
+  } catch {
+    // Storage unavailable: the key stays usable for this page session only.
+  }
+}
+
+/** Keys are only present here after the user explicitly opts in for that provider. */
+export function hasAiStoredApiKey(profileId?: string): boolean {
+  return readStoredApiKeys().has(resolveProfileId(profileId));
+}
+
+export function getAiStoredApiKey(profileId?: string): string {
+  return readStoredApiKeys().get(resolveProfileId(profileId)) ?? '';
+}
+
+/** Persists or forgets one provider key. An empty key forgets it. */
+export function setAiStoredApiKey(apiKey: string, profileId?: string): void {
+  const id = resolveProfileId(profileId);
+  const normalized = apiKey.trim();
+  if (normalized.length > MAX_API_KEY_LENGTH) throw new Error('API Key 过长，无法保存在本机。');
+  const keys = readStoredApiKeys();
+  if (normalized) keys.set(id, normalized);
+  else if (!keys.delete(id)) return;
+  writeStoredApiKeys(keys);
+}
+
+export function clearAiStoredApiKey(profileId?: string): void {
+  if (profileId) setAiStoredApiKey('', profileId);
+  else writeStoredApiKeys(new Map());
+}
+
+/** Session keys win; remembered keys fill in after a refresh. */
+export function getAiSessionApiKey(profileId?: string): string {
+  const id = resolveProfileId(profileId);
+  return sessionApiKeys.get(id) ?? getAiStoredApiKey(id);
+}
+
+/** `remember: true` persists this provider's key; `false` forgets any persisted copy. */
+export function setAiSessionApiKey(apiKey: string, profileId?: string, options: { remember?: boolean } = {}): void {
   const id = resolveProfileId(profileId);
   const normalized = apiKey.trim();
   if (normalized) sessionApiKeys.set(id, normalized);
   else sessionApiKeys.delete(id);
+  if (options.remember === true) setAiStoredApiKey(normalized, id);
+  else if (options.remember === false) setAiStoredApiKey('', id);
 }
 
 export function hasAiSessionApiKey(profileId?: string): boolean {
-  return sessionApiKeys.has(resolveProfileId(profileId));
+  return sessionApiKeys.has(resolveProfileId(profileId)) || hasAiStoredApiKey(profileId);
 }
 
+/** Passing a profile id forgets that provider's key too; omitting it clears every credential. */
 export function clearAiSessionApiKey(profileId?: string): void {
-  if (profileId) sessionApiKeys.delete(profileId);
-  else sessionApiKeys.clear();
+  if (profileId) { sessionApiKeys.delete(profileId); clearAiStoredApiKey(profileId); }
+  else { sessionApiKeys.clear(); clearAiStoredApiKey(); }
 }
 
 export const AI_TIMEOUT_MIN_MS = 1000;
