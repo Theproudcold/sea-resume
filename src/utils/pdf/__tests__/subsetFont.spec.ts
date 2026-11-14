@@ -18,5 +18,19 @@ describe('searchable PDF font subset', () => {
     const subset = await subsetOpenTypeFont(source, collectResumeCharacters(templateDemoData));
     expect(subset.byteLength).toBeLessThan(source.byteLength / 10);
     expect(subset.byteLength).toBeGreaterThan(1000);
+    const view = new DataView(subset.buffer, subset.byteOffset, subset.byteLength);
+    const tableCount = view.getUint16(4);
+    let cmapOffset = -1;
+    let cmapLength = 0;
+    for (let index = 0; index < tableCount; index += 1) {
+      const record = 12 + index * 16;
+      const name = String.fromCharCode(subset[record] ?? 0, subset[record + 1] ?? 0, subset[record + 2] ?? 0, subset[record + 3] ?? 0);
+      if (name !== 'cmap') continue;
+      cmapOffset = view.getUint32(record + 8);
+      cmapLength = view.getUint32(record + 12);
+    }
+    expect(cmapOffset).toBeGreaterThan(0);
+    const subtableLength = view.getUint16(cmapOffset + 14);
+    expect(12 + subtableLength).toBeLessThanOrEqual(cmapLength);
   });
 });

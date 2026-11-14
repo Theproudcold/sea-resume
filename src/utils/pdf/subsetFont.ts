@@ -153,7 +153,7 @@ function cmapTable(mappings: Array<[number, number]>): Uint8Array {
     ...segments.map((segment) => i16(segment.startGlyph - segment.start)),
     ...segments.map(() => u16(0)),
   ]);
-  const length = body.length + 2;
+  const length = body.length;
   return concat([
     u16(0), u16(1), u16(3), u16(1), u32(12),
     u16(4), u16(length), u16(0), body.slice(6),
