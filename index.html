@@ -14,7 +14,7 @@
       (function () {
         try {
           var mode = localStorage.getItem('sea-resume-color-scheme');
-          var dark = mode === 'dark' || (mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+          var dark = mode === 'dark' || ((mode !== 'light') && matchMedia('(prefers-color-scheme: dark)').matches);
           if (mode === 'light' || mode === 'dark') document.documentElement.dataset.mode = mode;
           document.documentElement.classList.toggle('dark', dark);
           var meta = document.querySelector('meta[name="theme-color"]');

@@ -11,8 +11,6 @@
 
 :root {
   --resume-font-family: #{$font-family-base};
-  --resume-ink: #{$text-main};
-  --resume-paper: #{$bg-white};
   --a4-width: #{$a4-width};
   --a4-height: #{$a4-height};
 }
@@ -98,6 +96,27 @@ $el-steps: (3, 70%), (5, 50%), (7, 30%), (8, 20%), (9, 9%);
   @page {
     margin: 0;
     size: A4 portrait;
+  }
+
+  /* 打印保持白纸黑字，不把屏幕深色主题带进纸面。 */
+  :root {
+    --resume-paper: #ffffff;
+    --resume-ink: #333333;
+    --resume-ink-strong: #1a1a1a;
+    --resume-ink-title: #1f2937;
+    --resume-ink-heading: #374151;
+    --resume-ink-body: #4b5563;
+    --resume-ink-soft: #6b7280;
+    --resume-rule: #e5e7eb;
+    --resume-chip: #f3f4f6;
+    --resume-hover: transparent;
+    --resume-sheet: #ffffff;
+    --resume-sheet-edge: #f3e8ff;
+    --resume-sheet-shadow: none;
+    --resume-wash-from: #ffffff;
+    --resume-wash-to: #ffffff;
+    --resume-chip-tint: #fdf2f8;
+    --resume-ring: transparent;
   }
 
   html,

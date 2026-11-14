@@ -24,7 +24,7 @@
 
 必须自行安装、启动服务并允许当前网页来源的 CORS。应用不启动模型、不下载权重。无鉴权只允许 loopback（localhost、127/8、::1）；不接受局域网或远程无鉴权地址，远程服务仍须 HTTPS + Key。不要为解决跨域问题关闭浏览器安全设置。
 
-JSON 模式不兼容时关闭配置中的 JSON 模式，输出仍会严格校验；超时可配置 1–600 秒，默认 90 秒。无鉴权时不发送 Authorization。请求不自动重试、不跟随重定向，本地失败不回退到线上。配置导入导出不包含 Key；原有线上配置默认 bearer、JSON 开启、90 秒超时，保持兼容。
+JSON 模式不兼容时关闭配置中的 JSON 模式，输出仍会严格校验；超时可配置 1–600 秒，默认 90 秒。无鉴权时不发送 Authorization。请求不自动重试、不跟随重定向，本地失败不回退到线上。配置导入导出不包含 Key；密钥默认只在页面内存，可按服务商显式勾选记住到本机（明文保存，不随导入导出与简历备份携带）。原有线上配置默认 bearer、JSON 开启、90 秒超时，保持兼容。
 
 ## 外部 Agent：文件交换（无需 MCP）
 
@@ -46,7 +46,7 @@ ZIP 包还含 `edit-schema.json`、`proposal.example.json` 和 `.gitignore`。�
 Codex CLI / Claude Code
           │ MCP stdio
           ▼
-本机开源 Local Relay
+站点托管的单文件 relay（构建时打包，依赖内联）
           │ ws://127.0.0.1:9333
           ▼
 网页中的受控业务工具 → 待审草稿 → 人工确认 → Resume Store → 当前存储适配器
@@ -54,13 +54,17 @@ Codex CLI / Claude Code
 
 LocalStorage 和本地文件夹存储均可使用，因为业务工具在页面内调用现有 Store。页面必须保持打开。无需浏览器扩展、浏览器调试端口或云端中转。
 
-### 安装与配置
+### 接入：一句话
 
-1. 在面板下载 MCP 启动包，解压到固定目录。
-2. 在解压的 `sea-resume-ai-relay/` 中运行 `npm ci --ignore-scripts`。需要 Node.js >=22.13；首次安装需要网络。
-3. 在面板展开配置向导，填写 `start.mjs` 的真实绝对路径。确认 CLI 能找到 `node`，复制生成的 Codex CLI 或 Claude Code 命令；Windows 使用生成的 JSON 配置。
-4. 由 CLI 启动 MCP，再在网页点击「启用 MCP 桥接」。不需要在网页再次输入 CLI 的 API Key。
-5. 让 Agent 使用下列业务工具。
+1. 在面板点「启用 MCP 桥接」，保持面板打开。
+2. 复制面板给出的一行命令到终端执行；或复制「给 AI 的一句话」直接粘给 Codex CLI / Claude Code，由它自己下载 `relay.mjs` 并注册 MCP。
+3. 按 CLI 提示重新加载 MCP，再让 Agent 使用下列业务工具。命令形如：
+
+```sh
+mkdir -p "$HOME/.sea-resume-ai-relay" && curl -fsSL '<站点>/ai-relay/relay.mjs' -o "$HOME/.sea-resume-ai-relay/relay.mjs" && codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" --host 127.0.0.1 --widget-origin <站点来源> --max-payload 500000
+```
+
+Windows 使用面板生成的 PowerShell 版本。其他 MCP 客户端使用面板 JSON 配置，需要 `relay.mjs` 的真实绝对路径（JSON 不展开 `~`）。不需要解压、不需要 `npm ci`，也不需要再次输入 CLI 的 API Key。
 
 | 工具 | 作用 |
 | --- | --- |
@@ -73,11 +77,13 @@ LocalStorage 和本地文件夹存储均可使用，因为业务工具在页面�
 
 “桥接已启动”仅代表网页已加载连接宿主，不保证 CLI、relay 和网络许可已就绪。是否连接可在 CLI 的 MCP 工具列表核对。浏览器可能要求本地网络访问许可；被拒绝、页面关闭或企业策略限制时使用文件交换。
 
-### 为什么提供启动包，而不是裸 npx
+### 为什么打成单文件，而不是裸 npx
 
-固定 `@mcp-b/webmcp-local-relay@6.0.3` 和 `@mcp-b/webmcp-polyfill@6.0.3`，采用 MIT 开源组件，不依赖旧 MCP-B 闭源扩展。真实联调发现 relay6.0.3 的默认依赖解析可能混用 Zod 4.4.3 与 4.6.7，导致空工具列表都报 `Cannot read properties of undefined (reading 'push')`。
+固定 `@mcp-b/webmcp-local-relay@6.0.3` 和 `@mcp-b/webmcp-polyfill@6.0.3`，采用 MIT 开源组件，不依赖旧 MCP-B 闭源扩展。真实联调发现 relay 6.0.3 的默认依赖解析可能混用 Zod 4.4.3 与 4.6.7，导致空工具列表也报 `Cannot read properties of undefined (reading 'push')`。
 
-启动包仅提供两行 ESM 启动器、package.json 和完整 lock，通过 `overrides.zod=4.4.3` 固定兼容依赖，不修改上游源码，不降级到来源校验较弱的旧 relay。不要删除锁文件或改用 `@latest`。源码用户也可执行：
+构建时用 rolldown 把上游 CLI 连同依赖（ws、Zod、MCP SDK）内联成单个 `ai-relay/relay.mjs`，根 `pnpm.overrides.zod=4.4.3` 与 `tools/ai-relay/package.json` 使用同一个兼容版本；不修改上游源码，不降级到来源校验较弱的旧 relay，接入时也不需要 `npm ci`。产物带版本与许可证说明，行为与上游一致：只监听回环地址，必须给定准确的 `--widget-origin`。
+
+面板折叠项仍提供完整启动包（`tools/ai-relay/`，含 `start.mjs`、`package.json` 与锁文件），作为离线或从源码安装的退路；不要删除锁文件或改用 `@latest`。源码用户也可执行：
 
 ```sh
 npm ci --prefix tools/ai-relay --ignore-scripts
@@ -111,7 +117,7 @@ node tools/ai-relay/start.mjs --host 127.0.0.1 --widget-origin http://localhost:
 
 ## 静态部署和信任边界
 
-`build/relayAssets.ts` 在开发／构建时从固定依赖生成 `ai-relay/`：host、embed、widget、上游许可证和启动包 ZIP。均由本站托管，支持 `VITE_BASE_PATH` 子路径，不动态执行第三方 CDN 代码。构建仍只输出静态资源。
+`build/relayAssets.ts` 在开发／构建时从固定依赖生成 `ai-relay/`：host、embed、widget、上游许可证、单文件 `relay.mjs` 和启动包 ZIP。`build/relayBundle.ts` 用 rolldown 把上游 CLI 与依赖内联成该单文件，由 Vite 输出到静态资源，支持 `VITE_BASE_PATH` 子路径，不动态执行第三方 CDN 代码。构建仍只输出静态资源。
 
 如部署额外 CSP，需要评估上游 blob iframe、内联 widget 脚本和回环 WebSocket 的许可：例如 frame-src 的本站/blob、connect-src 的本站和所用回环地址；严格策略可能阻止此功能。不要直接为整个站点放开不必要的 script-src。无法安全放行时关闭 MCP、使用文件交换。
 
@@ -129,7 +135,7 @@ WebMCP 浏览器原生 API 仍有实现差异，本项目通过固定版本 poly
 
 ## 验证范围
 
-- 应用全量 Vitest：59个文件、320项通过；包含过期／越权／重复草稿、移除模块不外发、撤销授权期间中止提交、保存失败回滚及并发编辑保护。
-- `node --test tools/ai-relay/relay.test.mjs`：2项通过，验证依赖锁与真实 stdio 初始化／工具列表，不调用模型。
-- 默认路径与 `/sea-resume/` 子路径生产构建通过。真实无头 Chrome + 干净安装启动包通过 ZIP 导出、MCP 读取／提交、人工确认保存、状态查询、撤销后注销、模拟无 Key 本地请求和编辑器撤销；没有页面／控制台错误。
+- 应用全量 Vitest：包含过期／越权／重复草稿、移除模块不外发、撤销授权期间中止提交、保存失败回滚、并发编辑保护，以及一句话接入命令的下载地址、来源校验和 Windows 分支。
+- `node --test tools/ai-relay/relay.test.mjs`：2项通过，验证依赖锁与真实 stdio 初始化／工具列表，不调用模型；另外对构建产物 `dist/ai-relay/relay.mjs` 做一次同样的 stdio 探测，确认单文件打包没有丢失工具。
+- 默认路径与 `/sea-resume/` 子路径生产构建通过。真实无头 Chrome + 启动包或单文件 relay 通过 ZIP 导出、MCP 读取／提交、人工确认保存、状态查询、撤销后注销、模拟无 Key 本地请求和编辑器撤销；没有页面／控制台错误。
 - 未调用真实 Ollama / LM Studio 权重、线上模型或 CLI 的模型会话。浏览器 HTTPS → 本地网络许可、企业 CSP 及其他浏览器需按实际部署验证。构建仍有大 chunk 提示，不影响成功构建。

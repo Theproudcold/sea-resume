@@ -1,5 +1,5 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: Cobalt (app-trimmed: no ASCII field, no cut corners) · redesign: full · schemes: light + dark (html.dark)
- * nav: kept top bar, set as a paper surface on a hairline with one cobalt key and the scheme toggle · signature: the white A4 sheet on a hairline wherever a resume appears, in both schemes · states: loading, empty, error, full
+ * nav: kept top bar, set as a paper surface on a hairline with one cobalt key and the scheme switch · signature: the A4 sheet follows the scheme on screen and stays white in print · states: loading, empty, error, full
  * axes: light+dark/sans/cool · posture: restrained · contrast: pass · v2.0.0 */
 /* Hallmark · dismissed 10b · .resume-entry-card padding eases its own collapse in the editor; the entry folds to one line and the motion is the fold itself, zeroed under reduced motion */
 /* Hallmark · answered F7 · every popper is the same kind of floating surface (menu, select, picker, popover), one recipe on purpose */
@@ -141,9 +141,43 @@
 
 .resume-document {
   color: var(--resume-ink);
+  background: var(--resume-paper);
   font-size: 1rem;
   line-height: 1.5;
   caret-color: auto;
+}
+
+/* 简历纸跟随屏幕主题。自带固定纸色的模板（技术）不参与。 */
+.resume-document:not(:has([data-resume-paper='fixed'])) :is(.text-gray-900, .text-black) { color: var(--resume-ink-title); }
+.resume-document:not(:has([data-resume-paper='fixed'])) :is(.text-gray-800, .text-gray-700) { color: var(--resume-ink-heading); }
+.resume-document:not(:has([data-resume-paper='fixed'])) :is(.text-gray-600, .text-gray-500, .text-gray-400, .text-gray-300) { color: var(--resume-ink-body); }
+.resume-document:not(:has([data-resume-paper='fixed'])) :is(.border-gray-200, .border-gray-700, .border-black) { border-color: var(--resume-rule); }
+.resume-document:not(:has([data-resume-paper='fixed'])) :is(.bg-white, .bg-gray-800) { background-color: var(--resume-sheet); }
+.resume-document:not(:has([data-resume-paper='fixed'])) :is(.hover\:bg-gray-50, .hover\:bg-gray-800):hover { background-color: var(--resume-hover); }
+.resume-document:not(:has([data-resume-paper='fixed'])) .bg-gradient-to-br { background-image: linear-gradient(to bottom right, var(--resume-wash-from), var(--resume-wash-to)); }
+.resume-document:not(:has([data-resume-paper='fixed'])) .hover\:ring-pink-300:hover { --tw-ring-color: var(--resume-ring); }
+
+/* 新主题快照从点击处扩开，旧主题留在圆外；关掉默认交叉淡化，避免两层叠在一起发灰。 */
+html.scheme-rippling::view-transition-group(root) {
+  animation-duration: 750ms;
+}
+
+html.scheme-rippling::view-transition-image-pair(root) {
+  isolation: isolate;
+}
+
+html.scheme-rippling::view-transition-old(root),
+html.scheme-rippling::view-transition-new(root) {
+  mix-blend-mode: normal;
+  animation: none;
+}
+
+html.scheme-rippling::view-transition-old(root) {
+  z-index: 1;
+}
+
+html.scheme-rippling::view-transition-new(root) {
+  z-index: 2;
 }
 
 :where(a, button, input, select, textarea, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
@@ -366,6 +400,15 @@
   color: var(--color-ink-2);
   font-family: var(--font-display);
   font-weight: 500;
+}
+
+/* Element 把顶部标签渲染成块级元素，必填星号（::before）后面的插槽内容一旦是块级盒子
+   （例如带图标按钮的 flex 标签）就会被挤到下一行，标签因此多出一行空行。用 flex 让星号
+   与标签内容同行，并保持垂直居中。 */
+.el-form-item--label-top .el-form-item__label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .el-form-item__error {
@@ -593,15 +636,33 @@
 .el-dropdown-menu {
   --el-dropdown-menuItem-hover-fill: var(--color-paper-2);
   --el-dropdown-menuItem-hover-color: var(--color-ink);
+  --dropdown-icon-rail: var(--text-md);
+  --dropdown-icon-gap: var(--space-xs);
+  --dropdown-item-padding-inline: 16px;
   padding: var(--space-2xs);
   background: transparent;
 }
 
 .el-dropdown-menu__item {
   min-height: 34px;
+  padding-inline: var(--dropdown-item-padding-inline);
   border-radius: var(--radius-s);
   color: var(--color-ink);
   font-weight: 400;
+}
+
+/* 图标列：固定宽度与统一间距，避免图标宽窄不一导致标签错位。 */
+.el-dropdown-menu__item > .el-icon {
+  flex: none;
+  width: var(--dropdown-icon-rail);
+  margin-right: var(--dropdown-icon-gap);
+  font-size: var(--dropdown-icon-rail);
+  line-height: 1;
+}
+
+/* 菜单里只要有一项带图标，其余项也补出图标位，标签落在同一条竖线上。 */
+.el-dropdown-menu:has(> .el-dropdown-menu__item > .el-icon) > .el-dropdown-menu__item:not(:has(> .el-icon)) {
+  padding-left: calc(var(--dropdown-item-padding-inline) + var(--dropdown-icon-rail) + var(--dropdown-icon-gap));
 }
 
 .el-dropdown-menu__item--divided {

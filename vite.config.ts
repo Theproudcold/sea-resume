@@ -25,6 +25,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      // The package "import" export is the browser build. It subsets CFF fonts;
+      // the Node export pulls fs and breaks the client bundle.
+      fontkit: resolve(__dirname, 'node_modules/fontkit/dist/browser-module.mjs'),
     },
   },
   server: {

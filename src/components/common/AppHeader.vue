@@ -20,7 +20,7 @@
             type="button"
             class="page-title-edit"
             :aria-label="`编辑简历名称：${title}`"
-            title="点击修改简历名称"
+            title="修改简历名称"
             @click="startTitleEdit"
           >
             <span class="page-title-text">{{ title }}</span>
@@ -53,20 +53,31 @@
         <div v-if="inlineToolbar && $slots.toolbar" class="header-inline-toolbar">
           <slot name="toolbar" />
         </div>
-        <button
-          type="button"
-          class="scheme-toggle"
-          :aria-label="isDark ? '切换到浅色主题' : '切换到深色主题'"
-          :title="isDark ? '浅色主题' : '深色主题'"
-          @click="toggleScheme"
+        <div
+          class="scheme-switch"
+          :class="{ 'is-ready': schemeReady }"
+          role="radiogroup"
+          aria-label="主题"
+          :style="{ '--scheme-index': schemeIndex }"
         >
-          <svg v-if="isDark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path fill="currentColor" d="M12 4.2a.9.9 0 0 1 .9.9V6a.9.9 0 0 1-1.8 0V5.1a.9.9 0 0 1 .9-.9Zm0 12.9a.9.9 0 0 1 .9.9v.9a.9.9 0 0 1-1.8 0v-.9a.9.9 0 0 1 .9-.9ZM4.2 12a.9.9 0 0 1 .9-.9H6a.9.9 0 0 1 0 1.8H5.1a.9.9 0 0 1-.9-.9Zm12.9 0a.9.9 0 0 1 .9-.9h.9a.9.9 0 0 1 0 1.8h-.9a.9.9 0 0 1-.9-.9ZM6.4 6.4a.9.9 0 0 1 1.27 0l.64.64a.9.9 0 1 1-1.27 1.27l-.64-.64a.9.9 0 0 1 0-1.27Zm9.29 9.29a.9.9 0 0 1 1.27 0l.64.64a.9.9 0 1 1-1.27 1.27l-.64-.64a.9.9 0 0 1 0-1.27Zm1.27-9.29a.9.9 0 0 1 0 1.27l-.64.64a.9.9 0 1 1-1.27-1.27l.64-.64a.9.9 0 0 1 1.27 0ZM7.68 15.05a.9.9 0 0 1 0 1.27l-.64.64a.9.9 0 1 1-1.27-1.27l.64-.64a.9.9 0 0 1 1.27 0ZM12 8.1A3.9 3.9 0 1 1 12 15.9 3.9 3.9 0 0 1 12 8.1Z" />
-          </svg>
-          <svg v-else viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <path fill="currentColor" d="M14.2 3.4a.9.9 0 0 1 .2 1 8.2 8.2 0 1 0 5.2 5.2.9.9 0 0 1 1.2-.2A9.9 9.9 0 1 1 14 3.2a.9.9 0 0 1 .2 1.2Z" />
-          </svg>
-        </button>
+          <span class="scheme-thumb" aria-hidden="true" />
+          <button
+            v-for="option in schemeOptions"
+            :key="option.value"
+            type="button"
+            class="scheme-option"
+            role="radio"
+            :aria-checked="schemePreference === option.value"
+            :aria-label="option.label"
+            :title="option.label"
+            :class="{ 'is-active': schemePreference === option.value }"
+            @click="selectScheme(option.value, $event)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="currentColor" :d="option.icon" />
+            </svg>
+          </button>
+        </div>
         <a
           class="repository-link"
           href="https://github.com/Theproudcold/sea-resume"
@@ -90,8 +101,14 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { applyColorScheme, persistColorScheme, readStoredScheme } from '@/composables/useColorScheme';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import {
+  applyColorScheme,
+  persistColorScheme,
+  readStoredScheme,
+  resolveColorScheme,
+  type ColorSchemePreference,
+} from '@/composables/useColorScheme';
 import { ArrowLeft, EditPen } from '@element-plus/icons-vue';
 
 const props = withDefaults(defineProps<{
@@ -146,26 +163,44 @@ const cancelTitleEdit = () => {
 };
 
 const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`;
-const isDark = ref(document.documentElement.classList.contains('dark'));
+const SUN_ICON = 'M12 4.2a.9.9 0 0 1 .9.9V6a.9.9 0 0 1-1.8 0V5.1a.9.9 0 0 1 .9-.9Zm0 12.9a.9.9 0 0 1 .9.9v.9a.9.9 0 0 1-1.8 0v-.9a.9.9 0 0 1 .9-.9ZM4.2 12a.9.9 0 0 1 .9-.9H6a.9.9 0 0 1 0 1.8H5.1a.9.9 0 0 1-.9-.9Zm12.9 0a.9.9 0 0 1 .9-.9h.9a.9.9 0 0 1 0 1.8h-.9a.9.9 0 0 1-.9-.9ZM6.4 6.4a.9.9 0 0 1 1.27 0l.64.64a.9.9 0 1 1-1.27 1.27l-.64-.64a.9.9 0 0 1 0-1.27Zm9.29 9.29a.9.9 0 0 1 1.27 0l.64.64a.9.9 0 1 1-1.27 1.27l-.64-.64a.9.9 0 0 1 0-1.27Zm1.27-9.29a.9.9 0 0 1 0 1.27l-.64.64a.9.9 0 1 1-1.27-1.27l.64-.64a.9.9 0 0 1 1.27 0ZM7.68 15.05a.9.9 0 0 1 0 1.27l-.64.64a.9.9 0 1 1-1.27-1.27l.64-.64a.9.9 0 0 1 1.27 0ZM12 8.1A3.9 3.9 0 1 1 12 15.9 3.9 3.9 0 0 1 12 8.1Z';
+const MOON_ICON = 'M14.2 3.4a.9.9 0 0 1 .2 1 8.2 8.2 0 1 0 5.2 5.2.9.9 0 0 1 1.2-.2A9.9 9.9 0 1 1 14 3.2a.9.9 0 0 1 .2 1.2Z';
+const SYSTEM_ICON = 'M4.6 5.2A1.6 1.6 0 0 1 6.2 3.6h11.6a1.6 1.6 0 0 1 1.6 1.6v8.2a1.6 1.6 0 0 1-1.6 1.6h-4.3l.7 1.6h2.1a.9.9 0 0 1 0 1.8H7.7a.9.9 0 0 1 0-1.8h2.1l.7-1.6H6.2a1.6 1.6 0 0 1-1.6-1.6Zm1.6-.2a.2.2 0 0 0-.2.2v8.2c0 .1.1.2.2.2h11.6a.2.2 0 0 0 .2-.2V5.2a.2.2 0 0 0-.2-.2Z';
+const schemeOptions: Array<{ value: ColorSchemePreference; label: string; icon: string }> = [
+  { value: 'light', label: '浅色主题', icon: SUN_ICON },
+  { value: 'system', label: '跟随系统', icon: SYSTEM_ICON },
+  { value: 'dark', label: '深色主题', icon: MOON_ICON },
+];
+const schemePreference = ref<ColorSchemePreference>(readStoredScheme() ?? 'system');
+const schemeReady = ref(false);
+const schemeIndex = computed(() => {
+  const index = schemeOptions.findIndex((option) => option.value === schemePreference.value);
+  return index < 0 ? 1 : index;
+});
 let schemeMedia: MediaQueryList | null = null;
 
-const paintScheme = (dark: boolean) => {
-  applyColorScheme(dark);
-  isDark.value = dark;
+const paintScheme = () => {
+  applyColorScheme(resolveColorScheme(schemePreference.value) === 'dark');
 };
 
-const toggleScheme = () => {
-  const dark = !isDark.value;
-  persistColorScheme(dark);
-  isDark.value = dark;
+const selectScheme = (preference: ColorSchemePreference, event: MouseEvent) => {
+  // 点已选中的按钮仍在浅色和深色之间切换，不会卡在当前外观。
+  if (preference === schemePreference.value) {
+    preference = resolveColorScheme(preference) === 'dark' ? 'light' : 'dark';
+  }
+  schemePreference.value = preference;
+  persistColorScheme(preference, { x: event.clientX, y: event.clientY });
 };
 
-const onSystemScheme = (event: MediaQueryListEvent) => {
-  if (readStoredScheme()) return;
-  paintScheme(event.matches);
+const onSystemScheme = () => {
+  if (schemePreference.value !== 'system') return;
+  paintScheme();
 };
 
 onMounted(() => {
+  requestAnimationFrame(() => {
+    schemeReady.value = true;
+  });
   if (typeof window.matchMedia !== 'function') return;
   schemeMedia = window.matchMedia('(prefers-color-scheme: dark)');
   schemeMedia.addEventListener('change', onSystemScheme);
@@ -355,7 +390,76 @@ onUnmounted(() => {
   color: var(--color-ink);
 }
 
-.scheme-toggle,
+.scheme-switch {
+  position: relative;
+  display: inline-grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(3, 32px);
+  align-items: center;
+  height: 36px;
+  padding: 3px;
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-input);
+  background: var(--color-paper-2);
+}
+
+.scheme-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 32px;
+  height: 30px;
+  border-radius: var(--radius-s);
+  background: var(--color-paper-3);
+  box-shadow: var(--shadow-key);
+  pointer-events: none;
+  transform: translateX(calc(var(--scheme-index) * 100%));
+}
+
+.scheme-switch.is-ready .scheme-thumb {
+  transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.scheme-option {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 32px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: color 280ms var(--ease-out);
+}
+
+.scheme-option svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.scheme-option:hover {
+  color: var(--color-ink);
+}
+
+.scheme-option.is-active {
+  color: var(--color-ink);
+}
+
+.scheme-option.is-active svg {
+  transform: scale(1.08);
+}
+
+.scheme-option:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
 .repository-link {
   position: relative;
   display: inline-flex;
@@ -381,25 +485,21 @@ onUnmounted(() => {
   inset: -4px;
 }
 
-.scheme-toggle svg,
 .repository-link svg {
   width: 18px;
   height: 18px;
 }
 
-.scheme-toggle:hover,
 .repository-link:hover {
   border-color: var(--color-rule-2);
   background: var(--color-paper-2);
 }
 
-.scheme-toggle:active,
 .repository-link:active {
   transform: translateY(1px);
   box-shadow: var(--shadow-key-press);
 }
 
-.scheme-toggle:focus-visible,
 .repository-link:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
