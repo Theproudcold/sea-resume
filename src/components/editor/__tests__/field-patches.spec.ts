@@ -9,6 +9,7 @@ import ProjectEditor from '../ProjectEditor.vue';
 import SkillEditor from '../SkillEditor.vue';
 import CustomBlockEditor from '../CustomBlockEditor.vue';
 import { useResumeStore } from '@/stores/resume';
+import * as avatarImage from '@/utils/avatarImage';
 
 const Field = defineComponent({
   name: 'TestField',
@@ -21,6 +22,9 @@ const stubs = {
   'el-input': Field, 'el-select': Field, 'el-date-picker': Field, 'el-checkbox': Field, 'el-switch': Field,
   'el-form': Container, 'el-form-item': Container, 'el-row': Container, 'el-col': Container,
   'el-upload': { ...Container, name: 'TestUpload', props: ['onChange'] }, 'el-popover': Container, 'el-popconfirm': Container,
+  MonthRangeField: defineComponent({ name: 'MonthRangeField', props: ['start', 'end', 'present'], emits: ['update:start', 'update:end', 'update:present'], template: '<div class="month-range" />' }),
+  SkillTagInput: defineComponent({ name: 'SkillTagInput', props: ['items'], emits: ['update:items'], template: '<div class="skill-tags" />' }),
+  EntryDeleteButton: { template: '<button class="entry-delete"><slot /></button>' },
   'el-icon': true, 'el-button': { template: '<button><slot /></button>' }, 'el-option': true, 'el-divider': true,
   RichTextEditor: Field, SmoothCollapse: Container,
 };
@@ -95,29 +99,25 @@ describe('store-owned editor field patches', () => {
   });
 
   it.each(['resume switch', 'unmount', 'newer upload'] as const)('ignores stale avatar reads after %s', async (scenario) => {
-    const readers: Array<{ result: string; onload?: () => void }> = [];
-    vi.stubGlobal('FileReader', class {
-      result = '';
-      onload?: () => void;
-      constructor() { readers.push(this); }
-      readAsDataURL() {}
-    });
+    const pending: Array<{ resolve: (value: string) => void }> = [];
+    vi.spyOn(avatarImage, 'compressAvatar').mockImplementation(() => new Promise((resolve) => { pending.push({ resolve }); }));
     const store = useResumeStore();
     const wrapper = render(BasicInfoEditor);
     const upload = wrapper.findComponent({ name: 'TestUpload' });
     const file = { raw: new File(['avatar'], 'avatar.png', { type: 'image/png' }) };
     upload.props('onChange')(file);
-    expect(readers).toHaveLength(1);
+    await nextTick();
+    expect(pending).toHaveLength(1);
     if (scenario === 'resume switch') store.data = { ...store.data, id: 'another-resume' };
     else if (scenario === 'unmount') wrapper.unmount();
     else {
       upload.props('onChange')(file);
-      readers[1]!.result = 'new-avatar';
-      readers[1]!.onload?.();
+      pending[1]!.resolve('new-avatar');
+      await nextTick();
     }
     const patch = vi.spyOn(store, 'updateBasic');
-    readers[0]!.result = 'stale-avatar';
-    readers[0]!.onload?.();
+    pending[0]!.resolve('stale-avatar');
+    await nextTick();
     expect(patch).not.toHaveBeenCalled();
     expect(store.data.basic.avatar).toBe(scenario === 'newer upload' ? 'new-avatar' : undefined);
   });
@@ -127,43 +127,28 @@ describe('store-owned editor field patches', () => {
     const previous = store.data.projects[0]!;
     const patch = vi.spyOn(store, 'updateProject');
     const wrapper = render(ProjectEditor);
-    const checkbox = wrapper.findAllComponents(Field).find(field => field.attributes('label') === '至今')!;
-    expect(checkbox.props('modelValue')).toBe(true);
-    checkbox.vm.$emit('update:modelValue', false);
+    const range = wrapper.findComponent({ name: 'MonthRangeField' });
+    expect(range.props('present')).toBe(true);
+    range.vm.$emit('update:present', false);
     await nextTick();
     expect(previous.endDate).toBe('present');
     expect(patch).toHaveBeenCalledExactlyOnceWith('p', { endDate: '' });
     store.data.projects[0] = { ...store.data.projects[0]!, endDate: 'present' };
     await nextTick();
-    expect(checkbox.props('modelValue')).toBe(true);
+    expect(wrapper.findComponent({ name: 'MonthRangeField' }).props('present')).toBe(true);
   });
 
-  it('keeps skill separator drafts through own echoes, but follows undo/import/external replacements', async () => {
+  it('commits complete skill tags and leaves an unfinished word out of the saved list', async () => {
     const store = useResumeStore();
     const wrapper = render(SkillEditor);
-    const input = wrapper.find('input[type="textarea"]');
-    await input.setValue('Vue,  ');
-    expect(store.data.skills[0]!.items).toEqual(['Vue']);
-    expect((input.element as HTMLInputElement).value).toBe('Vue,  ');
-    store.updateSkill('s', { category: '框架' });
+    const tags = wrapper.findComponent({ name: 'SkillTagInput' });
+    expect(tags.props('items')).toEqual(['Vue']);
+    tags.vm.$emit('update:items', ['Vue', 'TypeScript']);
     await nextTick();
-    expect((input.element as HTMLInputElement).value).toBe('Vue,  ');
-    await input.setValue('Vue,  React, ');
-    expect(store.data.skills[0]!.items).toEqual(['Vue', 'React']);
+    expect(store.data.skills[0]!.items).toEqual(['Vue', 'TypeScript']);
     await store.undo();
     await nextTick();
-    expect((input.element as HTMLInputElement).value).toBe('Vue');
-    store.data = { ...store.data, skills: [{ id: 's', category: '导入', items: ['Rust', 'Go'] }] };
-    await nextTick();
-    expect((input.element as HTMLInputElement).value).toBe('Rust, Go');
-    store.updateSkill('s', { items: ['Python'] });
-    await nextTick();
-    expect((input.element as HTMLInputElement).value).toBe('Python');
-    store.data.skills = [];
-    await nextTick();
-    store.data.skills = [{ id: 's', category: '重建', items: ['新技能'] }];
-    await nextTick();
-    expect((wrapper.find('input[type="textarea"]').element as HTMLInputElement).value).toBe('新技能');
+    expect(wrapper.findComponent({ name: 'SkillTagInput' }).props('items')).toEqual(['Vue']);
   });
 
   it('patches a custom item and converts text/type together in one action', async () => {

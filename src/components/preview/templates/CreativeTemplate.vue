@@ -1,5 +1,5 @@
 <template>
-  <div class="creative-template min-h-full bg-gradient-to-br from-purple-50 to-pink-50" :style="{
+  <div class="creative-template min-h-full" :style="{
     '--margin-top': (data.theme?.moduleMargins?.top || 0) + 'px',
     '--margin-bottom': (data.theme?.moduleMargins?.bottom || 24) + 'px',
     '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
@@ -8,22 +8,22 @@
     fontFamily: data.theme?.fontFamily || 'var(--resume-font-family)',
     fontSize: (data.theme?.fontSize || 14) + 'px',
     lineHeight: data.theme?.lineHeight || 1.6,
-    '--primary-color': data.theme?.color || '#9333ea'
+    '--primary-color': data.theme?.color || '#a84d3d'
   }">
     <!-- 创意头部 -->
     <div 
-      class="header bg-white rounded-2xl shadow-lg p-8 mb-6 cursor-pointer hover:ring-2 hover:ring-pink-300 transition-all"
+      class="creative-banner cursor-pointer"
       @click="setActiveSection('basic')"
     >
       <div class="text-center">
-        <div class="w-24 h-24 rounded-full mx-auto mb-4 overflow-hidden bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white text-3xl font-bold">
+        <div class="creative-avatar">
           <img v-if="data.basic.avatar" :src="data.basic.avatar" alt="头像" class="w-full h-full object-cover" />
           <span v-else>{{ (data.basic.name || 'U').charAt(0).toUpperCase() }}</span>
         </div>
-        <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
+        <h1 class="creative-name">
           {{ data.basic.name || '您的姓名' }}
         </h1>
-        <div class="text-lg text-gray-700">{{ data.basic.title || '求职意向' }}</div>
+        <div class="creative-role">{{ data.basic.title || '求职意向' }}</div>
         <div class="flex justify-center gap-4 mt-4 text-sm text-gray-600">
           <span v-if="data.basic.email">{{ data.basic.email }}</span>
           <span v-if="data.basic.phone">{{ data.basic.phone }}</span>
@@ -32,7 +32,7 @@
             :key="contact.id"
             class="inline-flex max-w-full items-center gap-1"
           >
-            <ContactIcon v-if="data.theme.displayIcons !== false" type="custom" :icon="contact.icon" />
+            <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" />
             <span class="truncate"><span v-if="contact.label">{{ contact.label }}：</span>{{ contact.value }}</span>
           </span>
         </div>
@@ -45,10 +45,10 @@
       <!-- 个人简介 -->
       <div 
         v-if="data.basic.summary" 
-        class="card bg-white rounded-xl shadow p-6 cursor-pointer hover:ring-2 hover:ring-pink-300 transition-all"
+        class="card cursor-pointer"
         @click="setActiveSection('basic')"
       >
-        <h2 class="text-xl font-bold mb-3" style="color: var(--primary-color)">✨ 个人简介</h2>
+        <h2 class="card-title">个人简介</h2>
         <div class="text-gray-700 rich-text" v-html="data.basic.summary"></div>
       </div>
 
@@ -62,7 +62,7 @@
       >
         <template #item="{ element: section }">
           <div 
-            class="section-item cursor-pointer hover:ring-2 hover:ring-pink-300 hover:ring-offset-2 rounded-xl transition-all"
+            class="section-item cursor-pointer"
             style="
               margin-top: var(--margin-top);
               margin-bottom: var(--margin-bottom);
@@ -72,10 +72,10 @@
             @click.stop="setActiveSection(section)"
           >
             <!-- 工作经历 -->
-            <div v-if="section === 'experience' && data.experiences.some(exp => exp.visible !== false)" class="card bg-white rounded-xl shadow p-6">
-              <h2 class="card-header text-xl font-bold mb-4" style="color: var(--primary-color)">💼 工作经历</h2>
+            <div v-if="section === 'experience' && data.experiences.some(exp => exp.visible !== false)" class="card">
+              <h2 class="card-header card-title">{{ data.sectionTitles?.experience || '工作经历' }}</h2>
               <div class="space-y-4">
-                <div v-for="exp in data.experiences.filter(exp => exp.visible !== false)" :key="exp.id" class="border-l-4 pl-4" style="border-color: var(--primary-color); opacity: 0.8">
+                <div v-for="exp in data.experiences.filter(exp => exp.visible !== false)" :key="exp.id" class="creative-entry">
                   <div class="flex justify-between items-start mb-1">
                     <h3 class="font-bold text-gray-900">{{ exp.company }}</h3>
                     <span class="text-xs text-gray-500">{{ formatDateRange(exp.startDate, exp.endDate) }}</span>
@@ -87,10 +87,10 @@
             </div>
 
             <!-- 项目经验 -->
-            <div v-else-if="section === 'projects' && data.projects.some(project => project.visible !== false)" class="card bg-white rounded-xl shadow p-6">
-              <h2 class="card-header text-xl font-bold mb-4" style="color: var(--primary-color)">🚀 项目经验</h2>
+            <div v-else-if="section === 'projects' && data.projects.some(project => project.visible !== false)" class="card">
+              <h2 class="card-header card-title">{{ data.sectionTitles?.projects || '项目经验' }}</h2>
               <div class="space-y-4">
-                <div v-for="project in data.projects.filter(project => project.visible !== false)" :key="project.id" class="border-l-4 pl-4" style="border-color: var(--primary-color); opacity: 0.8">
+                <div v-for="project in data.projects.filter(project => project.visible !== false)" :key="project.id" class="creative-entry">>
                   <div class="flex justify-between items-start mb-1">
                     <h3 class="font-bold text-gray-900">{{ project.name }}</h3>
                     <span class="text-xs text-gray-500">{{ formatDateRange(project.startDate, project.endDate) }}</span>
@@ -101,8 +101,7 @@
                     <span
                       v-for="tech in project.techStack"
                       :key="tech"
-                      class="px-2 py-1 rounded text-xs"
-                      style="color: var(--primary-color); background: #fdf2f8; border: 1px solid var(--primary-color);"
+                      class="creative-chip"
                     >
                       {{ tech }}
                     </span>
@@ -112,10 +111,10 @@
             </div>
 
             <!-- 教育背景 -->
-            <div v-else-if="section === 'education' && data.education.some(edu => edu.visible !== false)" class="card bg-white rounded-xl shadow p-6">
-              <h2 class="card-header text-xl font-bold mb-4" style="color: var(--primary-color)">🎓 教育背景</h2>
+            <div v-else-if="section === 'education' && data.education.some(edu => edu.visible !== false)" class="card">
+              <h2 class="card-header card-title">{{ data.sectionTitles?.education || '教育背景' }}</h2>
               <div class="space-y-3">
-                <div v-for="edu in data.education.filter(edu => edu.visible !== false)" :key="edu.id" class="border-l-4 pl-4" style="border-color: var(--primary-color); opacity: 0.8">
+                <div v-for="edu in data.education.filter(edu => edu.visible !== false)" :key="edu.id" class="creative-entry">>
                   <h3 class="font-bold text-gray-900">{{ edu.school }}</h3>
                   <div class="text-sm text-gray-700">{{ edu.degree }} · {{ edu.major }}</div>
                 </div>
@@ -123,14 +122,13 @@
             </div>
 
             <!-- 技能 -->
-            <div v-else-if="section === 'skills' && data.skills.some(skill => skill.visible !== false)" class="card bg-white rounded-xl shadow p-6">
-              <h2 class="card-header text-xl font-bold mb-4" style="color: var(--primary-color)">⭐ 专业技能</h2>
+            <div v-else-if="section === 'skills' && data.skills.some(skill => skill.visible !== false)" class="card">
+              <h2 class="card-header card-title">{{ data.sectionTitles?.skills || '专业技能' }}</h2>
               <div class="flex flex-wrap gap-2">
                 <span
                   v-for="skill in data.skills.filter(skill => skill.visible !== false).flatMap(s => s.items)"
                   :key="skill"
-                  class="px-3 py-1 rounded-full text-sm"
-                  style="color: var(--primary-color); background: #fdf2f8; border: 1px solid var(--primary-color);"
+                  class="creative-chip"
                 >
                   {{ skill }}
                 </span>
@@ -138,12 +136,12 @@
             </div>
 
             <!-- 自定义模块 -->
-            <div v-else-if="isCustomBlock(section)" class="card bg-white rounded-xl shadow p-6">
-              <h2 class="card-header text-xl font-bold mb-4" style="color: var(--primary-color)">
-                📌 {{ getSectionTitle(section) }}
+            <div v-else-if="isCustomBlock(section)" class="card">
+              <h2 class="card-header card-title">
+                {{ getSectionTitle(section) }}
               </h2>
               <div v-if="Array.isArray(getCustomContent(section))" class="space-y-4">
-                <div v-for="item in getCustomItems(section)" :key="item.id" class="border-l-4 pl-4" style="border-color: var(--primary-color); opacity: 0.8">
+                <div v-for="item in getCustomItems(section)" :key="item.id" class="creative-entry">>
                   <div class="flex justify-between items-start mb-1">
                     <h3 v-if="item.title" class="font-bold text-gray-900">{{ item.title }}</h3>
                     <span v-if="item.date" class="text-xs text-gray-500">{{ item.date }}</span>
@@ -174,7 +172,7 @@ const props = defineProps<{
 }>();
 
 const formatDateRange = (start: string, end: string | 'present') => {
-  const format = props.data.theme.dateFormat || 'YYYY.MM';
+  const format = props.data.theme?.dateFormat || 'YYYY.MM';
   const formatFn = (dateStr: string) => {
     if (!dateStr) return '';
     try {
@@ -240,16 +238,90 @@ const setActiveSection = (id: string) => {
 
 <style scoped>
 .creative-template {
-  /* font-family via inline style */
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--primary-color) 8%, var(--resume-paper)), var(--resume-paper) 168px);
+  color: var(--resume-ink);
+}
+
+.creative-banner {
+  margin-bottom: 1rem;
+  padding: 1.2rem 1.15rem 1.05rem;
+  border-radius: 16px;
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.creative-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.4rem;
+  height: 4.4rem;
+  margin: 0 auto 0.7rem;
+  overflow: hidden;
+  border: 2px solid rgb(255 255 255 / 72%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 16%);
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.creative-name {
+  margin: 0;
+  font-size: 1.75em;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1.15;
+}
+
+.creative-role {
+  margin-top: 0.28rem;
+  color: rgb(255 255 255 / 86%);
+}
+
+.creative-banner :deep(span),
+.creative-banner :deep(a) {
+  color: rgb(255 255 255 / 88%);
 }
 
 .card {
-  transition: transform 0.2s;
+  margin-bottom: 0.7rem;
+  padding: 0.95rem 1.05rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--resume-rule));
+  border-radius: 14px;
+  background: var(--resume-sheet);
+}
+
+.card-title {
+  margin: 0 0 0.65rem;
+  color: var(--primary-color);
+  font-size: 1.02em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.creative-entry {
+  padding-left: 0.75rem;
+  border-left: 2px solid color-mix(in srgb, var(--primary-color) 55%, var(--resume-sheet));
+}
+
+.creative-chip {
+  padding: 0.12rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 30%, var(--resume-rule));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-color) 8%, var(--resume-sheet));
+  color: var(--primary-color);
+  font-size: 0.78em;
 }
 
 @media print {
   .creative-template {
     background: white;
+  }
+
+  .creative-banner {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 }
 </style>

@@ -3,7 +3,7 @@
     <ResumeCanvas>
       <component :is="currentTemplate" v-if="currentTemplate" :data="previewData" />
       <div v-else class="preview-empty">
-        <el-empty description="请选择一个模板开始制作简历" />
+        <el-empty description="还没有可用的模板" />
       </div>
     </ResumeCanvas>
   </div>

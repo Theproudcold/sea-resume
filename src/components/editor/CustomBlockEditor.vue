@@ -1,8 +1,10 @@
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { useResumeStore } from '@/stores/resume';
-import { Delete, Calendar, Edit, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
+import { Calendar, Edit, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
+import EntryDeleteButton from './EntryDeleteButton.vue';
+import { focusNewEntry } from '@/utils/focusNewEntry';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import SmoothCollapse from '@/components/common/SmoothCollapse.vue';
 import type { CustomItem } from '@/types/resume';
@@ -54,12 +56,15 @@ const items = computed(() => {
 });
 
 const addItem = () => {
+  const before = new Set(items.value.map(item => item.id));
   resumeStore.addCustomItem(props.id, {
     title: '',
     subtitle: '',
     date: '',
     description: ''
   });
+  const created = items.value.find(item => !before.has(item.id));
+  if (created) void nextTick(() => focusNewEntry(created.id));
 };
 
 const updateItem = (itemId: string, updates: Partial<CustomItem>) => {
@@ -91,10 +96,10 @@ defineExpose({ addItem });
     <!-- 列表模式 -->
     <div v-else class="space-y-6">
       <div v-if="items.length === 0" class="resume-editor-empty">
-        <p class="text-gray-500">暂无条目，您可以添加多个项目</p>
+        <p>添加条目</p>
       </div>
 
-      <div v-for="(item, index) in items" :key="item.id" class="item-card resume-entry-card relative" :class="{ 'is-collapsed': isItemCollapsed(item.id) }">
+      <div v-for="(item, index) in items" :key="item.id" class="item-card resume-entry-card relative" :class="{ 'is-collapsed': isItemCollapsed(item.id) }" :data-entry-id="item.id">
         <div class="resume-entry-card__header">
           <span class="text-sm text-gray-600">自定义条目 {{ index + 1 }}</span>
           <div class="flex items-center gap-2">
@@ -114,14 +119,7 @@ defineExpose({ addItem });
               :title="isItemCollapsed(item.id) ? '展开此条目' : '折叠此条目'"
               @click="toggleItemCollapsed(item.id)"
             />
-            <el-button
-              type="danger"
-              link
-              :icon="Delete"
-              aria-label="删除此条目"
-              title="删除此条目"
-              @click="removeItem(item.id)"
-            />
+            <EntryDeleteButton :label="item.title.trim() || '未命名条目'" @confirm="removeItem(item.id)" />
           </div>
         </div>
 
@@ -132,6 +130,7 @@ defineExpose({ addItem });
             <el-input 
               :model-value="item.title"
               placeholder="标题 (如: 奖项名称)"
+              data-entry-focus
               @update:model-value="(value: string) => updateItem(item.id, { title: value })"
             >
               <template #prefix>

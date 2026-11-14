@@ -6,39 +6,40 @@
     '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
     '--font-size': (data.theme?.fontSize || 13) + 'px',
     '--line-height': data.theme?.lineHeight || 1.4,
+    '--spacing': (data.theme?.moduleMargins?.bottom ?? 16) + 'px',
     '--primary-color': data.theme?.color || '#1a1a1a',
     padding: (data.theme?.pageMargins !== undefined ? data.theme.pageMargins : 24) + 'px',
     fontFamily: data.theme?.fontFamily || 'var(--resume-font-family)',
     fontSize: 'var(--font-size)',
     lineHeight: 'var(--line-height)',
-    color: '#333'
+    color: 'var(--resume-ink)'
   }">
     <!-- 双栏布局 -->
-    <div class="grid grid-cols-3 gap-8">
+    <div class="professional-grid">
       <!-- 左侧栏 -->
-      <div class="col-span-1 border-r border-gray-200 pr-8">
-        <div class="mb-8 cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded transition-colors" @click="setActiveSection('basic')">
+      <div class="professional-side">
+        <div class="side-profile cursor-pointer" @click="setActiveSection('basic')">
         <div v-if="data.basic.avatar" class="mb-4">
-          <img :src="data.basic.avatar" alt="头像" class="w-20 h-20 rounded-full object-cover border border-gray-200" />
+          <img :src="data.basic.avatar" alt="头像" class="w-20 h-20 rounded-full object-cover" style="box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 16%, white)" />
         </div>
-          <h1 class="text-2xl font-bold text-gray-900 mb-2" style="color: var(--primary-color)">{{ data.basic.name || '您的姓名' }}</h1>
-          <div class="text-base text-gray-600 mb-4">{{ data.basic.title || '求职意向' }}</div>
+          <h1 class="side-name">{{ data.basic.name || '您的姓名' }}</h1>
+          <div class="side-role">{{ data.basic.title || '求职意向' }}</div>
           
           <div class="space-y-2 text-sm text-gray-500">
              <div v-if="data.basic.email" class="flex items-center gap-2">
-              <ContactIcon v-if="data.theme.displayIcons !== false" type="email" :icon="data.basic.iconOverrides?.email" class="shrink-0" :size="14" style="color: var(--primary-color)" />
+              <ContactIcon v-if="data.theme?.displayIcons !== false" type="email" :icon="data.basic.iconOverrides?.email" class="shrink-0" :size="14" style="color: var(--primary-color)" />
               <span class="break-all">{{ data.basic.email }}</span>
             </div>
             <div v-if="data.basic.phone" class="flex items-center gap-2">
-              <ContactIcon v-if="data.theme.displayIcons !== false" type="phone" :icon="data.basic.iconOverrides?.phone" class="shrink-0" :size="14" style="color: var(--primary-color)" />
+              <ContactIcon v-if="data.theme?.displayIcons !== false" type="phone" :icon="data.basic.iconOverrides?.phone" class="shrink-0" :size="14" style="color: var(--primary-color)" />
               <span>{{ data.basic.phone }}</span>
             </div>
             <div v-if="data.basic.location" class="flex items-center gap-2">
-              <ContactIcon v-if="data.theme.displayIcons !== false" type="location" :icon="data.basic.iconOverrides?.location" class="shrink-0" :size="14" style="color: var(--primary-color)" />
+              <ContactIcon v-if="data.theme?.displayIcons !== false" type="location" :icon="data.basic.iconOverrides?.location" class="shrink-0" :size="14" style="color: var(--primary-color)" />
               <span>{{ data.basic.location }}</span>
             </div>
              <div v-if="data.basic.website" class="flex items-center gap-2">
-              <ContactIcon v-if="data.theme.displayIcons !== false" type="website" :icon="data.basic.iconOverrides?.website" class="shrink-0" :size="14" style="color: var(--primary-color)" />
+              <ContactIcon v-if="data.theme?.displayIcons !== false" type="website" :icon="data.basic.iconOverrides?.website" class="shrink-0" :size="14" style="color: var(--primary-color)" />
               <a :href="data.basic.website" target="_blank" class="break-all hover:text-blue-600 transition-colors">{{ data.basic.website }}</a>
             </div>
             <div
@@ -46,7 +47,7 @@
               :key="contact.id"
               class="flex min-w-0 items-center gap-2"
             >
-              <ContactIcon v-if="data.theme.displayIcons !== false" type="custom" :icon="contact.icon" class="shrink-0" :size="14" style="color: var(--primary-color)" />
+              <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" class="shrink-0" :size="14" style="color: var(--primary-color)" />
               <span class="min-w-0 truncate"><span v-if="contact.label">{{ contact.label }}：</span>{{ contact.value }}</span>
             </div>
             <ResumeSmartFields :data="data" />
@@ -56,10 +57,10 @@
         <!-- 技能 -->
         <div 
           v-if="data.skills.some(skill => skill.visible !== false)"
-          class="mb-8 cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-offset-2 rounded transition-all p-1"
+          class="side-block cursor-pointer"
           @click.stop="setActiveSection('skills')"
         >
-          <h2 class="text-base font-bold text-gray-900 mb-3 border-b-2 pb-1" style="border-color: var(--primary-color)">专业技能</h2>
+          <h2 class="side-heading">{{ data.sectionTitles?.skills || '专业技能' }}</h2>
           <div class="space-y-3">
             <div v-for="skill in data.skills.filter(skill => skill.visible !== false)" :key="skill.id">
               <div class="font-medium text-gray-800 mb-1" style="font-size: var(--font-size)">{{ skill.category }}</div>
@@ -73,10 +74,10 @@
          <!-- 教育背景 -->
         <div 
           v-if="data.education.some(edu => edu.visible !== false)"
-          class="cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-offset-2 rounded transition-all p-1"
+          class="side-block cursor-pointer"
           @click.stop="setActiveSection('education')"
         >
-          <h2 class="text-base font-bold text-gray-900 mb-3 border-b-2 pb-1" style="border-color: var(--primary-color)">教育背景</h2>
+          <h2 class="side-heading">{{ data.sectionTitles?.education || '教育背景' }}</h2>
           <div class="space-y-4">
             <div v-for="edu in data.education.filter(edu => edu.visible !== false)" :key="edu.id">
               <div class="font-bold text-gray-800" style="font-size: var(--font-size)">{{ edu.school }}</div>
@@ -88,14 +89,14 @@
       </div>
 
       <!-- 右侧栏 (主要内容) -->
-      <div class="col-span-2 space-y-8" style="gap: var(--spacing); display: flex; flex-direction: column;">
+      <div class="professional-main" style="gap: var(--spacing);">
         <!-- 个人简介 -->
         <div 
           v-if="data.basic.summary"
-          class="cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-offset-2 rounded transition-all p-1"
+          class="main-block cursor-pointer"
           @click.stop="setActiveSection('basic')"
         >
-          <h2 class="text-lg font-bold text-gray-900 mb-2 border-b-2 pb-1" style="border-color: var(--primary-color)">个人简介</h2>
+          <h2 class="main-heading">个人简介</h2>
           <div class="text-gray-700 rich-text" v-html="data.basic.summary" style="font-size: var(--font-size); line-height: var(--line-height)"></div>
         </div>
 
@@ -109,7 +110,7 @@
         >
           <template #item="{ element: section }">
             <div 
-              class="section-content cursor-pointer hover:ring-2 hover:ring-blue-400 hover:ring-offset-2 rounded transition-all"
+              class="section-content main-block cursor-pointer"
               style="
                 margin-top: var(--margin-top);
                 margin-bottom: var(--margin-bottom);
@@ -120,7 +121,7 @@
             >
               <!-- 工作经历 -->
               <div v-if="section === 'experience' && data.experiences.some(exp => exp.visible !== false)">
-                <h2 class="text-lg font-bold text-gray-900 mb-3 border-b-2 pb-1" style="border-color: var(--primary-color)">工作经历</h2>
+                <h2 class="main-heading">{{ data.sectionTitles?.experience || '工作经历' }}</h2>
                 <div class="space-y-6" style="gap: var(--spacing); display: flex; flex-direction: column;">
                   <div v-for="exp in data.experiences.filter(exp => exp.visible !== false)" :key="exp.id">
                     <div class="flex justify-between items-baseline mb-1">
@@ -135,7 +136,7 @@
 
               <!-- 项目经验 -->
               <div v-else-if="section === 'projects' && data.projects.some(project => project.visible !== false)">
-                <h2 class="text-lg font-bold text-gray-900 mb-3 border-b-2 pb-1" style="border-color: var(--primary-color)">项目经验</h2>
+                <h2 class="main-heading">{{ data.sectionTitles?.projects || '项目经验' }}</h2>
                 <div class="space-y-6" style="gap: var(--spacing); display: flex; flex-direction: column;">
                   <div v-for="project in data.projects.filter(project => project.visible !== false)" :key="project.id">
                     <div class="flex justify-between items-baseline mb-1">
@@ -153,7 +154,7 @@
 
               <!-- 自定义模块 -->
               <div v-else-if="isCustomBlock(section)">
-                <h2 class="text-lg font-bold text-gray-900 mb-3 border-b-2 pb-1" style="border-color: var(--primary-color)">
+                <h2 class="main-heading">
                   {{ getSectionTitle(section) }}
                 </h2>
                 <div v-if="Array.isArray(getCustomContent(section))" style="gap: var(--spacing); display: flex; flex-direction: column;">
@@ -193,7 +194,7 @@ const props = defineProps<{
 }>();
 
 const formatDateRange = (start: string, end: string | 'present') => {
-  const format = props.data.theme.dateFormat || 'YYYY.MM';
+  const format = props.data.theme?.dateFormat || 'YYYY.MM';
   const formatFn = (dateStr: string) => {
     if (!dateStr) return '';
     try {
@@ -277,6 +278,80 @@ const setActiveSection = (id: string) => {
 
 <style scoped>
 .professional-template {
-  color: #1a1a1a;
+  color: var(--resume-ink);
+  background: var(--resume-paper);
+}
+
+.professional-grid {
+  display: grid;
+  grid-template-columns: minmax(148px, 0.86fr) minmax(0, 2.14fr);
+  gap: 1.6rem;
+}
+
+.professional-side {
+  padding-right: 1.15rem;
+  border-right: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--resume-rule));
+}
+
+.side-profile {
+  margin-bottom: 1.35rem;
+  padding: 2px;
+  border-radius: 6px;
+}
+
+.side-name {
+  margin: 0 0 0.35rem;
+  color: var(--primary-color);
+  font-size: 1.45em;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+.side-role {
+  margin-bottom: 0.85rem;
+  color: var(--resume-ink-soft);
+  font-size: 0.95em;
+}
+
+.side-heading,
+.main-heading {
+  margin: 0 0 0.55rem;
+  padding-bottom: 0.22rem;
+  border-bottom: 1.5px solid var(--primary-color);
+  color: var(--resume-ink);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+}
+
+.side-heading {
+  font-size: 0.98em;
+}
+
+.main-heading {
+  font-size: 1.08em;
+}
+
+.side-block,
+.main-block {
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.side-block {
+  margin-bottom: 1.25rem;
+}
+
+.professional-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.side-profile:hover,
+.side-block:hover,
+.main-block:hover {
+  background: color-mix(in srgb, var(--primary-color) 5%, transparent);
 }
 </style>

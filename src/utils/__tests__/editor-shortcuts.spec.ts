@@ -8,5 +8,9 @@ describe('editor shortcuts', () => {
     expect(resolveEditorShortcut({ key: 'Z', metaKey: true, ctrlKey: false, shiftKey: true })).toBe('redo');
     expect(resolveEditorShortcut({ key: 'y', metaKey: false, ctrlKey: true, shiftKey: false })).toBe('redo');
     expect(resolveEditorShortcut({ key: 'z', metaKey: false, ctrlKey: false, shiftKey: false })).toBeNull();
+    expect(resolveEditorShortcut({ key: '[', metaKey: false, ctrlKey: false, shiftKey: false })).toBe('previous-section');
+    expect(resolveEditorShortcut({ key: ']', metaKey: false, ctrlKey: false, shiftKey: false })).toBe('next-section');
+    expect(resolveEditorShortcut({ key: '?', metaKey: false, ctrlKey: false, shiftKey: true })).toBe('shortcut-help');
+    expect(resolveEditorShortcut({ key: '[', metaKey: true, ctrlKey: false, shiftKey: false })).toBeNull();
   });
 });

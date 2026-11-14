@@ -11,15 +11,17 @@
     <div class="assistant-panel">
       <el-radio-group :model-value="mode" aria-label="AI 工作模式" @update:model-value="changeMode">
         <el-radio-button value="optimize">简历优化</el-radio-button>
+        <el-radio-button value="polish">STAR 润色</el-radio-button>
         <el-radio-button value="quick">快捷修改</el-radio-button>
         <el-radio-button value="greeting">打招呼语</el-radio-button>
       </el-radio-group>
       <ResumeOptimizationPanel v-if="visible && mode === 'optimize'" ref="optimizationPanel" :resume="resume" @configure="configureModel" @applied="handleOptimized" />
+      <StarPolishPanel v-if="visible && mode === 'polish'" ref="polishPanel" :resume="resume" @configure="configureModel" @apply="(proposal, done) => emit('apply', proposal, done)" />
       <GreetingPanel v-if="visible && mode === 'greeting'" :resume="resume" @configure="configureModel" />
       <template v-if="mode === 'quick'">
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>隐私说明</template>
-        <p>只有点击生成并确认后，当前简历内容和你的指令才会发送到配置的 AI 服务；出生日期不会随请求发送。API Key 只保存在本次页面会话。</p>
+        <p>只有点击生成并确认后，当前可见的简历正文和你的指令才会发送。姓名、电话、邮箱、生日和隐藏章节不会发送；这些字段只有在指令里写出新值时才会被修改。API Key 只保存在本次页面会话。</p>
       </el-alert>
 
       <template v-if="!pendingDraft">
@@ -39,7 +41,7 @@
         </el-form>
 
         <el-checkbox v-model="consent" class="consent-check">
-          我确认将当前简历内容发送给所配置的 AI 服务以完成本次请求。
+          我确认将当前可见的简历正文和这条指令发送给所配置的 AI 服务。
         </el-checkbox>
         <el-checkbox v-model="directApply" class="direct-check">
           跳过逐项审核，直接应用本次修改（仍可撤销）
@@ -85,6 +87,7 @@ import { createChangeProposal, type ResumeChangeProposal } from '@/services/ai/c
 import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import { requestResumeAiDraft } from '@/services/ai/AiProvider';
 import ResumeOptimizationPanel from '@/components/ai/ResumeOptimizationPanel.vue';
+import StarPolishPanel from '@/components/ai/StarPolishPanel.vue';
 import GreetingPanel from '@/components/ai/GreetingPanel.vue';
 
 const props = defineProps<{ visible: boolean; resume: ResumeData; undoAvailable: boolean }>();
@@ -104,11 +107,17 @@ const loading = ref(false);
 const errorMessage = ref('');
 const pendingDraft = ref<ResumeChangeProposal | null>(null);
 const applying = ref(false);
-const mode = ref<'quick' | 'optimize' | 'greeting'>('optimize');
+const mode = ref<'quick' | 'optimize' | 'polish' | 'greeting'>('optimize');
 const optimizationPanel = ref<InstanceType<typeof ResumeOptimizationPanel>>();
-async function beforeClose(): Promise<boolean> { return !applying.value && (mode.value !== 'optimize' || await optimizationPanel.value?.beforeClose() !== false); }
+const polishPanel = ref<InstanceType<typeof StarPolishPanel>>();
+async function beforeClose(): Promise<boolean> {
+  if (applying.value) return false;
+  if (mode.value === 'optimize') return await optimizationPanel.value?.beforeClose() !== false;
+  if (mode.value === 'polish') return await polishPanel.value?.beforeClose() !== false;
+  return true;
+}
 async function closeDrawer(done: () => void) { if (await beforeClose()) done(); }
-async function changeMode(value: string | number | boolean | undefined) { if ((value === 'quick' || value === 'optimize' || value === 'greeting') && await beforeClose()) mode.value = value; }
+async function changeMode(value: string | number | boolean | undefined) { if ((value === 'quick' || value === 'optimize' || value === 'polish' || value === 'greeting') && await beforeClose()) mode.value = value; }
 async function configureModel() { if (await beforeClose()) emit('configure'); }
 defineExpose({ beforeClose });
 let controller: AbortController | undefined;
@@ -146,6 +155,10 @@ async function requestChanges() {
     if (generation !== requestGeneration) return;
     const proposal = await createChangeProposal(baseline, draft);
     if (generation !== requestGeneration) return;
+    if (!draft.operations.length) {
+      errorMessage.value = draft.explanation;
+      return;
+    }
     pendingDraft.value = proposal;
     if (directApply.value && pendingDraft.value) confirmApply();
   } catch (error) {

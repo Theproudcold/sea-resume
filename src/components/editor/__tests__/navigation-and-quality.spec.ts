@@ -12,10 +12,10 @@ describe('editor navigation and quality panel', () => {
 
   it('allows each quality issue to navigate to its target section', async () => {
     const wrapper = mount(ResumeQualityPanel, {
-      props: { modelValue: true, issues: [{ id: 'p', section: 'projects', severity: 'warning', message: '项目描述为空。' }] },
+      props: { modelValue: true, issues: [{ id: 'p', section: 'projects', target: 'project-description-p1', severity: 'warning', message: '项目描述为空。' }] },
       global: { stubs: { 'el-dialog': { template: '<div><slot /></div>', props: ['modelValue'] }, 'el-button': { template: '<button @click="$emit(\'click\')"><slot /></button>' }, 'el-empty': true } },
     });
     await wrapper.get('button').trigger('click');
-    expect(wrapper.emitted('navigate')?.[0]).toEqual(['projects']);
+    expect(wrapper.emitted('navigate')?.[0]).toEqual(['projects', 'project-description-p1']);
   });
 });

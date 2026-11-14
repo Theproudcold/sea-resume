@@ -1,5 +1,6 @@
 <template>
   <div class="minimal-template" :style="{
+    color: 'var(--resume-ink)',
     '--margin-top': (data.theme?.moduleMargins?.top || 0) + 'px',
     '--margin-bottom': (data.theme?.moduleMargins?.bottom || 24) + 'px',
     '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
@@ -12,16 +13,16 @@
   }">
     <!-- 极简头部 -->
     <header 
-      class="text-center mb-12 pb-8 border-b border-black cursor-pointer hover:bg-gray-50 transition-colors rounded p-4 -m-4"
+      class="minimal-header text-center cursor-pointer"
       @click="setActiveSection('basic')"
     >
-      <img v-if="data.basic.avatar" :src="data.basic.avatar" alt="头像" class="w-20 h-20 rounded-full object-cover mx-auto mb-6" />
-      <h1 class="text-5xl font-light tracking-wide mb-4">{{ data.basic.name || '您的姓名' }}</h1>
-      <div class="text-sm tracking-widest uppercase text-gray-700">{{ data.basic.title || '求职意向' }}</div>
+      <img v-if="data.basic.avatar" :src="data.basic.avatar" alt="头像" class="w-16 h-16 rounded-full object-cover mx-auto mb-4" />
+      <h1 class="minimal-name">{{ data.basic.name || '您的姓名' }}</h1>
+      <div class="minimal-role">{{ data.basic.title || '求职意向' }}</div>
     </header>
 
     <!-- 联系方式 -->
-    <div class="text-center text-xs tracking-wide mb-12 space-x-6">
+    <div class="minimal-contacts text-center">
       <span v-if="data.basic.email">{{ data.basic.email }}</span>
       <span v-if="data.basic.phone">{{ data.basic.phone }}</span>
       <span v-if="data.basic.location">{{ data.basic.location }}</span>
@@ -30,7 +31,7 @@
         :key="contact.id"
         class="inline-flex max-w-full items-center gap-1"
       >
-        <ContactIcon v-if="data.theme.displayIcons !== false" type="custom" :icon="contact.icon" />
+        <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" />
         <span class="truncate"><span v-if="contact.label">{{ contact.label }}：</span>{{ contact.value }}</span>
       </span>
       <ResumeSmartFields :data="data" class="justify-center mt-2" />
@@ -39,10 +40,10 @@
     <!-- 简介 -->
     <section 
       v-if="data.basic.summary" 
-      class="mb-12 cursor-pointer hover:bg-gray-50 transition-colors rounded p-4 -m-4"
+      class="minimal-summary cursor-pointer"
       @click="setActiveSection('basic')"
     >
-      <div class="text-center text-sm leading-loose text-gray-800 max-w-2xl mx-auto rich-text" v-html="data.basic.summary"></div>
+      <div class="text-center text-sm text-gray-700 max-w-2xl mx-auto rich-text" v-html="data.basic.summary"></div>
     </section>
 
     <!-- 动态排序模块 -->
@@ -66,8 +67,8 @@
         >
           <!-- 工作经历 -->
           <section v-if="section === 'experience' && data.experiences.some(exp => exp.visible !== false)">
-            <h2 class="section-header text-xs tracking-widest uppercase text-center mb-8 font-semibold">Experience</h2>
-            <div class="space-y-8">
+            <h2 class="section-header">{{ data.sectionTitles?.experience || '工作经历' }}</h2>
+            <div class="minimal-entries">
               <div v-for="exp in data.experiences.filter(exp => exp.visible !== false)" :key="exp.id" class="text-center">
                 <h3 class="font-semibold text-lg mb-1">{{ exp.company }}</h3>
                 <div class="text-sm text-gray-600 mb-1">{{ exp.position }}</div>
@@ -79,8 +80,8 @@
 
           <!-- 项目经验 -->
           <section v-else-if="section === 'projects' && data.projects.some(project => project.visible !== false)">
-            <h2 class="section-header text-xs tracking-widest uppercase text-center mb-8 font-semibold">Projects</h2>
-            <div class="space-y-8">
+            <h2 class="section-header">{{ data.sectionTitles?.projects || '项目经验' }}</h2>
+            <div class="minimal-entries">
               <div v-for="project in data.projects.filter(project => project.visible !== false)" :key="project.id" class="text-center">
                 <h3 class="font-semibold text-lg mb-1">{{ project.name }}</h3>
                 <div class="text-sm text-gray-600 mb-1">{{ project.role }}</div>
@@ -95,8 +96,8 @@
 
           <!-- 教育背景 -->
           <section v-else-if="section === 'education' && data.education.some(edu => edu.visible !== false)">
-            <h2 class="section-header text-xs tracking-widest uppercase text-center mb-8 font-semibold">Education</h2>
-            <div class="space-y-6">
+            <h2 class="section-header">{{ data.sectionTitles?.education || '教育背景' }}</h2>
+            <div class="minimal-entries">
               <div v-for="edu in data.education.filter(edu => edu.visible !== false)" :key="edu.id" class="text-center">
                 <h3 class="font-semibold">{{ edu.school }}</h3>
                 <div class="text-sm text-gray-600">{{ edu.degree }} · {{ edu.major }}</div>
@@ -107,7 +108,7 @@
 
           <!-- 技能 -->
           <section v-else-if="section === 'skills' && data.skills.some(skill => skill.visible !== false)">
-            <h2 class="section-header text-xs tracking-widest uppercase text-center mb-8 font-semibold">Skills</h2>
+            <h2 class="section-header">{{ data.sectionTitles?.skills || '专业技能' }}</h2>
             <div class="text-center space-y-2">
               <div v-for="skill in data.skills.filter(skill => skill.visible !== false)" :key="skill.id" class="text-sm">
                 <span class="font-medium">{{ skill.category }}</span>
@@ -118,7 +119,7 @@
 
           <!-- 自定义模块 -->
           <section v-else-if="isCustomBlock(section)">
-            <h2 class="section-header text-xs tracking-widest uppercase text-center mb-8 font-semibold">
+            <h2 class="section-header">
               {{ getSectionTitle(section) }}
             </h2>
             <div v-if="Array.isArray(getCustomContent(section))" class="space-y-6">
@@ -150,7 +151,7 @@ const props = defineProps<{
 }>();
 
 const formatDateRange = (start: string, end: string | 'present') => {
-  const format = props.data.theme.dateFormat || 'YYYY.MM';
+  const format = props.data.theme?.dateFormat || 'YYYY.MM';
   const formatFn = (dateStr: string) => {
     if (!dateStr) return '';
     try {
@@ -216,7 +217,62 @@ const setActiveSection = (id: string) => {
 
 <style scoped>
 .minimal-template {
-  background: #fff;
+  background: var(--resume-paper);
+  color: var(--resume-ink);
+}
+
+.minimal-header {
+  margin-bottom: 1.35rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--resume-ink);
+}
+
+.minimal-name {
+  margin: 0;
+  font-size: 2.15em;
+  font-weight: 450;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+}
+
+.minimal-role {
+  margin-top: 0.45rem;
+  color: var(--resume-ink-soft);
+  font-size: 0.92em;
+  letter-spacing: 0.16em;
+}
+
+.minimal-contacts {
+  margin-bottom: 1.35rem;
+  color: var(--resume-ink-soft);
+  font-size: 0.78em;
+  letter-spacing: 0.04em;
+}
+
+.minimal-contacts > span + span {
+  margin-left: 1.1rem;
+}
+
+.minimal-summary {
+  margin-bottom: 1.5rem;
+  padding: 2px;
+}
+
+.section-header {
+  margin: 0 0 0.85rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--resume-rule);
+  color: var(--resume-ink);
+  font-size: 0.82em;
+  font-weight: 650;
+  letter-spacing: 0.22em;
+  text-align: center;
+}
+
+.minimal-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
 }
 
 section {

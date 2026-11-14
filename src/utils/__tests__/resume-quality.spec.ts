@@ -19,7 +19,7 @@ describe('resume quality checks', () => {
     const ids = issues.map((issue) => issue.id);
     expect(ids).toEqual(expect.arrayContaining([
       'basic-name', 'basic-title', 'basic-contact', 'basic-summary',
-      'experience-empty', 'projects-empty', 'education-empty',
+      'experience-empty', 'projects-empty', 'education-empty', 'skills-empty',
     ]));
     expect(JSON.stringify(resume)).toBe(before);
   });
@@ -31,10 +31,14 @@ describe('resume quality checks', () => {
     resume.education = [{ id: 'd1', school: '', degree: '', major: '', startDate: '', endDate: '' }];
     const issues = checkResumeQuality(resume);
     expect(issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'experience-incomplete-e1', section: 'experience' }),
-      expect.objectContaining({ id: 'experience-date-e1', section: 'experience' }),
-      expect.objectContaining({ id: 'project-incomplete-p1', section: 'projects' }),
-      expect.objectContaining({ id: 'education-incomplete-d1', section: 'education' }),
+      expect.objectContaining({ id: 'experience-incomplete-e1', section: 'experience', target: 'experience-company-e1' }),
+      expect.objectContaining({ id: 'experience-date-e1', section: 'experience', target: 'experience-date-e1' }),
+      expect.objectContaining({ id: 'project-incomplete-p1', section: 'projects', target: 'project-name-p1' }),
+      expect.objectContaining({ id: 'education-incomplete-d1', section: 'education', target: 'education-school-d1' }),
+    ]));
+    resume.experiences[0] = { ...resume.experiences[0]!, company: 'A' };
+    expect(checkResumeQuality(resume)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'experience-incomplete-e1', target: 'experience-position-e1' }),
     ]));
   });
 
@@ -44,6 +48,7 @@ describe('resume quality checks', () => {
     resume.experiences = [{ id: 'e', company: 'A', position: 'Dev', startDate: '2022-01', endDate: 'present', description: '<p>Built systems</p>' }];
     resume.projects = [{ id: 'p', name: 'Tool', role: 'Lead', startDate: '2021-01', endDate: '2021-12', description: 'Shipped' }];
     resume.education = [{ id: 'd', school: 'U', degree: 'BS', major: 'CS', startDate: '2018-01', endDate: '2021-01' }];
+    resume.skills = [{ id: 's', category: '语言', items: ['TypeScript'] }];
     expect(checkResumeQuality(resume)).toEqual([]);
   });
 

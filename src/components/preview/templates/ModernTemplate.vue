@@ -4,40 +4,45 @@
     '--margin-bottom': (data.theme?.moduleMargins?.bottom || 24) + 'px',
     '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
     '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
+    // Restore the typography/spacing tokens consumed by var(...) below; without
+    // them the theme font size, line height and module spacing never render.
+    '--font-size': (data.theme?.fontSize || 14) + 'px',
+    '--line-height': data.theme?.lineHeight || 1.5,
+    '--spacing': (data.theme?.moduleMargins?.bottom ?? 24) + 'px',
     '--primary-color': data.theme?.color || '#2563eb',
     padding: (data.theme?.pageMargins !== undefined ? data.theme.pageMargins : 24) + 'px',
     fontFamily: data.theme?.fontFamily || 'var(--resume-font-family)',
     fontSize: 'var(--font-size)',
     lineHeight: 'var(--line-height)',
-    color: '#333'
+    color: 'var(--resume-ink)'
   }">
     <!-- 基础信息 -->
-    <header class="header flex flex-col md:flex-row gap-6 items-start" style="margin-bottom: calc(var(--margin-bottom) * 1.5)">
+    <header class="header flex flex-col md:flex-row gap-5 items-center" style="margin-bottom: calc(var(--margin-bottom) * 0.85)">
       <div v-if="data.basic.avatar" class="avatar-container shrink-0">
-        <img :src="data.basic.avatar" class="w-28 h-28 rounded-full object-cover border-2 border-white shadow-sm" />
+        <img :src="data.basic.avatar" class="w-20 h-20 rounded-full object-cover" style="box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 18%, white)" />
       </div>
-      <div class="flex-1">
-        <h1 class="name font-bold text-gray-900 mb-2">
+      <div class="flex-1 min-w-0">
+        <h1 class="name font-bold text-gray-900" style="font-size: 1.85em; line-height: 1.15; letter-spacing: 0.01em">
           {{ data.basic.name || '您的姓名' }}
         </h1>
-        <div class="title mb-4" style="color: var(--primary-color)">
+        <div class="title mt-1 mb-3 font-medium" style="color: var(--primary-color); font-size: 1.05em">
           {{ data.basic.title || '求职意向' }}
         </div>
       <div class="contact-info flex flex-wrap gap-x-6 gap-y-2 text-sm text-gray-600">
         <div v-if="data.basic.email" class="flex items-center gap-1">
-          <ContactIcon v-if="data.theme.displayIcons !== false" type="email" :icon="data.basic.iconOverrides?.email" style="color: var(--primary-color)" />
+          <ContactIcon v-if="data.theme?.displayIcons !== false" type="email" :icon="data.basic.iconOverrides?.email" style="color: var(--primary-color)" />
           <span>{{ data.basic.email }}</span>
         </div>
         <div v-if="data.basic.phone" class="flex items-center gap-1">
-          <ContactIcon v-if="data.theme.displayIcons !== false" type="phone" :icon="data.basic.iconOverrides?.phone" style="color: var(--primary-color)" />
+          <ContactIcon v-if="data.theme?.displayIcons !== false" type="phone" :icon="data.basic.iconOverrides?.phone" style="color: var(--primary-color)" />
           <span>{{ data.basic.phone }}</span>
         </div>
         <div v-if="data.basic.location" class="flex items-center gap-1">
-          <ContactIcon v-if="data.theme.displayIcons !== false" type="location" :icon="data.basic.iconOverrides?.location" style="color: var(--primary-color)" />
+          <ContactIcon v-if="data.theme?.displayIcons !== false" type="location" :icon="data.basic.iconOverrides?.location" style="color: var(--primary-color)" />
           <span>{{ data.basic.location }}</span>
         </div>
         <div v-if="data.basic.website" class="flex items-center gap-1">
-          <ContactIcon v-if="data.theme.displayIcons !== false" type="website" :icon="data.basic.iconOverrides?.website" style="color: var(--primary-color)" />
+          <ContactIcon v-if="data.theme?.displayIcons !== false" type="website" :icon="data.basic.iconOverrides?.website" style="color: var(--primary-color)" />
           <span>{{ data.basic.website }}</span>
         </div>
         <div
@@ -45,7 +50,7 @@
           :key="contact.id"
           class="flex min-w-0 items-center gap-1"
         >
-          <ContactIcon v-if="data.theme.displayIcons !== false" type="custom" :icon="contact.icon" style="color: var(--primary-color)" />
+          <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" style="color: var(--primary-color)" />
           <span class="truncate"><span v-if="contact.label">{{ contact.label }}：</span>{{ contact.value }}</span>
         </div>
         <ResumeSmartFields :data="data" />
@@ -53,15 +58,15 @@
       </div>
     </header>
 
-    <el-divider class="mb-6" style="margin-bottom: var(--spacing)" />
+    <div class="resume-rule" />
 
     <!-- 简介 -->
     <section
       v-if="data.basic.summary"
-      class="mb-8 cursor-pointer hover:bg-gray-50 p-2 -m-2 rounded transition-colors"
+      class="summary-block cursor-pointer hover:bg-gray-50 rounded transition-colors"
       @click="setActiveSection('basic')"
     >
-      <div class="text-gray-600 leading-relaxed rich-text" v-html="data.basic.summary"></div>
+      <div class="text-gray-600 rich-text" v-html="data.basic.summary"></div>
     </section>
 
     <!-- 动态排序模块 -->
@@ -84,10 +89,7 @@
             margin-left: var(--margin-left);
             margin-right: var(--margin-right);
           ">
-            <h2 class="section-title font-semibold text-gray-800 mb-3 flex items-center gap-2">
-              <span class="w-1 h-6 rounded" style="background-color: var(--primary-color)"></span>
-              {{ getSectionTitle(section) }}
-            </h2>
+            <h2 class="section-title">{{ getSectionTitle(section) }}</h2>
             <div v-if="Array.isArray(getCustomContent(section))" style="gap: var(--spacing); display: flex; flex-direction: column;">
               <div v-for="item in getCustomItems(section)" :key="item.id" class="custom-item" style="margin-bottom: 0">
                 <div class="flex justify-between items-start mb-2">
@@ -112,10 +114,7 @@
             margin-left: var(--margin-left);
             margin-right: var(--margin-right);
           ">
-            <h2 class="section-title font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <span class="w-1 h-6 rounded" style="background-color: var(--primary-color)"></span>
-              {{ data.sectionTitles?.experience || '工作经历' }}
-            </h2>
+            <h2 class="section-title">{{ data.sectionTitles?.experience || '工作经历' }}</h2>
             <div style="gap: var(--spacing); display: flex; flex-direction: column;">
               <div v-for="exp in data.experiences.filter(exp => exp.visible !== false)" :key="exp.id" class="experience-item" style="margin-bottom: 0">
                 <div class="flex justify-between items-start mb-2">
@@ -139,10 +138,7 @@
             margin-left: var(--margin-left);
             margin-right: var(--margin-right);
           ">
-            <h2 class="section-title font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <span class="w-1 h-6 rounded" style="background-color: var(--primary-color)"></span>
-              {{ data.sectionTitles?.projects || '项目经验' }}
-            </h2>
+            <h2 class="section-title">{{ data.sectionTitles?.projects || '项目经验' }}</h2>
             <div style="gap: var(--spacing); display: flex; flex-direction: column;">
               <div v-for="project in data.projects.filter(project => project.visible !== false)" :key="project.id" class="project-item" style="margin-bottom: 0">
                 <div class="flex justify-between items-start mb-2">
@@ -159,8 +155,8 @@
                   <span
                     v-for="tech in project.techStack"
                     :key="tech"
-                    class="px-2 py-1 text-xs rounded"
-                    style="color: var(--primary-color); background-color: color-mix(in srgb, var(--primary-color) 10%, white)"
+                    class="px-1.5 py-0.5 text-xs rounded-sm"
+                    style="color: var(--primary-color); background-color: color-mix(in srgb, var(--primary-color) 9%, var(--resume-sheet))"
                   >
                     {{ tech }}
                   </span>
@@ -176,10 +172,7 @@
             margin-left: var(--margin-left);
             margin-right: var(--margin-right);
           ">
-            <h2 class="section-title font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <span class="w-1 h-6 rounded" style="background-color: var(--primary-color)"></span>
-              {{ data.sectionTitles?.education || '教育背景' }}
-            </h2>
+            <h2 class="section-title">{{ data.sectionTitles?.education || '教育背景' }}</h2>
             <div class="space-y-3">
               <div v-for="edu in data.education.filter(edu => edu.visible !== false)" :key="edu.id" class="education-item" style="margin-bottom: calc(var(--spacing) * 0.5)">
                 <div class="flex justify-between items-start">
@@ -204,10 +197,7 @@
             margin-left: var(--margin-left);
             margin-right: var(--margin-right);
           ">
-            <h2 class="section-title font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <span class="w-1 h-6 rounded" style="background-color: var(--primary-color)"></span>
-              {{ data.sectionTitles?.skills || '专业技能' }}
-            </h2>
+            <h2 class="section-title">{{ data.sectionTitles?.skills || '专业技能' }}</h2>
             <div class="space-y-2">
               <div v-for="skill in data.skills.filter(skill => skill.visible !== false)" :key="skill.id" class="skill-item">
                 <span class="font-medium text-gray-800" style="font-size: var(--font-size)">{{ skill.category }}:</span>
@@ -235,7 +225,7 @@ const props = defineProps<{
 }>();
 
 const formatDateRange = (start: string, end: string | 'present') => {
-  const format = props.data.theme.dateFormat || 'YYYY.MM';
+  const format = props.data.theme?.dateFormat || 'YYYY.MM';
   const formatFn = (dateStr: string) => {
     if (!dateStr) return '';
     try {
@@ -326,12 +316,40 @@ const setActiveSection = (id: string) => {
 .modern-template {
   font-family: var(--resume-font-family);
   line-height: $line-height-base + 0.1;
-  color: #333; // Dark gray
+  color: var(--resume-ink);
+  background: var(--resume-sheet);
+}
 
+.resume-rule {
+  height: 1px;
+  margin-bottom: calc(var(--spacing) * 0.75);
+  background: color-mix(in srgb, var(--primary-color) 28%, var(--resume-rule));
+}
+
+.summary-block {
+  margin: 0 0 calc(var(--spacing) * 0.85);
+  padding: 2px;
 }
 
 .section {
   page-break-inside: avoid;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  margin: 0 0 0.7em;
+  padding-bottom: 0.28em;
+  border-bottom: 1.5px solid var(--primary-color);
+  color: var(--resume-ink);
+  font-size: 1.08em;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+}
+
+.contact-info {
+  font-size: 0.92em;
 }
 
 .experience-item,

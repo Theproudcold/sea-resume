@@ -3,10 +3,10 @@
 
     <div v-if="education.length === 0" class="resume-editor-empty">
       <el-icon :size="24" aria-hidden="true"><School /></el-icon>
-      <p>暂无教育背景，点击上方按钮添加</p>
+      <p>添加教育背景</p>
     </div>
 
-    <div v-for="(edu, index) in education" :key="edu.id" class="education-item resume-entry-card" :class="{ 'is-collapsed': isCollapsed(edu.id) }">
+    <div v-for="(edu, index) in education" :key="edu.id" class="education-item resume-entry-card" :class="{ 'is-collapsed': isCollapsed(edu.id) }" :data-entry-id="edu.id">
       <div class="resume-entry-card__header">
         <span>教育背景 {{ index + 1 }}</span>
         <div class="flex items-center gap-1">
@@ -26,23 +26,24 @@
             :title="isCollapsed(edu.id) ? '展开此教育经历' : '折叠此教育经历'"
             @click="toggleCollapsed(edu.id)"
           />
-          <el-button type="danger" size="small" text @click="removeItem(edu.id)" :icon="Delete">删除</el-button>
+          <EntryDeleteButton :label="edu.school.trim() || '未命名教育经历'" @confirm="removeItem(edu.id)" />
         </div>
       </div>
 
       <SmoothCollapse><div v-show="!isCollapsed(edu.id)" class="education-item__body">
         <el-form label-position="top">
-        <el-form-item label="学校名称" required>
+        <el-form-item label="学校名称" required :data-quality-id="`education-school-${edu.id}`">
           <el-input
             :model-value="edu.school"
             placeholder="学校名称"
+            data-entry-focus
             @update:model-value="(value: string) => handleUpdate(edu.id, { school: value })"
           />
         </el-form-item>
 
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="学历" required>
+            <el-form-item label="学历" required :data-quality-id="`education-degree-${edu.id}`">
               <el-select
                 :model-value="edu.degree"
                 placeholder="请选择"
@@ -56,7 +57,7 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="专业" required>
+            <el-form-item label="专业" required :data-quality-id="`education-major-${edu.id}`">
               <el-input
                 :model-value="edu.major"
                 placeholder="专业名称"
@@ -66,32 +67,18 @@
           </el-col>
         </el-row>
 
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="入学时间">
-              <el-date-picker
-                :model-value="edu.startDate"
-                type="month"
-                placeholder="选择月份"
-                format="YYYY-MM"
-                value-format="YYYY-MM"
-                @update:model-value="(value: string | null) => handleUpdate(edu.id, { startDate: value || '' })"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="毕业时间">
-              <el-date-picker
-                :model-value="edu.endDate"
-                type="month"
-                placeholder="选择月份"
-                format="YYYY-MM"
-                value-format="YYYY-MM"
-                @update:model-value="(value: string | null) => handleUpdate(edu.id, { endDate: value || '' })"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <el-form-item label="起止时间" :data-quality-id="`education-date-${edu.id}`">
+          <MonthRangeField
+            :start="edu.startDate"
+            :end="edu.endDate === 'present' ? '' : edu.endDate"
+            :present="edu.endDate === 'present'"
+            start-placeholder="入学月份"
+            end-placeholder="毕业月份"
+            @update:start="(value) => handleUpdate(edu.id, { startDate: value })"
+            @update:end="(value) => handleUpdate(edu.id, { endDate: value })"
+            @update:present="(value) => handleUpdate(edu.id, { endDate: value ? 'present' : '' })"
+          />
+        </el-form-item>
 
         <el-form-item label="GPA / 绩点（选填）">
           <el-input
@@ -107,12 +94,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
-import { Delete, School, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
+import { School, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import type { Education } from '@/types/resume';
 import SmoothCollapse from '@/components/common/SmoothCollapse.vue';
+import EntryDeleteButton from './EntryDeleteButton.vue';
+import MonthRangeField from './MonthRangeField.vue';
+import { focusNewEntry } from '@/utils/focusNewEntry';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
@@ -130,6 +120,7 @@ const toggleCollapsed = (id: string) => {
 
 
 const addNew = () => {
+  const before = new Set(education.value.map(item => item.id));
   resumeStore.addEducation({
     school: '',
     degree: '',
@@ -137,6 +128,8 @@ const addNew = () => {
     startDate: '',
     endDate: '',
   });
+  const created = education.value.find(item => !before.has(item.id));
+  if (created) void nextTick(() => focusNewEntry(created.id));
 };
 
 const removeItem = (id: string) => {

@@ -158,11 +158,10 @@ function updatePageEstimate() {
     estimatedPages.value = null;
     return;
   }
-  const ruler = document.createElement('div');
-  ruler.style.cssText = 'position:fixed;left:-10000px;top:0;height:297mm;width:1px;visibility:hidden;';
-  document.body.appendChild(ruler);
-  const a4Height = ruler.getBoundingClientRect().height || ruler.offsetHeight;
-  ruler.remove();
+  // ResumeCanvas already keeps a 297mm ruler for pagination. Reuse it instead of
+  // inserting and measuring a new node on every content mutation.
+  const ruler = document.querySelector<HTMLElement>('.preview-panel .a4-ruler');
+  const a4Height = ruler?.getBoundingClientRect().height || ruler?.offsetHeight || 0;
   if (a4Height <= 0) {
     estimatedPages.value = null;
     return;
@@ -243,7 +242,7 @@ async function restoreOriginalTheme() {
 }
 
 const customColor = ref(data.value.theme?.color || '#2563eb');
-const imgIconState = ref(data.value.theme.displayIcons !== false);
+const imgIconState = ref(data.value.theme?.displayIcons !== false);
 
 const updateIconState = (val: any) => {
   resumeStore.updateTheme({ displayIcons: val });

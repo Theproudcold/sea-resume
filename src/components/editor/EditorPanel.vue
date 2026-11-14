@@ -1,6 +1,6 @@
 <template>
-  <div class="editor-panel">
-    <aside class="editor-sidebar" aria-label="简历模块导航">
+  <div class="editor-panel" :style="panelStyle">
+    <aside v-show="sidebarVisible" class="editor-sidebar" aria-label="简历模块导航">
       <div class="sidebar-brand">
         <span class="sidebar-title">简历内容</span>
       </div>
@@ -46,7 +46,7 @@
           @start="isDraggingSections = true"
           @end="isDraggingSections = false"
         >
-          <template #item="{ element }">
+          <template #item="{ element, index }">
             <div class="sidebar-section-item" :class="{ 'is-active': selectedSectionId === element.id, 'is-hidden': isSectionHidden(element.id) }">
               <el-icon class="drag-handle" title="拖动排序"><Rank /></el-icon>
               <button
@@ -67,14 +67,16 @@
                   :title="isSectionHidden(element.id) ? '显示模块' : '隐藏模块'"
                   @click.stop="toggleVisibility(element.id)"
                 />
-                <el-button
-                  link
-                  type="danger"
-                  :icon="Delete"
-                  aria-label="移除模块"
-                  title="移除模块"
-                  @click.stop="removeBlock(element.id)"
-                />
+                <el-dropdown trigger="click" @command="(command: string) => handleSectionCommand(element.id, command)">
+                  <el-button link :icon="MoreFilled" :aria-label="`${getSectionTitle(element.id)}的模块操作`" title="模块操作" @click.stop />
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item command="up" :disabled="index === 0"><el-icon><ArrowUp /></el-icon>上移</el-dropdown-item>
+                      <el-dropdown-item command="down" :disabled="index === sectionsList.length - 1"><el-icon><ArrowDown /></el-icon>下移</el-dropdown-item>
+                      <el-dropdown-item command="remove"><el-icon><Remove /></el-icon>从简历中移出</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </div>
             </div>
           </template>
@@ -100,7 +102,23 @@
       </div>
     </aside>
 
-    <main class="editor-main">
+    <PanelSplitter
+      v-if="!compact"
+      label="调整模块导航宽度"
+      :collapsed="!sidebarVisible"
+      :toggleable="canToggle('sidebar')"
+      :align="sidebarVisible ? 'center' : 'start'"
+      :value="resolved.sidebarWidth"
+      :min="SIDEBAR_WIDTH_MIN"
+      :max="SIDEBAR_WIDTH_MAX"
+      collapse-title="折叠模块导航"
+      expand-title="展开模块导航"
+      @resize="resizeSidebar"
+      @toggle="togglePane('sidebar')"
+      @reset="resetLayout"
+    />
+
+    <main v-show="editorVisible" class="editor-main">
       <el-scrollbar ref="editorScrollbar" height="100%">
         <div class="editor-content">
           <div ref="transitionShell" class="editor-section-transition-shell" :style="{ minHeight: transitionMinHeight }">
@@ -140,16 +158,29 @@
 import { ref, computed, markRaw, watch, nextTick, type Component } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
-import { User, Briefcase, School, Star, Folder, Rank, Brush, Plus, Tickets, Hide, View, Delete } from '@element-plus/icons-vue';
+import { User, Briefcase, School, Star, Folder, Rank, Brush, Plus, Tickets, Hide, View, ArrowUp, ArrowDown, Remove, MoreFilled } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 import draggable from 'vuedraggable';
 import EditorContentHost from './EditorContentHost.vue';
 import ExperienceEditor from './ExperienceEditor.vue';
 import EducationEditor from './EducationEditor.vue';
 import SkillEditor from './SkillEditor.vue';
 import ProjectEditor from './ProjectEditor.vue';
+import PanelSplitter from '@/components/common/PanelSplitter.vue';
+import { useEditorLayout } from '@/composables/useEditorLayout';
+import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from '@/utils/editorLayout';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
+
+const { compact, resolved, paneVisible, canToggle, togglePane, resizeSidebar, resetLayout } = useEditorLayout();
+const sidebarVisible = computed(() => paneVisible('sidebar'));
+const editorVisible = computed(() => paneVisible('editor'));
+/** 三栏宽度由布局状态驱动：模块导航固定，编辑区占满剩余宽度。 */
+const panelStyle = computed(() => ({
+  '--editor-panel-width': `${resolved.value.editorPanelWidth}px`,
+  '--sidebar-width': `${resolved.value.sidebarWidth}px`,
+}));
 
 const props = withDefaults(defineProps<{ previewNavigationKey?: number }>(), { previewNavigationKey: 0 });
 type EditorScrollbar = { scrollTo: (options: ScrollToOptions) => void };
@@ -252,7 +283,7 @@ const toggleVisibility = (id: string) => {
   resumeStore.toggleSectionVisibility(id);
 };
 
-// 移除模块 (仅从排序中移除，相当于隐藏)
+// 移出模块：只从当前简历顺序拿掉，内容和自定义模块都还在，可再添加回来。
 const removeBlock = (id: string) => {
   const newOrder = data.value.sectionOrder.filter(sectionId => sectionId !== id);
   resumeStore.updateSectionOrder(newOrder);
@@ -260,11 +291,30 @@ const removeBlock = (id: string) => {
     const fallbackId = newOrder[0] || 'basic';
     selectSection(fallbackId);
   }
+  ElMessage.success('已移出，可在添加模块中恢复');
+};
+
+const moveSection = (id: string, delta: number) => {
+  const order = [...data.value.sectionOrder];
+  const index = order.indexOf(id);
+  const target = index + delta;
+  if (index < 0 || target < 0 || target >= order.length) return;
+  const [item] = order.splice(index, 1);
+  order.splice(target, 0, item);
+  resumeStore.updateSectionOrder(order);
+};
+
+const handleSectionCommand = (id: string, command: string) => {
+  if (command === 'up') moveSection(id, -1);
+  else if (command === 'down') moveSection(id, 1);
+  else if (command === 'remove') removeBlock(id);
 };
 
 // 永久删除自定义模块
 const deleteBlock = (id: string) => {
-  removeBlock(id);
+  const newOrder = data.value.sectionOrder.filter(sectionId => sectionId !== id);
+  resumeStore.updateSectionOrder(newOrder);
+  if (selectedSectionId.value === id) selectSection(newOrder[0] || 'basic');
   resumeStore.removeCustomBlock(id);
 };
 
@@ -390,14 +440,13 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
 <style scoped>
 /* The editor pane: a nav rail on the raised surface beside the form host, hairline seams. */
 .editor-panel {
-  display: grid;
-  grid-template-columns: clamp(208px, 18vw, 264px) minmax(0, 1fr);
-  width: min(62vw, 1080px);
-  min-width: 620px;
-  max-width: 1080px;
+  display: flex;
+  width: var(--editor-panel-width, min(62vw, 1080px));
+  min-width: 0;
   height: 100%;
-  flex: 0 1 62%;
-  overflow: hidden;
+  flex: 0 0 auto;
+  /* 分隔条的折叠按钮悬浮在栏缝上，需要溢出到相邻栏之上。 */
+  overflow: visible;
   border-right: var(--rule-hair) solid var(--color-rule);
   background: var(--color-paper);
 }
@@ -405,7 +454,10 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
 .editor-sidebar {
   display: flex;
   min-width: 0;
+  max-width: 100%;
   min-height: 0;
+  flex: 0 0 var(--sidebar-width, 232px);
+  width: var(--sidebar-width, 232px);
   flex-direction: column;
   overflow: hidden;
   border-right: var(--rule-hair) solid var(--color-rule);
@@ -574,9 +626,7 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
   transition: opacity var(--dur-micro) var(--ease-out), background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
 }
 
-.sidebar-section-actions :deep(.el-button.el-button--danger) {
-  --el-button-hover-text-color: var(--color-error);
-}
+
 
 .sidebar-section-actions :deep(.el-button.is-link:not(.is-disabled):hover) {
   background: var(--color-paper-2);
@@ -630,6 +680,7 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
 .editor-main {
   min-width: 0;
   min-height: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   background: var(--color-paper);
 }
@@ -683,6 +734,7 @@ const finishEnter = () => { transitionMinHeight.value = ''; };
   }
 
   .editor-sidebar {
+    width: auto;
     max-height: 184px;
     flex: 0 0 auto;
     border-right: 0;

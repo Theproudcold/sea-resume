@@ -20,19 +20,19 @@
           </div>
           <div class="contact-grid">
             <div v-if="data.basic.phone" class="contact-item">
-              <ContactIcon v-if="data.theme.displayIcons !== false" type="phone" :icon="data.basic.iconOverrides?.phone" />
+              <ContactIcon v-if="data.theme?.displayIcons !== false" type="phone" :icon="data.basic.iconOverrides?.phone" />
               <span>{{ data.basic.phone }}</span>
             </div>
             <div v-if="data.basic.email" class="contact-item">
-              <ContactIcon v-if="data.theme.displayIcons !== false" type="email" :icon="data.basic.iconOverrides?.email" />
+              <ContactIcon v-if="data.theme?.displayIcons !== false" type="email" :icon="data.basic.iconOverrides?.email" />
               <a :href="`mailto:${data.basic.email}`" @click.stop>{{ data.basic.email }}</a>
             </div>
             <div v-if="data.basic.location" class="contact-item">
-              <ContactIcon v-if="data.theme.displayIcons !== false" type="location" :icon="data.basic.iconOverrides?.location" />
+              <ContactIcon v-if="data.theme?.displayIcons !== false" type="location" :icon="data.basic.iconOverrides?.location" />
               <span>{{ data.basic.location }}</span>
             </div>
             <div v-if="data.basic.website" class="contact-item">
-              <ContactIcon v-if="data.theme.displayIcons !== false" type="website" :icon="data.basic.iconOverrides?.website" />
+              <ContactIcon v-if="data.theme?.displayIcons !== false" type="website" :icon="data.basic.iconOverrides?.website" />
               <a :href="data.basic.website" :title="data.basic.website" target="_blank" rel="noreferrer" @click.stop>{{ data.basic.website }}</a>
             </div>
             <div
@@ -40,7 +40,7 @@
               :key="contact.id"
               class="contact-item"
             >
-              <ContactIcon v-if="data.theme.displayIcons !== false" type="custom" :icon="contact.icon" />
+              <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" />
               <span class="contact-copy"><span v-if="contact.label" class="contact-label">{{ contact.label }}：</span>{{ contact.value }}</span>
             </div>
             <ResumeSmartFields :data="data" />
@@ -221,19 +221,19 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 .ai-agent-template {
   box-sizing: border-box;
   min-height: var(--a4-height);
-  color: #252a30;
+  color: var(--resume-ink);
   font-size: var(--font-size);
   line-height: var(--line-height);
-  background: #fff;
+  background: var(--resume-paper);
 }
 
 .profile-header {
   display: flex;
   align-items: center;
   gap: 20px;
-  min-height: 112px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid #d6dbe0;
+  min-height: 96px;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid var(--primary-color);
   cursor: pointer;
 }
 
@@ -243,7 +243,7 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
   flex: 0 0 84px;
   object-fit: cover;
   border-radius: 2px;
-  background: #f1f3f5;
+  background: var(--resume-chip);
 }
 
 .profile-main {
@@ -260,9 +260,9 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 
 .identity h1 {
   margin: 0;
-  color: #20262d;
-  font-size: 30px;
-  font-weight: 750;
+  color: var(--resume-ink-title);
+  font-size: 26px;
+  font-weight: 700;
   line-height: 1.2;
   letter-spacing: 0.02em;
 }
@@ -278,7 +278,7 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 16px;
-  color: #39414a;
+  color: var(--resume-ink-body);
   font-size: 12px;
 }
 
@@ -293,7 +293,7 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
-  color: #39414a;
+  color: var(--resume-ink-body);
 }
 
 .contact-item > span,
@@ -319,8 +319,8 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 .summary-block {
   margin: 16px 0 4px;
   padding: 0 0 14px;
-  border-bottom: 1px solid #e2e5e8;
-  color: #424a52;
+  border-bottom: 1px solid var(--resume-rule);
+  color: var(--resume-ink-body);
   cursor: pointer;
 }
 
@@ -339,27 +339,16 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 }
 
 .section-title {
-  position: relative;
-  margin: 0 0 12px;
-  padding: 0 0 7px 14px;
-  border-bottom: 1px solid #d9dee3;
-  color: #252b32;
+  margin: 0 0 10px;
+  padding: 0 0 5px;
+  border-bottom: 1.5px solid var(--primary-color);
+  color: var(--resume-ink-heading);
   font-size: 15px;
+  letter-spacing: 0.04em;
   font-weight: 700;
   line-height: 1.3;
   cursor: grab;
   break-after: avoid;
-}
-
-.section-title::before {
-  position: absolute;
-  top: 1px;
-  bottom: 8px;
-  left: 0;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--primary-color);
-  content: '';
 }
 
 .entry-list {
@@ -370,7 +359,7 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 
 .resume-entry {
   min-width: 0;
-  color: #30363d;
+  color: var(--resume-ink);
   break-inside: avoid;
 }
 
@@ -383,33 +372,33 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 
 .entry-primary {
   min-width: 0;
-  color: #242a30;
+  color: var(--resume-ink-title);
   font-size: calc(var(--font-size) + 1px);
   font-weight: 700;
 }
 
 .entry-date {
   flex: 0 0 auto;
-  color: #555e67;
+  color: var(--resume-ink-soft);
   font-size: 0.92em;
   white-space: nowrap;
 }
 
 .entry-subtitle {
   margin-top: 2px;
-  color: #4a535c;
+  color: var(--resume-ink-body);
   font-weight: 500;
 }
 
 .entry-note {
   margin-top: 3px;
-  color: #626b74;
+  color: var(--resume-ink-soft);
   font-size: 0.94em;
 }
 
 .entry-description {
   margin-top: 5px;
-  color: #343b42;
+  color: var(--resume-ink);
   overflow-wrap: anywhere;
 }
 
@@ -425,7 +414,7 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 .project-link {
   display: inline-block;
   margin-top: 4px;
-  color: #4a535c;
+  color: var(--resume-ink-body);
   font-size: 0.92em;
   overflow-wrap: anywhere;
 }
@@ -442,7 +431,7 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 }
 
 .skill-line strong {
-  color: #252b32;
+  color: var(--resume-ink-heading);
 }
 
 .rich-text :deep(p) {
@@ -493,7 +482,8 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 @media print {
   .ai-agent-template {
     min-height: 0;
-    color: #20252b;
+    background: #fff;
+    color: #252a30;
   }
 
   .profile-header,
@@ -502,7 +492,7 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
   }
 
   .section-title {
-    color: #20252b;
+    color: #252b32;
   }
 }
 </style>

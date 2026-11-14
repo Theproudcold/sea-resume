@@ -36,7 +36,7 @@
         @delete="isCurrentResume && emit('delete', sectionId)"
       />
     </EditorSection>
-    <el-empty v-else description="请选择或添加一个简历模块" />
+    <el-empty v-else description="从左侧选择模块，或添加一个新模块" />
   </div>
 </template>
 

@@ -3,10 +3,10 @@
 
     <div v-if="experiences.length === 0" class="resume-editor-empty">
       <el-icon :size="24" aria-hidden="true"><Briefcase /></el-icon>
-      <p>暂无工作经历，点击上方按钮添加</p>
+      <p>添加工作经历</p>
     </div>
 
-    <div v-for="(exp, index) in experiences" :key="exp.id" class="experience-item resume-entry-card" :class="{ 'is-collapsed': isCollapsed(exp.id) }">
+    <div v-for="(exp, index) in experiences" :key="exp.id" class="experience-item resume-entry-card" :class="{ 'is-collapsed': isCollapsed(exp.id) }" :data-entry-id="exp.id">
       <div class="resume-entry-card__header">
         <span>工作经历 {{ index + 1 }}</span>
         <div class="flex items-center gap-1">
@@ -26,21 +26,22 @@
             :title="isCollapsed(exp.id) ? '展开此工作经历' : '折叠此工作经历'"
             @click="toggleCollapsed(exp.id)"
           />
-          <el-button type="danger" size="small" text @click="removeItem(exp.id)" :icon="Delete">删除</el-button>
+          <EntryDeleteButton :label="exp.company.trim() || '未命名经历'" @confirm="removeItem(exp.id)" />
         </div>
       </div>
 
       <SmoothCollapse><div v-show="!isCollapsed(exp.id)" class="experience-item__body">
         <el-form label-position="top">
-        <el-form-item label="公司名称" required>
+        <el-form-item label="公司名称" required :data-quality-id="`experience-company-${exp.id}`">
           <el-input
             :model-value="exp.company"
             placeholder="公司名称"
+            data-entry-focus
             @update:model-value="(value: string) => handleUpdate(exp.id, { company: value })"
           />
         </el-form-item>
 
-        <el-form-item label="职位" required>
+        <el-form-item label="职位" required :data-quality-id="`experience-position-${exp.id}`">
           <el-input
             :model-value="exp.position"
             placeholder="职位名称"
@@ -48,43 +49,18 @@
           />
         </el-form-item>
 
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="开始时间">
-              <el-date-picker
-                :model-value="exp.startDate"
-                type="month"
-                placeholder="选择月份"
-                format="YYYY-MM"
-                value-format="YYYY-MM"
-                @update:model-value="(value: string | null) => handleUpdate(exp.id, { startDate: value || '' })"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="结束时间">
-              <el-select
-                v-if="exp.endDate === 'present'"
-                :model-value="exp.endDate"
-                @update:model-value="(value: string) => handleUpdate(exp.id, { endDate: value })"
-              >
-                <el-option label="至今" value="present" />
-                <el-option label="选择日期" value="" />
-              </el-select>
-              <el-date-picker
-                v-else
-                :model-value="exp.endDate"
-                type="month"
-                placeholder="选择月份"
-                format="YYYY-MM"
-                value-format="YYYY-MM"
-                @update:model-value="(value: string | null) => handleUpdate(exp.id, { endDate: value || '' })"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <el-form-item label="起止时间" :data-quality-id="`experience-date-${exp.id}`">
+          <MonthRangeField
+            :start="exp.startDate"
+            :end="exp.endDate === 'present' ? '' : exp.endDate"
+            :present="exp.endDate === 'present'"
+            @update:start="(value) => handleUpdate(exp.id, { startDate: value })"
+            @update:end="(value) => handleUpdate(exp.id, { endDate: value })"
+            @update:present="(value) => handleUpdate(exp.id, { endDate: value ? 'present' : '' })"
+          />
+        </el-form-item>
 
-        <el-form-item label="工作描述">
+        <el-form-item label="工作描述" :data-quality-id="`experience-description-${exp.id}`">
           <RichTextEditor
             :model-value="exp.description"
             @update:modelValue="(val) => handleUpdate(exp.id, { description: val })"
@@ -97,13 +73,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
-import { Delete, Briefcase, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
+import { Briefcase, Hide, View, ArrowDown, ArrowUp } from '@element-plus/icons-vue';
 import type { Experience } from '@/types/resume';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import SmoothCollapse from '@/components/common/SmoothCollapse.vue';
+import EntryDeleteButton from './EntryDeleteButton.vue';
+import MonthRangeField from './MonthRangeField.vue';
+import { focusNewEntry } from '@/utils/focusNewEntry';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
@@ -121,6 +100,7 @@ const toggleCollapsed = (id: string) => {
 
 
 const addNew = () => {
+  const before = new Set(experiences.value.map(item => item.id));
   resumeStore.addExperience({
     company: '',
     position: '',
@@ -128,6 +108,8 @@ const addNew = () => {
     endDate: 'present',
     description: '',
   });
+  const created = experiences.value.find(item => !before.has(item.id));
+  if (created) void nextTick(() => focusNewEntry(created.id));
 };
 
 const removeItem = (id: string) => {

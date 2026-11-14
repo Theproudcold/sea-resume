@@ -21,7 +21,7 @@
         </el-upload>
       </el-form-item>
 
-      <el-form-item label="姓名" required>
+      <el-form-item label="姓名" required data-quality-id="basic-name">
         <el-input
           :model-value="localBasic.name"
           placeholder="请输入姓名"
@@ -29,7 +29,7 @@
         />
       </el-form-item>
 
-      <el-form-item label="求职意向" required>
+      <el-form-item label="求职意向" required data-quality-id="basic-title">
         <el-input
           :model-value="localBasic.title"
           placeholder="例如：前端工程师"
@@ -39,7 +39,7 @@
 
       <el-row :gutter="16">
         <el-col :span="12">
-          <el-form-item label="邮箱" required class="relative">
+          <el-form-item label="邮箱" required class="relative" data-quality-id="basic-contact">
             <template #label>
               <div class="flex items-center gap-2">
                 <span>邮箱</span>
@@ -236,13 +236,7 @@
                   </button>
                 </div>
               </el-popover>
-              <el-button
-                text
-                type="danger"
-                :icon="Delete"
-                :aria-label="`删除${contact.label || '自定义联系方式'}`"
-                @click="removeCustomContact(contact.id)"
-              />
+              <EntryDeleteButton :label="contact.label.trim() || '自定义联系方式'" @confirm="removeCustomContact(contact.id)" />
             </div>
             <el-input
               :model-value="contact.value"
@@ -255,7 +249,7 @@
         </div>
       </el-form-item>
 
-      <el-form-item label="个人简介">
+      <el-form-item label="个人简介" data-quality-id="basic-summary">
         <RichTextEditor
           :model-value="localBasic.summary || ''"
           @update:modelValue="(summary: string) => handleUpdate({ summary })"
@@ -269,11 +263,13 @@
 import { computed, onBeforeUnmount } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
-import { Plus, Edit, Delete } from '@element-plus/icons-vue';
+import { Plus, Edit } from '@element-plus/icons-vue';
+import EntryDeleteButton from './EntryDeleteButton.vue';
 import * as Icons from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import type { BasicInfo, CustomContact } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
+import { compressAvatar } from '@/utils/avatarImage';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 
 const resumeStore = useResumeStore();
@@ -288,27 +284,17 @@ const handleUpdate = (updates: Partial<BasicInfo>) => {
 let avatarReadGeneration = 0;
 onBeforeUnmount(() => { avatarReadGeneration++; });
 
-const handleAvatarChange = (file: any) => {
-  const isJPG = file.raw.type === 'image/jpeg' || file.raw.type === 'image/png';
-  const isLt2M = file.raw.size / 1024 / 1024 < 2;
-
-  if (!isJPG) {
-    ElMessage.error('上传头像图片只能是 JPG/PNG 格式!');
-    return;
-  }
-  if (!isLt2M) {
-    ElMessage.error('上传头像图片大小不能超过 2MB!');
-    return;
-  }
-
+const handleAvatarChange = (file: { raw?: File }) => {
+  const raw = file.raw;
+  if (!raw) return;
   const generation = ++avatarReadGeneration;
   const resumeId = data.value.id;
-  const reader = new FileReader();
-  reader.onload = () => {
+  void compressAvatar(raw).then((avatar) => {
     if (generation !== avatarReadGeneration || data.value.id !== resumeId || resumeStore.isLoading) return;
-    handleUpdate({ avatar: reader.result as string });
-  };
-  reader.readAsDataURL(file.raw);
+    handleUpdate({ avatar });
+  }).catch((error: unknown) => {
+    ElMessage.error(error instanceof Error ? error.message : '头像处理失败');
+  });
 };
 
 const iconOptions = {

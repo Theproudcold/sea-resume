@@ -12,7 +12,7 @@
       <li v-for="issue in issues" :key="issue.id">
         <span class="quality-dot" aria-hidden="true">!</span>
         <span>{{ issue.message }}</span>
-        <el-button link type="primary" @click="$emit('navigate', issue.section)">去编辑</el-button>
+        <el-button link type="primary" @click="$emit('navigate', issue.section, issue.target)">去编辑</el-button>
       </li>
     </ul>
   </el-dialog>
@@ -21,7 +21,7 @@
 <script setup lang="ts">
 import type { ResumeQualityIssue } from '@/utils/resumeQuality';
 defineProps<{ modelValue: boolean; issues: ResumeQualityIssue[] }>();
-defineEmits<{ 'update:modelValue': [value: boolean]; navigate: [section: ResumeQualityIssue['section']] }>();
+defineEmits<{ 'update:modelValue': [value: boolean]; navigate: [section: ResumeQualityIssue['section'], target: string] }>();
 </script>
 
 <style scoped>

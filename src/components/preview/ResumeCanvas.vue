@@ -110,17 +110,18 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .resume-canvas-wrapper {
-  display: flex;
-  justify-content: center;
+  display: block;
   padding: var(--ui-space-4);
   background: var(--ui-bg-page);
   overflow: auto;
 }
 
 .resume-canvas {
+  /* 预览列变窄时靠滚动而不是压缩：A4 图纸始终是 210mm。 */
   width: var(--a4-width);
+  min-width: var(--a4-width);
   min-height: var(--a4-height);
-  background: #fff;
+  background: var(--resume-paper);
   box-shadow: var(--ui-shadow-md);
   margin: 0 auto;
   position: relative; /* For absolute positioning of breaks */
@@ -164,7 +165,7 @@ onBeforeUnmount(() => {
 @media print {
   .resume-canvas-wrapper {
     padding: 0;
-    background: white;
+    background: #fff;
   }
 
   .resume-canvas {
