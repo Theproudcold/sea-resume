@@ -17,7 +17,12 @@ const CheckboxStub = defineComponent({
   props: { modelValue: Boolean },
   emits: ['update:modelValue'],
   setup(props, { emit }) {
-    return () => h('input', { type: 'checkbox', checked: props.modelValue, onChange: (event: Event) => emit('update:modelValue', (event.target as HTMLInputElement).checked) });
+    return () => h('input', {
+      type: 'checkbox',
+      checked: props.modelValue,
+      onChange: (event: Event) => emit('update:modelValue', (event.target as HTMLInputElement).checked),
+      'onUpdate:modelValue': (value: boolean) => emit('update:modelValue', value),
+    });
   },
 });
 
@@ -133,6 +138,10 @@ describe('AiProviderSettingsPanel', () => {
     const second = mount(AiProviderSettingsPanel, { global: { stubs } });
     await second.find('.provider-row-main').trigger('click');
     expect((second.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(true);
+    await saveButton(second).trigger('click');
+    expect(hasAiStoredApiKey()).toBe(true);
+    expect(getAiStoredApiKey()).toBe('panel-secret');
+    await second.find('.provider-row-main').trigger('click');
     await second.find('input[type="checkbox"]').setValue(false);
     await saveButton(second).trigger('click');
     expect(hasAiStoredApiKey()).toBe(false);

@@ -192,6 +192,7 @@ const selectedProfile = ref<AiProviderProfile | null>(null);
 const selectedHasKeyVersion = ref(0);
 const apiKeyDraft = ref('');
 const rememberKeyDraft = ref(false);
+const storedKeyOnOpen = ref(false);
 const modelError = ref('');
 const fetchingModels = ref(false);
 const view = ref<'list' | 'catalog' | 'detail'>('list');
@@ -234,7 +235,8 @@ function openDetails(profileId: string) {
   selectedProfile.value = { ...profile, models: [...profile.models] };
   isNewProfile.value = false;
   apiKeyDraft.value = '';
-  rememberKeyDraft.value = hasAiStoredApiKey(profile.profileId);
+  storedKeyOnOpen.value = hasAiStoredApiKey(profile.profileId);
+  rememberKeyDraft.value = storedKeyOnOpen.value;
   modelError.value = '';
   selectedHasKeyVersion.value += 1;
   view.value = 'detail';
@@ -245,6 +247,7 @@ function backToProviderList() {
   isNewProfile.value = false;
   apiKeyDraft.value = '';
   rememberKeyDraft.value = false;
+  storedKeyOnOpen.value = false;
   modelError.value = '';
   selectedHasKeyVersion.value += 1;
   view.value = 'list';
@@ -275,6 +278,7 @@ function addProvider(presetId: AiProviderPresetId) {
   isNewProfile.value = true;
   apiKeyDraft.value = '';
   rememberKeyDraft.value = false;
+  storedKeyOnOpen.value = false;
   modelError.value = '';
   selectedHasKeyVersion.value += 1;
   view.value = 'detail';
@@ -334,11 +338,10 @@ function saveSettings(makeDefault = false) {
     if (rememberKeyDraft.value) {
       const remembered = draftKey || getAiSessionApiKey(profile.profileId);
       if (remembered) setAiStoredApiKey(remembered, profile.profileId);
-    } else {
+    } else if (storedKeyOnOpen.value) {
       setAiStoredApiKey('', profile.profileId);
     }
     apiKeyDraft.value = '';
-    rememberKeyDraft.value = false;
     selectedHasKeyVersion.value += 1;
     isNewProfile.value = false;
     ElMessage.success(makeDefault ? '服务商配置已保存并设为默认' : '服务商配置已保存');
