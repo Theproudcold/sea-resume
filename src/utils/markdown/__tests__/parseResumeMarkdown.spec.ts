@@ -76,6 +76,44 @@ describe('parseResumeMarkdown', () => {
     expect(() => parseResumeMarkdown('x'.repeat(1024 * 1024 + 1))).toThrow('1 MB');
   });
 
+  it('recovers an entry whose title was written as body text instead of a heading', () => {
+    const result = parseResumeMarkdown(`# 于海波 | Agent 应用开发工程师
+
+hypoy9040@163.com
+
+## 工作经历
+
+杭州唐梨科技有限公司 | Agent 应用开发工程师
+2026/05 - 至今
+参与企业级智能体研发，负责 Agent 规划运行时与多 Agent 协作的落地。
+
+## 教育背景
+
+浙江大学 | 本科 | 计算机科学与技术
+2022-09 - 2026-07
+`);
+    expect(result.resume.experiences).toHaveLength(1);
+    expect(result.resume.experiences[0]).toMatchObject({
+      company: '杭州唐梨科技有限公司',
+      position: 'Agent 应用开发工程师',
+      startDate: '2026-05',
+      endDate: 'present',
+    });
+    expect(result.resume.experiences[0]?.description).toContain('参与企业级智能体研发');
+    expect(result.resume.experiences[0]?.description).not.toContain('杭州唐梨科技有限公司');
+    expect(result.resume.education[0]).toMatchObject({
+      school: '浙江大学', degree: '本科', major: '计算机科学与技术', startDate: '2022-09', endDate: '2026-07',
+    });
+    expect(result.warnings.some((warning) => warning.code === 'missing-company')).toBe(false);
+  });
+
+  it('warns instead of silently dropping fields when an entry has no usable title', () => {
+    const result = parseResumeMarkdown('## 工作经历\n\n参与企业级智能体研发，负责规划运行时。\n');
+    expect(result.resume.experiences).toHaveLength(1);
+    expect(result.resume.experiences[0]?.company).toBe('');
+    expect(result.warnings.some((warning) => warning.code === 'missing-company')).toBe(true);
+  });
+
   it('escapes raw HTML and refuses executable or remote-resource URLs', () => {
     const html = markdownToSafeHtml('<script>alert(1)</script> ![remote](https://example.com/x.png)');
     expect(html).not.toContain('<script>');

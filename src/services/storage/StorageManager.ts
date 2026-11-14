@@ -1,7 +1,13 @@
 import type { IStorageAdapter, StorageType, StorageConfig, MigrationProgress } from '@/types/storage';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
+import { withTimeout } from '@/utils/asyncTimeout';
+import { normalizeResumeData } from '@/utils/resumeData';
 import { LocalStorageAdapter } from './LocalStorageAdapter';
 import { FileSystemAdapter } from './FileSystemAdapter';
+
+/** 存储适配器兜底超时：任何写操作都必须让界面拿到结果，不能无限等待。 */
+const ADAPTER_WRITE_TIMEOUT_MS = 25000;
+const ADAPTER_WRITE_TIMEOUT_MESSAGE = '保存超时：存储位置 25 秒内没有响应。请检查本地目录授权是否失效、目录是否可写，然后重试。';
 
 /**
  * 存储管理器（单例模式）
@@ -100,7 +106,7 @@ export class StorageManager {
       }
       const resume = await sourceAdapter.read(meta.id);
       if (resume) {
-        await targetAdapter.save(resume, meta);
+        await targetAdapter.save(normalizeResumeData(resume), meta);
         existingIds.add(meta.id);
         addedCount++;
       }
@@ -180,8 +186,8 @@ export class StorageManager {
           continue;
         }
 
-        // 保存到目标存储
-        await targetAdapter.save(data, meta);
+        // 保存到目标存储（补齐旧数据缺失的字段）
+        await targetAdapter.save(normalizeResumeData(data), meta);
       } catch (error) {
         console.error(`迁移简历 ${meta.id} 失败:`, error);
         onProgress?.({
@@ -215,23 +221,35 @@ export class StorageManager {
 
   /**
    * 代理方法：读取简历
+   * 历史数据可能缺少 theme 等新增字段，读取后按默认值补齐再交给界面。
    */
   async read(id: string): Promise<ResumeData | null> {
-    return this.currentAdapter.read(id);
+    const resume = await this.currentAdapter.read(id);
+    return resume ? normalizeResumeData(resume) : null;
   }
 
   /**
    * 代理方法：保存简历
    */
   async save(data: ResumeData, meta: ResumeMeta): Promise<void> {
-    return this.currentAdapter.save(data, meta);
+    try {
+      return await withTimeout(this.currentAdapter.save(data, meta), ADAPTER_WRITE_TIMEOUT_MS, ADAPTER_WRITE_TIMEOUT_MESSAGE);
+    } catch (error) {
+      console.error(`保存简历 ${data.id} 失败（${this.currentAdapter.type}）:`, error);
+      throw error;
+    }
   }
 
   /**
    * 代理方法：删除简历
    */
   async delete(id: string): Promise<void> {
-    return this.currentAdapter.delete(id);
+    try {
+      return await withTimeout(this.currentAdapter.delete(id), ADAPTER_WRITE_TIMEOUT_MS, ADAPTER_WRITE_TIMEOUT_MESSAGE);
+    } catch (error) {
+      console.error(`删除简历 ${id} 失败（${this.currentAdapter.type}）:`, error);
+      throw error;
+    }
   }
 
   /**
@@ -242,6 +260,31 @@ export class StorageManager {
       return this.currentAdapter.export(id);
     }
     return undefined;
+  }
+
+  /**
+   * 重新申请已保存本地目录的权限，并把当前存储切回该目录。
+   * 必须在用户点击等手势中调用，否则浏览器不会弹出授权框。
+   */
+  async reauthorizeFileSystem(): Promise<void> {
+    if (this.currentAdapter instanceof FileSystemAdapter) {
+      await this.currentAdapter.reauthorizeSavedDirectory();
+      return;
+    }
+    const cached = this.adapterCache.get('file_system');
+    if (!(cached instanceof FileSystemAdapter)) {
+      throw new Error('本地目录尚未初始化；请在设置中重新选择目录。');
+    }
+    await cached.reauthorizeSavedDirectory();
+    this.currentAdapter = cached;
+  }
+
+  /** 当前缓存中本地目录的名称；未选择时返回占位文本。 */
+  getFileSystemDirectoryName(): string {
+    const adapter = this.currentAdapter instanceof FileSystemAdapter
+      ? this.currentAdapter
+      : this.adapterCache.get('file_system');
+    return adapter instanceof FileSystemAdapter ? adapter.getDirectoryName() : '未选择';
   }
 }
 

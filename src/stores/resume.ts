@@ -2,53 +2,11 @@ import { defineStore } from 'pinia';
 import type { ResumeData, BasicInfo, Experience, Education, Skill, CustomBlock, Project, ResumeMeta, ThemeConfig, CustomItem } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { generateId } from '@/utils/helpers';
-import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
+import { createDefaultResumeData, normalizeResumeData } from '@/utils/resumeData';
+import { cloneResume, rememberResumeSnapshot } from '@/utils/resumeSnapshot';
 import { assertProposalBaseline, parseChangeProposal, previewProposal } from '@/services/ai/changeProposal';
 
 const applyingProposals = new WeakSet<object>();
-
-// 默认简历数据
-const getDefaultResumeData = (): ResumeData => ({
-  id: generateId(),
-  title: '我的简历',
-  basic: {
-    name: '',
-    title: '',
-    email: '',
-    phone: '',
-  },
-  experiences: [],
-  education: [],
-  skills: [],
-  projects: [],
-  customBlocks: [],
-  templateId: 'modern',
-  theme: {
-    color: '#2563eb', // blue-600
-    fontFamily: RECOMMENDED_FONT_FAMILY,
-    fontSize: 14,
-    lineHeight: 1.5,
-    moduleMargins: {
-      top: 0,
-      bottom: 24,
-      left: 0,
-      right: 0,
-    },
-    pageMargins: 24,
-    dateFormat: 'YYYY.MM',
-    displayIcons: true,
-  },
-  sectionOrder: ['experience', 'projects', 'education', 'skills'],
-  hiddenSections: [],
-  sectionTitles: {
-    experience: '工作经历',
-    projects: '项目经验',
-    education: '教育背景',
-    skills: '技能证书',
-  },
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-});
 
 type SaveTimers = { debounce: ReturnType<typeof setTimeout>; maxWait: ReturnType<typeof setTimeout> };
 const pendingSaveTimers = new WeakMap<object, SaveTimers>();
@@ -58,7 +16,7 @@ const loadRequests = new WeakMap<object, number>();
 
 export const useResumeStore = defineStore('resume', {
   state: () => ({
-    data: getDefaultResumeData(),
+    data: createDefaultResumeData(),
     saveStatus: 'saved' as 'saving' | 'saved' | 'error',
     saveError: null as string | null,
     historyPast: [] as ResumeData[],
@@ -84,7 +42,7 @@ export const useResumeStore = defineStore('resume', {
       applyingProposals.add(this);
       try {
         assertAuthorized();
-        const previous = this.exportData();
+        const previous = cloneResume(this.data);
         const generation = this.saveGeneration;
         await assertProposalBaseline(previous, proposal);
         assertAuthorized();
@@ -119,8 +77,7 @@ export const useResumeStore = defineStore('resume', {
     rememberChange() {
       const now = Date.now();
       if (!this.historyLastAt || now - this.historyLastAt > 700) {
-        this.historyPast.push(JSON.parse(JSON.stringify(this.data)) as ResumeData);
-        if (this.historyPast.length > 100) this.historyPast.shift();
+        this.historyPast = rememberResumeSnapshot(this.historyPast, this.data);
         this.historyFuture = [];
       }
       this.historyLastAt = now;
@@ -137,10 +94,10 @@ export const useResumeStore = defineStore('resume', {
     async undo() {
       const previous = this.historyPast.pop();
       if (!previous) return;
-      const current = this.exportData();
+      const current = cloneResume(this.data);
       this.historyFuture.push(current);
       this.historyLastAt = 0;
-      this.data = JSON.parse(JSON.stringify(previous)) as ResumeData;
+      this.data = cloneResume(previous);
       const applied = this.data;
       const save = this.autoSave();
       const generation = this.saveGeneration;
@@ -160,10 +117,10 @@ export const useResumeStore = defineStore('resume', {
     async redo() {
       const next = this.historyFuture.pop();
       if (!next) return;
-      const current = this.exportData();
+      const current = cloneResume(this.data);
       this.historyPast.push(current);
       this.historyLastAt = 0;
-      this.data = JSON.parse(JSON.stringify(next)) as ResumeData;
+      this.data = cloneResume(next);
       const applied = this.data;
       const save = this.autoSave();
       const generation = this.saveGeneration;
@@ -192,7 +149,7 @@ export const useResumeStore = defineStore('resume', {
     updateSectionTitle(section: string, title: string) {
       this.rememberChange();
       if (!this.data.sectionTitles) {
-        this.data.sectionTitles = getDefaultResumeData().sectionTitles;
+        this.data.sectionTitles = createDefaultResumeData().sectionTitles;
       }
       this.data.sectionTitles[section] = title;
       this.scheduleSave();
@@ -216,23 +173,8 @@ export const useResumeStore = defineStore('resume', {
         if (loadRequests.get(this) !== requestId) return;
         if (!resume) throw new Error(`简历 ${id} 不存在`);
 
-        // Merge with defaults so old stored resumes gain newly introduced fields.
-        const defaults = getDefaultResumeData();
-        this.data = {
-          ...defaults,
-          ...resume,
-          theme: {
-            ...defaults.theme,
-            ...(resume.theme || {}),
-            fontFamily: resume.theme?.fontFamily === 'sans-serif'
-              ? defaults.theme.fontFamily
-              : resume.theme?.fontFamily || defaults.theme.fontFamily,
-          },
-          sectionTitles: {
-            ...defaults.sectionTitles,
-            ...(resume.sectionTitles || {}),
-          },
-        };
+        // 旧简历可能缺少 theme 等新增字段，统一归一再交给界面渲染。
+        this.data = normalizeResumeData(resume);
         this.historyPast = [];
         this.saveGeneration += 1;
         this.activeSection = null;
@@ -255,7 +197,7 @@ export const useResumeStore = defineStore('resume', {
      * @param templateId 模板 ID
      */
     createNew(title: string = '我的简历', templateId: string = 'modern') {
-      this.data = getDefaultResumeData();
+      this.data = createDefaultResumeData();
       this.data.title = title;
       this.data.templateId = templateId;
     },
@@ -458,6 +400,21 @@ export const useResumeStore = defineStore('resume', {
       this.saveImmediately();
     },
 
+    /** 用自定义模板快照替换当前简历的内容和样式，保留这份简历自己的 id 与名称。 */
+    applyTemplateSnapshot(snapshot: ResumeData) {
+      this.rememberChange();
+      const current = this.data;
+      this.data = {
+        ...cloneResume(snapshot),
+        id: current.id,
+        title: current.title,
+        createdAt: current.createdAt,
+        updatedAt: new Date().toISOString(),
+      };
+      delete this.data.jobTarget;
+      this.saveImmediately();
+    },
+
     // 更新模块排序
     updateSectionOrder(newOrder: string[]) {
       this.rememberChange();
@@ -489,25 +446,14 @@ export const useResumeStore = defineStore('resume', {
 
     // 导出数据
     exportData(): ResumeData {
-      return JSON.parse(JSON.stringify(this.data));
+      return cloneResume(this.data);
     },
 
     // 导入数据
     async importData(data: ResumeData) {
       this.rememberChange();
       const previous = this.data;
-      const defaults = getDefaultResumeData();
-      this.data = {
-        ...defaults,
-        ...JSON.parse(JSON.stringify(data)) as ResumeData,
-        theme: {
-          ...defaults.theme,
-          ...(data.theme || {}),
-          moduleMargins: { ...defaults.theme.moduleMargins, ...(data.theme?.moduleMargins || {}) },
-        },
-        sectionTitles: { ...defaults.sectionTitles, ...(data.sectionTitles || {}) },
-        sectionOrder: data.sectionOrder?.length ? [...data.sectionOrder] : ['experience', 'projects', 'education', 'skills'],
-      };
+      this.data = normalizeResumeData(cloneResume(data));
       const applied = this.data;
       const save = this.autoSave();
       const generation = this.saveGeneration;
@@ -524,7 +470,7 @@ export const useResumeStore = defineStore('resume', {
       const current = this.data;
       this.cancelScheduledSave();
       this.rememberChange();
-      const defaults = getDefaultResumeData();
+      const defaults = createDefaultResumeData();
       defaults.id = current.id;
       defaults.title = current.title;
       defaults.createdAt = current.createdAt;
@@ -549,7 +495,7 @@ export const useResumeStore = defineStore('resume', {
       const currentSave = previousSave.catch(() => undefined).then(async () => {
         if (background && latestBackgroundSave.get(this) !== token) return;
         // Clone only when a background write actually runs, not on each keystroke.
-        const saved = snapshot ?? JSON.parse(JSON.stringify(source)) as ResumeData;
+        const saved = snapshot ?? cloneResume(source);
         const updatedAt = new Date().toISOString();
         saved.updatedAt = updatedAt;
         const meta: ResumeMeta = {

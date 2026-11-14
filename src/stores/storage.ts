@@ -16,6 +16,8 @@ export const useStorageStore = defineStore('storage', {
     migrationProgress: null as MigrationProgress | null,
     isMigrating: false,
     initializationWarning: '',
+    /** 是否保存过本地目录配置（授权失效回退到浏览器缓存时仍为 true，用于提示重新授权）。 */
+    hasFileSystemConfig: false,
   }),
 
   getters: {
@@ -53,9 +55,11 @@ export const useStorageStore = defineStore('storage', {
      */
     async init() {
       this.initializationWarning = '';
+      let wantsFileSystem = false;
       try {
         const savedConfig = localStorage.getItem(STORAGE_CONFIG_KEY);
         const config: StorageConfig = savedConfig ? JSON.parse(savedConfig) : { type: 'local_storage' };
+        wantsFileSystem = config.type === 'file_system';
         this.config = config;
         this.currentType = config.type;
         await storageManager.init(savedConfig ? config : undefined);
@@ -65,7 +69,24 @@ export const useStorageStore = defineStore('storage', {
         this.currentType = 'local_storage';
         this.config = { type: 'local_storage' };
         await storageManager.init();
+      } finally {
+        this.hasFileSystemConfig = wantsFileSystem;
       }
+    },
+
+    /** 重新授权已保存的本地目录；切换回该目录并返回目录名。 */
+    async reauthorizeFileSystem() {
+      await storageManager.reauthorizeFileSystem();
+      const config: StorageConfig = {
+        type: 'file_system',
+        fileSystem: { directoryPath: storageManager.getFileSystemDirectoryName() },
+      };
+      this.currentType = 'file_system';
+      this.config = config;
+      this.hasFileSystemConfig = true;
+      this.initializationWarning = '';
+      localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(config));
+      return config.fileSystem?.directoryPath || '本地目录';
     },
 
     async switchToFileSystem(directoryHandle: FileSystemDirectoryHandle, useExisting = false) {
@@ -75,6 +96,7 @@ export const useStorageStore = defineStore('storage', {
         const config: StorageConfig = { type: 'file_system', fileSystem: { directoryPath: result.directoryName } };
         this.currentType = 'file_system';
         this.config = config;
+        this.hasFileSystemConfig = true;
         this.initializationWarning = '';
         localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(config));
         return { addedCount: result.addedCount, conflictCount: result.conflictCount };

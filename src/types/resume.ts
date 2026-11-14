@@ -157,8 +157,11 @@ export interface TemplateMetadata {
   name: string;
   description: string;
   thumbnail?: string;
-  category: 'modern' | 'professional' | 'creative' | 'minimal' | 'tech';
+  category: 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' | 'custom';
   categoryLabel: string;
   keywords: string[];
   recommendedOrder: number;
+  source?: 'builtin' | 'custom';
+  /** 自定义模板沿用的内置版式组件。 */
+  baseTemplateId?: string;
 }

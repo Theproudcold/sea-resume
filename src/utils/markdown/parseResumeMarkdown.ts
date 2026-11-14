@@ -136,12 +136,40 @@ function parseContact(lines: string[], resume: ResumeData, warnings: MarkdownImp
   }
 }
 
+const ENTRY_HEADER_MAX_LENGTH = 90;
+
+function warnOnce(warnings: MarkdownImportWarning[], code: MarkdownImportWarning['code'], message: string) {
+  if (!warnings.some((warning) => warning.code === code)) warnings.push({ code, message });
+}
+
+/**
+ * 判断一行是否像条目标题（`公司 | 职位 | 起止`）。
+ * 模型偶尔会把标题行写成普通正文，导致公司、学校等字段整段落进描述里。
+ */
+function looksLikeEntryHeader(line: string): boolean {
+  const text = line.trim().replace(/^\s*[-*+]\s+/, '');
+  if (!text || text.length > ENTRY_HEADER_MAX_LENGTH) return false;
+  if (/^[*_`>#]/.test(text)) return false;
+  if (/[:：]/.test(text)) return false;
+  return /[|｜]/.test(text) || /\s[—–]\s/.test(text);
+}
+
 function entryParts(block: MarkdownBlock, warnings: MarkdownImportWarning[]) {
-  const allText = `${block.title}\n${block.lines.join('\n')}`;
+  const lines = [...block.lines];
+  let blockTitle = block.title;
+  if (!blockTitle) {
+    const firstIndex = lines.findIndex((line) => line.trim());
+    const candidate = firstIndex >= 0 ? (lines[firstIndex] ?? '').trim() : '';
+    if (looksLikeEntryHeader(candidate)) {
+      blockTitle = candidate;
+      lines.splice(firstIndex, 1);
+    }
+  }
+  const allText = `${blockTitle}\n${lines.join('\n')}`;
   const [startDate, endDate] = parseDateRange(allText, warnings);
   const labeled: Record<string, string> = {};
   const descriptionLines: string[] = [];
-  for (const line of block.lines.map((value) => value.trim()).filter(Boolean)) {
+  for (const line of lines.map((value) => value.trim()).filter(Boolean)) {
     const match = line.match(/^\s*(?:[-*+]\s*)?(?:\*\*)?([^:*：|]+?)(?:\*\*)?\s*[:：]\s*(.+)$/);
     if (match) {
       const key = (match[1] ?? '').toLowerCase().replace(/[\s_-]/g, '');
@@ -151,7 +179,7 @@ function entryParts(block: MarkdownBlock, warnings: MarkdownImportWarning[]) {
     }
     else descriptionLines.push(line);
   }
-  const title = cleanInline(block.title.replace(DATE_RANGE, '').replace(/[|｜—–]+$/, ''));
+  const title = cleanInline(blockTitle.replace(DATE_RANGE, '').replace(/[|｜—–]+$/, ''));
   const parts = title.split(/\s*[|｜]\s*|\s+[—–]\s+/).map(cleanInline).filter(Boolean);
   const bullets = descriptionLines.filter((line) => /^[-*+]\s+/.test(line)).map((line) => line.replace(/^[-*+]\s+/, ''));
   return { title, parts, labeled, descriptionLines, bullets, startDate, endDate };
@@ -161,14 +189,18 @@ function mapEntry(kind: string, block: MarkdownBlock, resume: ResumeData, warnin
   const parsed = entryParts(block, warnings);
   const description = markdownToSafeHtml(parsed.descriptionLines.join('\n'));
   if (kind === 'experience') {
+    const company = field(parsed.labeled, '公司', 'company', '组织') || parsed.parts[0] || parsed.title;
+    if (!company) warnOnce(warnings, 'missing-company', '有一条工作经历没有识别出「公司 / 职位」，请对照原 PDF 手动补充。');
     resume.experiences.push({
-      id: generateId(), company: field(parsed.labeled, '公司', 'company', '组织') || parsed.parts[0] || parsed.title,
+      id: generateId(), company,
       position: field(parsed.labeled, '职位', '岗位', 'position', 'role') || parsed.parts[1] || '',
       startDate: parsed.startDate, endDate: parsed.endDate, description, highlights: parsed.bullets,
     });
   } else if (kind === 'education') {
+    const school = field(parsed.labeled, '学校', '院校', 'school', 'university') || parsed.parts[0] || parsed.title;
+    if (!school) warnOnce(warnings, 'missing-school', '有一条教育经历没有识别出「学校 / 专业」，请对照原 PDF 手动补充。');
     resume.education.push({
-      id: generateId(), school: field(parsed.labeled, '学校', '院校', 'school', 'university') || parsed.parts[0] || parsed.title,
+      id: generateId(), school,
       degree: field(parsed.labeled, '学历', '学位', 'degree') || parsed.parts[1] || '',
       major: field(parsed.labeled, '专业', 'major', 'field') || parsed.parts[2] || '',
       startDate: parsed.startDate, endDate: parsed.endDate,
@@ -176,8 +208,10 @@ function mapEntry(kind: string, block: MarkdownBlock, resume: ResumeData, warnin
     });
   } else if (kind === 'projects') {
     const link = field(parsed.labeled, '链接', 'link', 'url');
+    const name = field(parsed.labeled, '项目', '项目名称', 'name') || parsed.parts[0] || parsed.title;
+    if (!name) warnOnce(warnings, 'missing-project-name', '有一个项目经历没有识别出「项目名称」，请对照原 PDF 手动补充。');
     resume.projects.push({
-      id: generateId(), name: field(parsed.labeled, '项目', '项目名称', 'name') || parsed.parts[0] || parsed.title,
+      id: generateId(), name,
       role: field(parsed.labeled, '角色', 'role', '职责') || parsed.parts[1] || '',
       startDate: parsed.startDate, endDate: parsed.endDate, description,
       link: sanitizeMarkdownUrl(link) ?? undefined,

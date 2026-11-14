@@ -1,6 +1,7 @@
 import type { IStorageAdapter, StorageType } from '@/types/storage';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import { withTimeout } from '@/utils/asyncTimeout';
 
 /**
  * IndexedDB Schema
@@ -27,6 +28,20 @@ interface ResumeManifest {
 const RESUMES_DIRECTORY_NAME = 'resumes';
 const RESUME_FILE_PREFIX = 'resume-';
 
+/** Directory permission methods are not in all DOM typings. */
+type PermissionCapableDirectoryHandle = FileSystemDirectoryHandle & {
+  queryPermission?: (options?: { mode?: string }) => Promise<PermissionState>;
+  requestPermission?: (options?: { mode?: string }) => Promise<PermissionState>;
+};
+
+const WRITE_TIMEOUT_MS = 15000;
+const PERMISSION_TIMEOUT_MS = 5000;
+const PERMISSION_LOST_MESSAGE = '本地目录的读写权限已失效。请在“管理 → 数据与存储设置”中重新选择并授权该目录，然后重试。';
+
+function writeTimeoutMessage(fileName: string): string {
+  return `写入本地目录超时（${fileName}）。目录可能位于云同步盘、被其他程序占用或权限已失效；请检查后重试。`;
+}
+
 /**
  * 本地文件系统适配器
  * 使用 File System Access API
@@ -41,25 +56,36 @@ export class FileSystemAdapter implements IStorageAdapter {
     this.directoryHandle = directoryHandle ?? null;
   }
 
+  private async openDatabase(): Promise<IDBPDatabase<FileSystemDB>> {
+    if (!this.db) {
+      this.db = await openDB<FileSystemDB>(DB_NAME, DB_VERSION, {
+        upgrade(db) {
+          if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
+        },
+      });
+    }
+    return this.db;
+  }
+
   /** Restore an already-authorized directory only; requesting a new one is always user initiated. */
   async init(): Promise<void> {
-    this.db = await openDB<FileSystemDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
-      },
-    });
+    const db = await this.openDatabase();
 
     if (this.directoryHandle) {
-      await this.db.put(STORE_NAME, this.directoryHandle, HANDLE_KEY);
+      await db.put(STORE_NAME, this.directoryHandle, HANDLE_KEY);
       this._isReady = true;
       return;
     }
 
-    const savedHandle = await this.db.get(STORE_NAME, HANDLE_KEY);
+    const savedHandle = await db.get(STORE_NAME, HANDLE_KEY);
     if (!savedHandle) return;
     try {
-      // @ts-ignore File System Access API permission methods are not in all DOM typings.
-      const permission = await savedHandle.queryPermission?.({ mode: 'readwrite' });
+      const handle = savedHandle as PermissionCapableDirectoryHandle;
+      const permission = await withTimeout(
+        handle.queryPermission?.({ mode: 'readwrite' }) ?? Promise.resolve('denied' as PermissionState),
+        PERMISSION_TIMEOUT_MS,
+        '目录授权状态查询超时',
+      );
       if (permission === 'granted') {
         this.directoryHandle = savedHandle;
         this._isReady = true;
@@ -67,6 +93,26 @@ export class FileSystemAdapter implements IStorageAdapter {
     } catch (error) {
       console.warn('恢复目录句柄失败；需要用户重新授权:', error);
     }
+  }
+
+  /**
+   * 重新申请已保存目录的读写权限。必须在用户手势（点击）中调用，否则浏览器不会弹出授权框。
+   */
+  async reauthorizeSavedDirectory(): Promise<void> {
+    const db = await this.openDatabase();
+    const savedHandle = this.directoryHandle ?? await db.get(STORE_NAME, HANDLE_KEY);
+    if (!savedHandle) throw new Error('没有已保存的本地目录；请重新选择目录。');
+    const previousHandle = this.directoryHandle;
+    this.directoryHandle = savedHandle;
+    try {
+      await this.ensureWritePermission();
+    } catch (error) {
+      this.directoryHandle = previousHandle;
+      this._isReady = false;
+      throw error;
+    }
+    await db.put(STORE_NAME, this.directoryHandle, HANDLE_KEY);
+    this._isReady = true;
   }
 
   /**
@@ -102,6 +148,30 @@ export class FileSystemAdapter implements IStorageAdapter {
 
   isReady(): boolean {
     return this._isReady && this.directoryHandle !== null;
+  }
+
+  /**
+   * 写盘前确认目录仍然可写。授权可能在两次访问之间失效；此时必须立刻给出可操作的提示，
+   * 而不是让 createWritable 长时间挂起。
+   */
+  private async ensureWritePermission(): Promise<void> {
+    const root = this.directoryHandle;
+    if (!root) throw new Error('文件系统未初始化');
+    const handle = root as PermissionCapableDirectoryHandle;
+    // 浏览器未实现权限 API 时不做拦截，交由后续写盘报错。
+    if (typeof handle.queryPermission !== 'function') return;
+    const options = { mode: 'readwrite' };
+    let permission = await withTimeout(handle.queryPermission(options), PERMISSION_TIMEOUT_MS, PERMISSION_LOST_MESSAGE);
+    if (permission === 'granted') return;
+    if (typeof handle.requestPermission === 'function') {
+      try {
+        // 需要用户手势才会弹出授权框；失败时按“未授权”处理并给出同样的提示。
+        permission = await withTimeout(handle.requestPermission(options), PERMISSION_TIMEOUT_MS, PERMISSION_LOST_MESSAGE);
+      } catch {
+        permission = 'denied';
+      }
+    }
+    if (permission !== 'granted') throw new Error(PERMISSION_LOST_MESSAGE);
   }
 
   /** Ensure a selected folder is upgraded to the current manifest layout. */
@@ -150,6 +220,7 @@ export class FileSystemAdapter implements IStorageAdapter {
     const root = this.directoryHandle;
     if (!root) throw new Error('文件系统未初始化');
     if (data.id !== meta.id) throw new Error('简历数据与元数据 ID 不一致。');
+    await this.ensureWritePermission();
     try {
       const currentList = await this.list();
       await this.upgradeLegacyLayout(currentList);
@@ -186,6 +257,7 @@ export class FileSystemAdapter implements IStorageAdapter {
   async delete(id: string): Promise<void> {
     const root = this.directoryHandle;
     if (!root) throw new Error('文件系统未初始化');
+    await this.ensureWritePermission();
     try {
       const currentList = await this.list();
       await this.upgradeLegacyLayout(currentList);
@@ -283,11 +355,11 @@ export class FileSystemAdapter implements IStorageAdapter {
   }
 
   private async writeJsonFile(directory: FileSystemDirectoryHandle, fileName: string, value: unknown): Promise<void> {
-    const fileHandle = await directory.getFileHandle(fileName, { create: true });
-    const writable = await fileHandle.createWritable();
+    const fileHandle = await withTimeout(directory.getFileHandle(fileName, { create: true }), WRITE_TIMEOUT_MS, writeTimeoutMessage(fileName));
+    const writable = await withTimeout(fileHandle.createWritable(), WRITE_TIMEOUT_MS, writeTimeoutMessage(fileName));
     try {
-      await writable.write(JSON.stringify(value, null, 2));
-      await writable.close();
+      await withTimeout(writable.write(JSON.stringify(value, null, 2)), WRITE_TIMEOUT_MS, writeTimeoutMessage(fileName));
+      await withTimeout(writable.close(), WRITE_TIMEOUT_MS, writeTimeoutMessage(fileName));
     } catch (error) {
       await writable.abort().catch(() => undefined);
       throw error;

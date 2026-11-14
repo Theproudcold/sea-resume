@@ -1,17 +1,30 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FileSystemAdapter } from '../FileSystemAdapter';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 
-function makeDirectory(files: Record<string, string>, removeError?: Error) {
+type PermissionStateStub = 'granted' | 'prompt' | 'denied';
+
+function makeDirectory(
+  files: Record<string, string>,
+  removeError?: Error,
+  options: { hangWritePath?: string; permission?: PermissionStateStub; requestFails?: boolean } = {},
+) {
   const writes = vi.fn();
   const directories = new Set<string>();
   const makeHandle = (prefix = ''): FileSystemDirectoryHandle => {
     const fullName = (name: string) => prefix ? `${prefix}/${name}` : name;
     return {
       name: prefix.split('/').slice(-1)[0] || 'resumes',
-      getFileHandle: vi.fn(async (name: string, options?: { create?: boolean }) => {
+      ...(options.permission ? {
+        queryPermission: async () => options.permission,
+        requestPermission: async () => {
+          if (options.requestFails) throw new Error('需要用户手势');
+          return options.permission;
+        },
+      } : {}),
+      getFileHandle: vi.fn(async (name: string, opts?: { create?: boolean }) => {
         const path = fullName(name);
-        if (!(path in files) && !options?.create) {
+        if (!(path in files) && !opts?.create) {
           const error = new Error('Not found');
           error.name = 'NotFoundError';
           throw error;
@@ -19,6 +32,7 @@ function makeDirectory(files: Record<string, string>, removeError?: Error) {
         return {
           getFile: async () => ({ text: async () => files[path] ?? '' }),
           createWritable: async () => {
+            if (options.hangWritePath && path === options.hangWritePath) return new Promise<never>(() => undefined);
             let pending = '';
             return {
               write: async (value: string) => { pending = value; },
@@ -28,9 +42,9 @@ function makeDirectory(files: Record<string, string>, removeError?: Error) {
           },
         } as unknown as FileSystemFileHandle;
       }),
-      getDirectoryHandle: vi.fn(async (name: string, options?: { create?: boolean }) => {
+      getDirectoryHandle: vi.fn(async (name: string, opts?: { create?: boolean }) => {
         const path = fullName(name);
-        if (!directories.has(path) && !options?.create) {
+        if (!directories.has(path) && !opts?.create) {
           const error = new Error('Not found');
           error.name = 'NotFoundError';
           throw error;
@@ -46,6 +60,10 @@ function makeDirectory(files: Record<string, string>, removeError?: Error) {
   };
   return { directory: makeHandle(), writes };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const meta = (id: string, title = 'Test'): ResumeMeta => ({
   id, title, templateId: 'modern', createdAt: 1, updatedAt: 1,
@@ -103,6 +121,47 @@ describe('FileSystemAdapter directory integrity', () => {
     await expect(adapter.delete('legacy-delete')).rejects.toThrow('disk busy');
     expect(await adapter.list()).toEqual([meta('legacy-delete', 'Keep me')]);
     expect(await adapter.read('legacy-delete')).toMatchObject(legacyResume);
+    log.mockRestore();
+  });
+
+  it('fails with an actionable message and writes nothing when the directory permission lapsed', async () => {
+    const { directory, writes } = makeDirectory(
+      { 'manifest.json': JSON.stringify({ schemaVersion: 1, resumes: [] }) },
+      undefined,
+      { permission: 'prompt', requestFails: true },
+    );
+    const adapter = new FileSystemAdapter(directory);
+
+    await expect(adapter.save({ id: 'resume-1' } as ResumeData, meta('resume-1'))).rejects.toThrow('读写权限已失效');
+    expect(writes).not.toHaveBeenCalled();
+  });
+
+  it('proceeds when the write permission can be re-granted', async () => {
+    const { directory, writes } = makeDirectory(
+      { 'manifest.json': JSON.stringify({ schemaVersion: 1, resumes: [] }) },
+      undefined,
+      { permission: 'granted' },
+    );
+    const adapter = new FileSystemAdapter(directory);
+
+    await adapter.save({ id: 'resume-1' } as ResumeData, meta('resume-1'));
+    expect(writes).toHaveBeenCalledWith('resumes/resume-1.json');
+  });
+
+  it('times out instead of hanging forever when writing the directory stalls', async () => {
+    vi.useFakeTimers();
+    const { directory } = makeDirectory(
+      { 'manifest.json': JSON.stringify({ schemaVersion: 1, resumes: [] }) },
+      undefined,
+      { hangWritePath: 'resumes/resume-stall.json' },
+    );
+    const adapter = new FileSystemAdapter(directory);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const pending = adapter.save({ id: 'resume-stall' } as ResumeData, meta('resume-stall'));
+    const assertion = expect(pending).rejects.toThrow('写入本地目录超时');
+    await vi.advanceTimersByTimeAsync(15000);
+    await assertion;
     log.mockRestore();
   });
 });
