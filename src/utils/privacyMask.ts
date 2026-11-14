@@ -20,6 +20,11 @@ export function createPrivacyMaskedResume(source: ResumeData): ResumeData {
   resume.basic.phone = '***-****-****';
   resume.basic.location = '所在地已隐藏';
   resume.basic.website = '';
+  resume.basic.customContacts = resume.basic.customContacts?.map((contact) => ({
+    ...contact,
+    label: maskSensitiveText(contact.label),
+    value: maskSensitiveText(contact.value),
+  }));
   resume.basic.avatar = undefined;
   resume.basic.birthDate = undefined;
   resume.basic.showAge = false;

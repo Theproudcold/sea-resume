@@ -7,11 +7,13 @@ describe('privacy preview masking', () => {
     const original = parseResumeMarkdown(`---\nname: 林晓\nemail: xiaolin@example.com\nphone: 13800138000\nwebsite: https://example.com/me\nbirthdate: 1990-08-12\n---\n# 林晓\n\n## 个人简介\n联系 xiaolin@example.com 或 13800138000\n\n## 工作经历\n### Acme | Engineer | 2022-2025\n- 联系邮箱 xiaolin@example.com`).resume;
     original.basic.showAge = true;
     original.basic.showExperienceYears = true;
+    original.basic.customContacts = [{ id: 'wechat', label: '微信', value: 'xiaolin@example.com', icon: 'Link' }];
     const masked = createPrivacyMaskedResume(original);
     expect(masked.basic.name).toBe('匿名用户');
     expect(masked.basic.email).toBe('***@***.***');
     expect(masked.basic.phone).toBe('***-****-****');
     expect(masked.basic.website).toBe('');
+    expect(masked.basic.customContacts?.[0]?.value).toBe('[邮箱已隐藏]');
     expect(masked.basic.birthDate).toBeUndefined();
     expect(masked.basic.showAge).toBe(false);
     expect(masked.basic.showExperienceYears).toBe(false);
