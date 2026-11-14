@@ -2,17 +2,23 @@ import type { ResumeData } from '@/types/resume';
 import notoSansScRegularUrl from '@/assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf?url';
 import notoSansScBoldUrl from '@/assets/fonts/noto-sans-sc/NotoSansSC-Bold.otf?url';
 import { createResumePdfDefinition } from './pdf/createResumePdfDefinition';
+import { collectResumeCharacters, subsetOpenTypeFont } from './pdf/subsetFont';
 import { resolveResumeAvatar } from './pdf/resolveAvatar';
 import { getA4ImagePageSlices } from './export-image';
+import { prepareResumeCapture } from './capture-colors';
 import type { TDocumentDefinitions, TFontDictionary, TVirtualFileSystem } from 'pdfmake/interfaces';
 
 interface PdfMakeRuntime {
   addVirtualFileSystem(vfs: TVirtualFileSystem): void;
   addFonts(fonts: TFontDictionary): void;
+  setFonts(fonts: TFontDictionary): void;
   createPdf(definition: TDocumentDefinitions): { getBlob(): Promise<Blob> };
+  virtualfs?: { storage?: Record<string, unknown> };
 }
 
 let runtimePromise: Promise<PdfMakeRuntime> | undefined;
+let fontInstall: Promise<void> = Promise.resolve();
+const sourceFonts = new Map<string, Promise<Uint8Array>>();
 
 function toBase64(bytes: Uint8Array): string {
   let binary = '';
@@ -23,40 +29,63 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-async function fetchFont(url: string): Promise<string> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`中文字体加载失败（HTTP ${response.status}），请检查网络或稍后重试。`);
-  return toBase64(new Uint8Array(await response.arrayBuffer()));
+async function fetchFontBytes(url: string): Promise<Uint8Array> {
+  const cached = sourceFonts.get(url);
+  if (cached) return cached;
+  const pending = fetch(url).then(async (response) => {
+    if (!response.ok) throw new Error(`中文字体加载失败（HTTP ${response.status}），请检查网络或稍后重试。`);
+    return new Uint8Array(await response.arrayBuffer());
+  }).catch((error) => {
+    sourceFonts.delete(url);
+    throw error;
+  });
+  sourceFonts.set(url, pending);
+  return pending;
 }
 
 async function loadPdfMake(): Promise<PdfMakeRuntime> {
   if (!runtimePromise) {
-    runtimePromise = (async () => {
-      const [module, regularFont, boldFont] = await Promise.all([
-        import('pdfmake/build/pdfmake'),
-        fetchFont(notoSansScRegularUrl),
-        fetchFont(notoSansScBoldUrl),
-      ]);
+    runtimePromise = import('pdfmake/build/pdfmake').then((module) => {
       const loaded = module as unknown as { default?: PdfMakeRuntime } & PdfMakeRuntime;
-      const pdfMake = loaded.default ?? loaded;
-      const regularFile = 'NotoSansSC-Regular.otf';
-      const boldFile = 'NotoSansSC-Bold.otf';
-      pdfMake.addVirtualFileSystem({ [regularFile]: regularFont, [boldFile]: boldFont });
-      pdfMake.addFonts({
-        NotoSansSC: {
-          normal: regularFile,
-          bold: boldFile,
-          italics: regularFile,
-          bolditalics: boldFile,
-        },
-      });
-      return pdfMake;
-    })().catch((error) => {
+      return loaded.default ?? loaded;
+    }).catch((error) => {
       runtimePromise = undefined;
       throw error;
     });
   }
   return runtimePromise;
+}
+
+async function withSubsetFonts(pdfMake: PdfMakeRuntime, data: ResumeData, create: () => Promise<Blob>): Promise<Blob> {
+  const previous = fontInstall;
+  let release!: () => void;
+  fontInstall = new Promise<void>((resolve) => { release = resolve; });
+  await previous;
+  const regularFile = 'NotoSansSC-Regular.subset.otf';
+  const boldFile = 'NotoSansSC-Bold.subset.otf';
+  try {
+    const characters = collectResumeCharacters(data);
+    const [regular, bold] = await Promise.all([
+      fetchFontBytes(notoSansScRegularUrl).then((bytes) => subsetOpenTypeFont(bytes, characters)),
+      fetchFontBytes(notoSansScBoldUrl).then((bytes) => subsetOpenTypeFont(bytes, characters)),
+    ]);
+    pdfMake.addVirtualFileSystem({
+      [regularFile]: toBase64(regular),
+      [boldFile]: toBase64(bold),
+    });
+    pdfMake.setFonts({
+      NotoSansSC: { normal: regularFile, bold: boldFile, italics: regularFile, bolditalics: boldFile },
+    });
+    return await create();
+  } finally {
+    pdfMake.setFonts({});
+    const storage = pdfMake.virtualfs?.storage;
+    if (storage) {
+      delete storage[regularFile];
+      delete storage[boldFile];
+    }
+    release();
+  }
 }
 
 export function sanitizePdfFilename(filename: string): string {
@@ -137,6 +166,8 @@ export async function exportPreviewToPDF(selector = '.resume-canvas', filename =
         }
         ancestor = ancestor.parentElement;
       }
+      // html2canvas cannot parse oklch()/oklab()/color() and throws on them.
+      prepareResumeCapture(clonedDocument, clonedElement);
     },
   });
 
@@ -177,7 +208,7 @@ export async function exportPreviewToPDF(selector = '.resume-canvas', filename =
 export async function createResumePdfBlob(data: ResumeData): Promise<Blob> {
   const [pdfMake, avatar] = await Promise.all([loadPdfMake(), resolveResumeAvatar(data.basic.avatar)]);
   const definition = createResumePdfDefinition(data, avatar);
-  return pdfMake.createPdf(definition).getBlob();
+  return withSubsetFonts(pdfMake, data, () => pdfMake.createPdf(definition).getBlob());
 }
 
 export async function exportToPDF(data: ResumeData, filename = 'resume'): Promise<void> {

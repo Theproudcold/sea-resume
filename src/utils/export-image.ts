@@ -1,4 +1,5 @@
 import { zipSync } from 'fflate';
+import { prepareResumeCapture } from './capture-colors';
 
 const A4_WIDTH_MM = 210;
 const A4_HEIGHT_MM = 297;
@@ -92,6 +93,10 @@ export async function exportToImage(
       logging: false,
       backgroundColor: format === 'jpeg' ? '#ffffff' : null,
       ignoreElements: (candidate) => candidate.classList.contains('no-print'),
+      onclone: (clonedDocument, clonedElement) => {
+        // html2canvas cannot parse oklch()/oklab()/color() and throws on them.
+        prepareResumeCapture(clonedDocument, clonedElement);
+      },
     });
 
     const pages = getA4ImagePageSlices(canvas.width, canvas.height);

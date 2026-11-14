@@ -74,11 +74,13 @@ function createHeader(data: ResumeData, layout: PdfTemplateLayout, avatar?: stri
 }
 
 function createSectionHeading(section: PdfResumeSection, layout: PdfTemplateLayout, topMargin: number): Content {
+  const ruled = layout.variant !== 'creative' && layout.variant !== 'tech';
   return {
     text: section.title,
     style: 'sectionHeader',
-    color: layout.accent,
+    color: ruled ? layout.ink : layout.accent,
     margin: [0, topMargin, 0, 5],
+    ...(ruled ? { decoration: 'underline' as const, decorationColor: layout.accent, decorationStyle: 'solid' as const } : {}),
   };
 }
 

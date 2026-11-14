@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { joinPdfTextItems, parseAiPdfMarkdownResponse, validatePdfFileMetadata, requestAiPdfMarkdown } from '../pdfResumeImport';
+import {
+  parseAiPdfMarkdownResponse,
+  positionedItems,
+  requestAiPdfMarkdown,
+  requestAiPdfMarkdownFromImages,
+  validatePdfFileMetadata,
+} from '../pdfResumeImport';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('AI PDF resume import helpers', () => {
@@ -7,11 +13,6 @@ describe('AI PDF resume import helpers', () => {
     expect(() => validatePdfFileMetadata({ name: 'resume.pdf', size: 1024 })).not.toThrow();
     expect(() => validatePdfFileMetadata({ name: 'resume.txt', size: 1024 })).toThrow('PDF');
     expect(() => validatePdfFileMetadata({ name: 'resume.pdf', size: 16 * 1024 * 1024 })).toThrow('15 MB');
-  });
-
-  it('joins PDF text items and preserves line breaks', () => {
-    expect(joinPdfTextItems([{ str: '姓名：林晓', hasEOL: true }, { str: '邮箱: lin@example.com', hasEOL: false }]))
-      .toBe('姓名：林晓\n邮箱: lin@example.com');
   });
 
   it('accepts only bounded JSON Markdown results', () => {
@@ -30,5 +31,44 @@ describe('AI PDF resume import helpers', () => {
     expect(JSON.parse(fetcher.mock.calls[0]![1].body).response_format).toBeUndefined();
     await expect(requestAiPdfMarkdown({ ...local, baseUrl: 'https://remote.example/v1' }, 'resume.pdf', 'text')).rejects.toThrow('loopback');
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends the exact Markdown contract the parser expects', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: '{"markdown":"# A"}' } }] })));
+    vi.stubGlobal('fetch', fetcher);
+    await requestAiPdfMarkdown({ baseUrl: 'https://api.example.com/v1', model: 'gpt-4o-mini', apiKey: 'k', authMode: 'bearer' }, 'resume.pdf', '文本');
+    const body = JSON.parse(fetcher.mock.calls[0]![1].body);
+    const system = body.messages[0].content as string;
+    expect(system).toContain('## 工作经历');
+    expect(system).toContain('### <公司> | <职位> | <YYYY-MM> — <YYYY-MM 或 至今>');
+    expect(system).toContain('## 教育背景');
+    expect(system).toContain('不要编造');
+    expect(system).toContain('不要并进工作经历或项目经历');
+    expect(system).not.toContain('可量化');
+    expect(body.temperature).toBe(0.1);
+  });
+
+  it('sends page images as image_url parts only when the user chose vision mode', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: '{"markdown":"# B"}' } }] })));
+    vi.stubGlobal('fetch', fetcher);
+    const config = { baseUrl: 'https://api.example.com/v1', model: 'gpt-4o', apiKey: 'k', authMode: 'bearer' as const };
+    const images = ['data:image/jpeg;base64,AAAA', 'data:image/jpeg;base64,BBBB'];
+    await expect(requestAiPdfMarkdownFromImages(config, 'resume.pdf', images)).resolves.toMatchObject({ markdown: '# B' });
+    const parts = JSON.parse(fetcher.mock.calls[0]![1].body).messages[1].content as Array<Record<string, unknown>>;
+    expect(parts[0]).toMatchObject({ type: 'text' });
+    expect(parts.slice(1)).toEqual(images.map((url) => ({ type: 'image_url', image_url: { url } })));
+    await expect(requestAiPdfMarkdownFromImages(config, 'resume.pdf', [])).rejects.toThrow('没有可发送的页面图片');
+  });
+
+  it('converts pdf text items into top-down layout coordinates', () => {
+    // viewport 会把 PDF 左下原点翻转到左上原点，否则阅读顺序会上下颠倒。
+    const items = positionedItems(
+      [{ str: '于海波', transform: [1, 0, 0, 1, 10, 20], width: 30, height: 12 }],
+      [2, 0, 0, -2, 0, 800],
+    );
+    expect(items).toEqual([{ text: '于海波', x: 20, y: 760, width: 60, height: 24 }]);
+    expect(positionedItems([{ str: '' }, { str: 'x', transform: 'bad' }], [1, 0, 0, 1, 0, 0])).toEqual([
+      { text: 'x', x: 0, y: 0, width: 0, height: 0 },
+    ]);
   });
 });

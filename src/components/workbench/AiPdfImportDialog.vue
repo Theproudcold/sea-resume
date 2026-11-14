@@ -8,19 +8,23 @@
     @update:model-value="emit('update:modelValue', $event)"
   >
     <ol class="import-steps" aria-label="导入步骤">
-      <li :class="{ 'is-current': !extracted }" :aria-current="!extracted ? 'step' : undefined"><b>1</b>选择 PDF</li>
-      <li :class="{ 'is-current': !!extracted && !parsed }" :aria-current="extracted && !parsed ? 'step' : undefined"><b>2</b>发送前确认</li>
+      <li :class="{ 'is-current': !hasSource }" :aria-current="!hasSource ? 'step' : undefined"><b>1</b>选择 PDF</li>
+      <li :class="{ 'is-current': hasSource && !parsed }" :aria-current="hasSource && !parsed ? 'step' : undefined"><b>2</b>发送前确认</li>
       <li :class="{ 'is-current': !!parsed }" :aria-current="parsed ? 'step' : undefined"><b>3</b>AI 解析预览</li>
     </ol>
 
-    <div v-if="!extracted" class="pdf-dropzone" :class="{ 'is-dragging': isDragging }"
+    <div v-if="!hasSource" class="pdf-dropzone" :class="{ 'is-dragging': isDragging }"
       @dragover.prevent="isDragging = true"
       @dragleave.prevent="isDragging = false"
       @drop.prevent="handleDrop"
     >
       <el-icon class="pdf-dropzone-icon" :size="38"><UploadFilled /></el-icon>
-      <h3>选择可复制文本的 PDF 简历</h3>
-      <p>PDF 最大 15 MB、最多 30 页。文本会先在浏览器本地提取；扫描图片 PDF 暂不支持 OCR。</p>
+      <h3>{{ mode === 'vision' ? '选择 PDF，由多模态模型读取页面' : '选择可复制文本的 PDF 简历' }}</h3>
+      <el-radio-group v-model="mode" class="pdf-mode-group" :disabled="extracting" aria-label="识别方式">
+        <el-radio-button value="text">文本提取</el-radio-button>
+        <el-radio-button value="vision">视觉识别</el-radio-button>
+      </el-radio-group>
+      <p>{{ modeDescription }}</p>
       <el-button type="primary" :loading="extracting" @click="fileInput?.click()">选择 PDF 文件</el-button>
       <input ref="fileInput" class="visually-hidden" type="file" accept="application/pdf,.pdf" @change="handleFileChange" />
     </div>
@@ -28,16 +32,34 @@
     <template v-else-if="!parsed">
       <div class="pdf-file-summary">
         <strong>{{ fileName }}</strong>
-        <span class="pdf-page-count">{{ extracted.pageCount }} 页</span>
-        <el-tag type="success" effect="plain">本地提取完成</el-tag>
+        <span class="pdf-page-count">{{ pageCount }} 页</span>
+        <el-tag :type="mode === 'text' ? 'success' : 'warning'" effect="plain">
+          {{ mode === 'text' ? '本地提取完成' : '页面图片已在本机就绪' }}
+        </el-tag>
+        <el-button text size="small" :disabled="requesting || extracting" @click="toggleMode">
+          改用{{ mode === 'text' ? '视觉识别' : '文本提取' }}
+        </el-button>
       </div>
-      <details class="text-preview">
-        <summary>查看本地提取的文本（仅预览前 4,000 字符）</summary>
-        <pre>{{ extracted.text.slice(0, 4000) }}<span v-if="extracted.text.length > 4000">…</span></pre>
-      </details>
+      <template v-if="mode === 'text'">
+        <details class="text-preview">
+          <summary>查看本地提取的文本（仅预览前 4,000 字符）</summary>
+          <pre>{{ extracted?.text.slice(0, 4000) }}<span v-if="(extracted?.text.length ?? 0) > 4000">…</span></pre>
+        </details>
+        <el-alert v-if="extracted?.columnPages" class="column-hint" type="info" :closable="false" show-icon
+          :title="`检测到 ${extracted.columnPages} 页为分栏排版，已按栏还原阅读顺序；若结果仍错乱，可改用视觉识别。`" />
+      </template>
+      <template v-else>
+        <div class="page-thumbnails" aria-label="待发送的页面图片">
+          <img v-for="(image, index) in rendered?.images ?? []" :key="index" :src="image" :alt="`第 ${index + 1} 页`" />
+        </div>
+        <p v-if="rendered && rendered.renderedPages < rendered.pageCount" class="pdf-model-note">
+          视觉识别单次最多 {{ rendered.renderedPages }} 页，本次只发送前 {{ rendered.renderedPages }} 页；其余页请拆分后单独导入。
+        </p>
+      </template>
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>发送前请确认</template>
-        <p>PDF 文件未上传；只有提取出的文本和文件名会在你点击解析并明确勾选后发送给配置的 AI 服务。API Key 仅保存在本次会话内存。</p>
+        <p v-if="mode === 'text'">PDF 文件未上传；只有提取出的文本和文件名会在你点击解析并明确勾选后发送给配置的 AI 服务。API Key 默认仅在本次会话内存，可在配置中选择记住到本机。</p>
+        <p v-else>PDF 文件本身不上传，但在本机渲染出的页面图片会随请求发送给配置的 AI 服务。图片包含页面上的全部可见内容（照片、证件号等一概在内），发送前请自行确认。</p>
       </el-alert>
       <div class="pdf-provider-card">
         <div class="pdf-provider-summary">
@@ -50,9 +72,13 @@
         </el-button>
       </div>
       <AiProviderSettingsPanel v-if="showModelSettings" @saved="refreshAiConfiguration" />
-      <p class="pdf-model-note">服务商与模型设置会和 AI 助手共用；API Key 只保存在当前页面会话。</p>
-      <el-checkbox v-model="consent" class="consent-check">我确认将 PDF 提取文本发送给上方 AI 服务用于本次解析。</el-checkbox>
-      <el-button :type="showModelSettings ? 'default' : 'primary'" class="parse-button" :loading="requesting" :disabled="!canRequest" @click="parseWithAi">发送文本并解析简历</el-button>
+      <p class="pdf-model-note">服务商与模型设置会和 AI 助手共用，只需配置一次；API Key 默认仅在当前页面会话。视觉识别需要使用支持图片输入的多模态模型。</p>
+      <el-checkbox v-model="consent" class="consent-check">
+        {{ mode === 'text' ? '我确认将 PDF 提取文本发送给上方 AI 服务用于本次解析。' : '我确认将 PDF 页面图片发送给上方 AI 服务用于本次解析。' }}
+      </el-checkbox>
+      <el-button :type="showModelSettings ? 'default' : 'primary'" class="parse-button" :loading="requesting" :disabled="!canRequest" @click="parseWithAi">
+        {{ mode === 'text' ? '发送文本并解析简历' : '发送页面图片并解析简历' }}
+      </el-button>
     </template>
 
     <template v-else-if="parsed && draftResume">
@@ -62,10 +88,11 @@
           <p>{{ draftResume.basic.title || '未识别求职意向' }}</p>
         </div>
         <div class="pdf-result-meta">
-          <span class="pdf-page-count">{{ extracted?.pageCount }} 页 PDF</span>
+          <span class="pdf-page-count">{{ pageCount }} 页 PDF</span>
           <el-tag type="success" effect="plain">确认后创建新简历</el-tag>
         </div>
       </div>
+      <p class="pdf-model-note">识别方式：{{ mode === 'text' ? '文本提取（未上传图片）' : '视觉识别（上传了页面图片）' }}</p>
       <div class="summary-grid">
         <span>工作 {{ draftResume.experiences.length }} 项</span>
         <span>项目 {{ draftResume.projects.length }} 项</span>
@@ -176,10 +203,12 @@
       </el-form>
     </template>
 
-    <el-alert v-if="errorMessage" class="error-alert" type="error" :closable="false" show-icon :title="errorMessage" />
+    <el-alert v-if="errorMessage" class="error-alert" type="error" :closable="false" show-icon :title="errorMessage">
+      <el-button v-if="mode === 'text' && selectedFile" size="small" :loading="extracting" @click="toggleMode">改用视觉识别</el-button>
+    </el-alert>
     <template #footer>
       <div class="app-dialog-actions">
-        <el-button v-if="extracted" @click="reset">重新选择 PDF</el-button>
+        <el-button v-if="hasSource" @click="reset">重新选择 PDF</el-button>
         <el-button @click="emit('update:modelValue', false)">取消</el-button>
         <el-button v-if="parsed" type="primary" :loading="loading" :disabled="!title.trim()" @click="confirmImport">确认并创建新简历</el-button>
       </div>
@@ -194,7 +223,7 @@ import type { ResumeData } from '@/types/resume';
 import type { MarkdownImportResult } from '@/types/markdown-import';
 import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
-import { extractPdfText, requestAiPdfMarkdown, type ExtractedPdfText } from '@/services/ai/pdfResumeImport';
+import { extractPdfText, renderPdfPagesToImages, requestAiPdfMarkdown, requestAiPdfMarkdownFromImages, MAX_VISION_PAGES, type ExtractedPdfText, type PdfImportMode, type RenderedPdfPages } from '@/services/ai/pdfResumeImport';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { markdownToSafeHtml } from '@/utils/markdown/markdownSafety';
 
@@ -209,7 +238,10 @@ const sessionKeyAvailable = ref(isAiProviderReady(modelSettings.value));
 const showModelSettings = ref(false);
 const fileName = ref('');
 const fileInput = ref<HTMLInputElement>();
+const mode = ref<PdfImportMode>('text');
+const selectedFile = ref<File | null>(null);
 const extracted = ref<ExtractedPdfText | null>(null);
+const rendered = ref<RenderedPdfPages | null>(null);
 const parsed = ref<MarkdownImportResult | null>(null);
 const draftResume = ref<ResumeData | null>(null);
 const title = ref('');
@@ -221,7 +253,13 @@ const requesting = ref(false);
 const isDragging = ref(false);
 const errorMessage = ref('');
 const isModelReady = computed(() => sessionKeyAvailable.value);
-const canRequest = computed(() => isModelReady.value && consent.value && !requesting.value);
+const hasSource = computed(() => extracted.value !== null || rendered.value !== null);
+const pageCount = computed(() => extracted.value?.pageCount ?? rendered.value?.pageCount ?? 0);
+const canRequest = computed(() => isModelReady.value && consent.value && !requesting.value
+  && (mode.value === 'text' ? !!extracted.value : !!rendered.value?.images.length));
+const modeDescription = computed(() => mode.value === 'text'
+  ? 'PDF 最大 15 MB、最多 30 页。文本在浏览器本地按版面提取，不上传图片；扫描图片版请切换到视觉识别。'
+  : `PDF 最大 15 MB、最多 30 页。页面在本机渲染成图片后发送给多模态模型（如 gpt-4o、qwen-vl-max、qwen2.5-vl、llava），扫描件与复杂排版也能识别；单次最多 ${MAX_VISION_PAGES} 页。`);
 const providerLabel = computed(() => modelSettings.value?.profileName || AI_PROVIDER_PRESETS.find((preset) => preset.id === modelSettings.value?.presetId)?.label || '未配置');
 
 function refreshAiConfiguration() {
@@ -237,6 +275,8 @@ watch(() => props.modelValue, (visible) => {
 
 function reset() {
   extracted.value = null;
+  rendered.value = null;
+  selectedFile.value = null;
   parsed.value = null;
   draftResume.value = null;
   fileName.value = '';
@@ -248,23 +288,45 @@ function reset() {
   if (fileInput.value) fileInput.value.value = '';
 }
 
-async function readFile(file?: File) {
-  errorMessage.value = '';
+/** 按当前识别方式在本地准备输入：文本提取或页面图片渲染。 */
+async function loadSource() {
+  const file = selectedFile.value;
   if (!file) return;
   extracting.value = true;
+  errorMessage.value = '';
   try {
-    const result = await extractPdfText(file);
-    extracted.value = result;
+    if (mode.value === 'text') {
+      extracted.value = await extractPdfText(file);
+      rendered.value = null;
+    } else {
+      rendered.value = await renderPdfPagesToImages(file);
+      extracted.value = null;
+    }
     fileName.value = file.name;
     parsed.value = null;
     draftResume.value = null;
+    consent.value = false;
     refreshAiConfiguration();
     showModelSettings.value = !isModelReady.value;
   } catch (error) {
+    extracted.value = null;
+    rendered.value = null;
     errorMessage.value = error instanceof Error ? error.message : 'PDF 读取失败。';
   } finally {
     extracting.value = false;
   }
+}
+
+async function toggleMode() {
+  mode.value = mode.value === 'text' ? 'vision' : 'text';
+  await loadSource();
+}
+
+async function readFile(file?: File) {
+  errorMessage.value = '';
+  if (!file) return;
+  selectedFile.value = file;
+  await loadSource();
 }
 
 function handleFileChange(event: Event) {
@@ -277,11 +339,14 @@ function handleDrop(event: DragEvent) {
 }
 
 async function parseWithAi() {
-  if (!canRequest.value || !extracted.value || !modelSettings.value) return;
+  if (!canRequest.value || !modelSettings.value) return;
   requesting.value = true;
   errorMessage.value = '';
   try {
-    const result = await requestAiPdfMarkdown(toAiProviderConfig(modelSettings.value), fileName.value, extracted.value.text);
+    const config = toAiProviderConfig(modelSettings.value);
+    const result = mode.value === 'text'
+      ? await requestAiPdfMarkdown(config, fileName.value, extracted.value?.text ?? '')
+      : await requestAiPdfMarkdownFromImages(config, fileName.value, rendered.value?.images ?? []);
     const imported = parseResumeMarkdown(result.markdown, fileName.value.replace(/\.pdf$/i, '.md'));
     parsed.value = imported;
     draftResume.value = JSON.parse(JSON.stringify(imported.resume)) as ResumeData;
@@ -338,6 +403,10 @@ function confirmImport() {
 .pdf-dropzone-icon { color: var(--color-accent); }
 .pdf-dropzone h3 { margin: var(--space-2xs) 0; color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; }
 .pdf-dropzone p { max-width: 46ch; margin: 0 0 var(--space-xs); color: var(--color-muted); font-family: var(--font-body); font-size: var(--text-md); line-height: var(--ui-line-height); }
+.pdf-mode-group { margin: var(--space-2xs) 0; }
+.column-hint { margin-bottom: var(--space-sm); }
+.page-thumbnails { display: flex; gap: var(--space-2xs); margin: var(--space-sm) 0; padding-bottom: var(--space-2xs); overflow-x: auto; }
+.page-thumbnails img { flex: 0 0 auto; width: 96px; border: var(--rule-hair) solid var(--color-rule-2); border-radius: var(--radius-s); background: var(--color-paper); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 .pdf-file-summary { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-xs) var(--space-sm); margin-bottom: var(--space-sm); padding-bottom: var(--space-sm); border-bottom: var(--rule-hair) solid var(--color-rule); }

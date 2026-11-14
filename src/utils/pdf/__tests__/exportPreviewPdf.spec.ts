@@ -65,6 +65,7 @@ describe('preview-faithful PDF export', () => {
     clippingWrapper.style.overflow = 'auto';
     clippingWrapper.style.height = '500px';
     const clonedPreview = preview.cloneNode(true) as HTMLElement;
+    clonedPreview.style.setProperty('color', 'oklch(0.5 0 0)');
     clippingWrapper.appendChild(clonedPreview);
     const options = mocks.html2canvas.mock.calls[0]?.[1] as {
       onclone: (clonedDocument: Document, clonedElement: HTMLElement) => void;
@@ -72,6 +73,8 @@ describe('preview-faithful PDF export', () => {
     options.onclone(document, clonedPreview);
     expect(clippingWrapper.style.overflow).toBe('visible');
     expect(clippingWrapper.style.height).toBe('auto');
+    // html2canvas cannot parse oklch(), so onclone must leave only rgb()/rgba() colors.
+    expect(clonedPreview.style.getPropertyValue('color')).toBe('rgb(99, 99, 99)');
     expect(preview.parentElement).toBe(document.body);
     expect(mocks.html2canvas).toHaveBeenCalledOnce();
     expect(mocks.html2canvas.mock.calls[0]?.[0]).toBe(preview);

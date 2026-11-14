@@ -6,6 +6,6 @@ export const minimalPdfLayout: PdfTemplateLayout = {
   accent: '#394150',
   ink: '#242932',
   muted: '#69717d',
-  pageMargin: 44,
+  pageMargin: 42,
   compact: true,
 };

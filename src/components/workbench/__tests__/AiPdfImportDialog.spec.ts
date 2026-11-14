@@ -1,4 +1,4 @@
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, inject, provide } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MarkdownImportResult } from '@/types/markdown-import';
@@ -9,12 +9,17 @@ import { clearAiModelSettings, clearAiSessionApiKey, saveAiModelSettings, setAiS
 const mocks = vi.hoisted(() => ({
   extractPdfText: vi.fn(),
   requestAiPdfMarkdown: vi.fn(),
+  renderPdfPagesToImages: vi.fn(),
+  requestAiPdfMarkdownFromImages: vi.fn(),
   parseResumeMarkdown: vi.fn(),
 }));
 
 vi.mock('@/services/ai/pdfResumeImport', () => ({
+  MAX_VISION_PAGES: 12,
   extractPdfText: mocks.extractPdfText,
   requestAiPdfMarkdown: mocks.requestAiPdfMarkdown,
+  renderPdfPagesToImages: mocks.renderPdfPagesToImages,
+  requestAiPdfMarkdownFromImages: mocks.requestAiPdfMarkdownFromImages,
 }));
 vi.mock('@/utils/markdown/parseResumeMarkdown', () => ({ parseResumeMarkdown: mocks.parseResumeMarkdown }));
 
@@ -91,6 +96,23 @@ const AlertStub = defineComponent({
   },
 });
 
+const radioSelectKey = Symbol('radio-select');
+const RadioGroupStub = defineComponent({
+  props: { modelValue: { type: String, default: '' } },
+  emits: ['update:modelValue'],
+  setup(props, { emit, slots }) {
+    provide(radioSelectKey, (value: string) => emit('update:modelValue', value));
+    return () => h('div', { class: 'radio-group' }, slots.default?.());
+  },
+});
+const RadioButtonStub = defineComponent({
+  props: { value: { type: String, default: '' }, disabled: Boolean },
+  setup(props, { slots }) {
+    const select = inject<(value: string) => void>(radioSelectKey, () => undefined);
+    return () => h('button', { type: 'button', 'data-value': props.value, onClick: () => select(props.value) }, slots.default?.());
+  },
+});
+
 const stubs = {
   ElDialog: DialogStub,
   ElInput: InputStub,
@@ -102,6 +124,8 @@ const stubs = {
   ElTag: { template: '<span><slot /></span>' },
   ElSelect: { template: '<select><slot /></select>' },
   ElOption: { template: '<option><slot /></option>' },
+  ElRadioGroup: RadioGroupStub,
+  ElRadioButton: RadioButtonStub,
   ElIcon: true,
 };
 
@@ -142,8 +166,17 @@ beforeEach(() => {
   setAiSessionApiKey('test-api-key');
   mocks.extractPdfText.mockResolvedValue({ text: 'Locally extracted resume text', pageCount: 1 });
   mocks.requestAiPdfMarkdown.mockResolvedValue({ markdown: '# Resume', explanation: 'Check the extracted details.' });
+  mocks.renderPdfPagesToImages.mockResolvedValue({ pageCount: 2, renderedPages: 2, images: ['data:image/jpeg;base64,AAA', 'data:image/jpeg;base64,BBB'] });
+  mocks.requestAiPdfMarkdownFromImages.mockResolvedValue({ markdown: '# Scan', explanation: '来自页面图片。' });
   mocks.parseResumeMarkdown.mockReturnValue(importedResult);
 });
+
+async function switchToVision(wrapper: ReturnType<typeof createWrapper>) {
+  const visionButton = wrapper.findAll('button').find((button) => button.attributes('data-value') === 'vision');
+  if (!visionButton) throw new Error('Missing vision mode button');
+  await visionButton.trigger('click');
+  await flushPromises();
+}
 
 describe('AiPdfImportDialog', () => {
   it('emits corrected basic and section fields in the confirm payload', async () => {
@@ -212,5 +245,45 @@ describe('AiPdfImportDialog', () => {
     saveAiModelSettings({ presetId: 'ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3', authMode: 'none', jsonMode: false, timeoutMs: 180000 });
     const wrapper = createWrapper(); await parseWithConsent(wrapper);
     expect(mocks.requestAiPdfMarkdown).toHaveBeenCalledWith(expect.objectContaining({ baseUrl: 'http://localhost:11434/v1', apiKey: '', authMode: 'none', jsonMode: false, timeoutMs: 180000 }), 'candidate.pdf', 'Locally extracted resume text');
+  });
+
+  it('renders page images and sends them only in vision mode', async () => {
+    const wrapper = createWrapper();
+    await switchToVision(wrapper);
+    await extractPdf(wrapper);
+
+    expect(mocks.extractPdfText).not.toHaveBeenCalled();
+    expect(mocks.renderPdfPagesToImages).toHaveBeenCalledTimes(1);
+    expect(wrapper.text()).toContain('页面图片已在本机就绪');
+    expect(wrapper.findAll('.page-thumbnails img')).toHaveLength(2);
+    expect(wrapper.text()).toContain('页面图片会随请求发送');
+
+    await wrapper.find('input[type="checkbox"]').setValue(true);
+    const parseButton = wrapper.findAll('button').find((button) => button.text().includes('发送页面图片并解析简历'));
+    await parseButton?.trigger('click');
+    await flushPromises();
+
+    expect(mocks.requestAiPdfMarkdown).not.toHaveBeenCalled();
+    expect(mocks.requestAiPdfMarkdownFromImages).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'deepseek-chat' }),
+      'candidate.pdf',
+      ['data:image/jpeg;base64,AAA', 'data:image/jpeg;base64,BBB'],
+    );
+    expect(wrapper.text()).toContain('视觉识别（上传了页面图片）');
+  });
+
+  it('offers the vision fallback when a PDF has no selectable text', async () => {
+    mocks.extractPdfText.mockRejectedValue(new Error('未能从 PDF 中提取到可选择文本。扫描图片版请改用「视觉识别」。'));
+    const wrapper = createWrapper();
+    await extractPdf(wrapper);
+
+    expect(wrapper.text()).toContain('未能从 PDF 中提取到可选择文本');
+    const fallback = wrapper.findAll('button').find((button) => button.text().includes('改用视觉识别'));
+    await fallback?.trigger('click');
+    await flushPromises();
+
+    expect(mocks.renderPdfPagesToImages).toHaveBeenCalledTimes(1);
+    expect(wrapper.findAll('.page-thumbnails img')).toHaveLength(2);
+    expect(wrapper.text()).not.toContain('未能从 PDF 中提取到可选择文本');
   });
 });
