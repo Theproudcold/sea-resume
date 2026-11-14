@@ -86,6 +86,7 @@ describe('interview orchestration with mocked JSON transport', () => {
     const store = await start(); await store.submitAnswer(' \n '); expect(store.currentTurn!.submittedAt).toBeUndefined();
     await store.submitAnswer('', true); expect(store.currentTurn!.skipped).toBe(true);
     client.mockResolvedValueOnce({ action: 'followup', question }); await store.continueInterview();
+    expect(client.mock.calls[client.mock.calls.length - 1]![1]).toContain('当前不能追问');
     expect(store.session!.status).toBe('failed'); expect(store.session!.turns).toHaveLength(1);
     expect(store.currentTurn!.answer).toBe('');
   });

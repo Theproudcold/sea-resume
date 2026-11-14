@@ -134,7 +134,10 @@ export async function nextInterviewQuestion(config: AiProviderConfig, session: I
     `allowed.followupAllowed=${followupAllowed}，allowed.mainAllowed=${mainAllowed}。这两个值以数据为准，不要自行放宽。`,
     'mainAllowed 为 true 时禁止 finish；followupAllowed 为 false 时禁止 followup。只有两个都是 false 才允许 finish，且 finish 时 question 必须是 null。',
     'followup 必须咬住上一题回答原文里的缺口，不能换成新主题。',
-    `返回 {"action":"followup","question":${questionShape}}。action 为 finish 时 question 写 null。`,
+    followupAllowed
+      ? `可以追问时返回 {"action":"followup","question":${questionShape}}，改问下一主题时 action 用 main。`
+      : `当前不能追问，返回 {"action":"main","question":${questionShape}}。`,
+    'action 为 finish 时 question 写 null。',
   ].join('\n');
   const raw = await requestAiJson(config, prompt, { ...interviewerData(session), allowed: { followupAllowed, mainAllowed } }, { ...options, temperature: 0.4 });
   const obj = record(raw, ['action', 'question']);
