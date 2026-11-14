@@ -158,7 +158,7 @@ describe('MCP business tools', () => {
     expect(codex).not.toContain('npm ci');
     const claude = relaySetupCommand('claude', origin, baseUrl, 'powershell');
     expect(claude).toContain('Invoke-WebRequest -UseBasicParsing');
-    expect(claude).toContain('; claude mcp add --transport stdio sea-resume -- node "$HOME\\.sea-resume-ai-relay\\relay.mjs"');
+    expect(claude).toContain('; if (-not $?) { exit 1 }; claude mcp add --transport stdio sea-resume -- node "$HOME\\.sea-resume-ai-relay\\relay.mjs"');
     expect(claude).not.toContain('&&');
     const prompt = relayAgentPrompt('codex', origin, baseUrl);
     expect(prompt).toContain(codex);

@@ -59,8 +59,9 @@ export function relaySetupCommand(client: RelayClient, origin: string, baseUrl: 
     ? `claude mcp add --transport stdio sea-resume -- node ${LAUNCHER_FILE[shell]}`
     : `codex mcp add sea-resume -- node ${LAUNCHER_FILE[shell]}`;
   const args = relayServerFlags(origin).join(' ');
-  // Windows PowerShell 5.1 还没有 &&，统一用 ; 分隔。
-  return `${relaySyncCommand(origin, baseUrl, shell)}${shell === 'posix' ? ' && ' : '; '}${register} ${args}`;
+  // PowerShell 5.1 没有 &&；下载失败时退出，避免继续注册缺失文件。
+  const separator = shell === 'posix' ? ' && ' : '; if (-not $?) { exit 1 }; ';
+  return `${relaySyncCommand(origin, baseUrl, shell)}${separator}${register} ${args}`;
 }
 /** 可直接粘给 Codex CLI / Claude Code 对话的一句话：让 AI 自己完成接入。 */
 export function relayAgentPrompt(client: RelayClient, origin: string, baseUrl: string, shell: RelayShell = 'posix'): string {
