@@ -54,10 +54,16 @@ describe('custom template repository', () => {
     expect(listCustomTemplates().map((item) => item.id)).toEqual(['two']);
   });
 
-  it('keeps valid templates when stored data contains a broken record', () => {
+  it('refuses to rewrite storage when one stored template is broken', () => {
     const valid = buildCustomTemplateFromResume(resume, { name: '可用模板' }, { id: 'valid', now: 10 });
-    localStorage.setItem('sea-resume_custom-templates', JSON.stringify([valid, { id: 'broken' }]));
+    const stored = JSON.stringify([valid, { id: 'broken' }]);
+    localStorage.setItem('sea-resume_custom-templates', stored);
+    const replacement = buildCustomTemplateFromResume(resume, { name: '新模板' }, { id: 'next', now: 20 });
 
-    expect(listCustomTemplates().map((item) => item.id)).toEqual(['valid']);
+    expect(() => listCustomTemplates()).toThrow('未继续写入');
+    expect(() => saveCustomTemplate(replacement)).toThrow('未继续写入');
+    expect(() => renameCustomTemplate('valid', '改名', 30)).toThrow('未继续写入');
+    expect(() => deleteCustomTemplate('valid')).toThrow('未继续写入');
+    expect(localStorage.getItem('sea-resume_custom-templates')).toBe(stored);
   });
 });

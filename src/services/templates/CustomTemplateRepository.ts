@@ -33,26 +33,23 @@ function normalizeStored(template: CustomResumeTemplate): CustomResumeTemplate {
   };
 }
 
-function readRaw(): unknown {
+function readStoredTemplates(): CustomResumeTemplate[] {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
+  let parsed: unknown;
   try {
-    return JSON.parse(raw) as unknown;
+    parsed = JSON.parse(raw) as unknown;
   } catch {
     throw new Error('自定义模板数据已损坏，未继续写入。');
   }
+  if (!Array.isArray(parsed) || parsed.some((item) => !isStoredTemplate(item))) {
+    throw new Error('自定义模板数据已损坏，未继续写入。');
+  }
+  return parsed.map(normalizeStored).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export function listCustomTemplates(): CustomResumeTemplate[] {
-  const parsed = readRaw();
-  if (!Array.isArray(parsed)) {
-    throw new Error('自定义模板数据已损坏，未继续写入。');
-  }
-
-  return parsed
-    .filter(isStoredTemplate)
-    .map(normalizeStored)
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+  return readStoredTemplates();
 }
 
 function persist(templates: CustomResumeTemplate[]): void {
