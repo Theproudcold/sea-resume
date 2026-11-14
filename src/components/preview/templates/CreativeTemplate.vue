@@ -90,7 +90,7 @@
             <div v-else-if="section === 'projects' && data.projects.some(project => project.visible !== false)" class="card">
               <h2 class="card-header card-title">{{ data.sectionTitles?.projects || '项目经验' }}</h2>
               <div class="space-y-4">
-                <div v-for="project in data.projects.filter(project => project.visible !== false)" :key="project.id" class="creative-entry">>
+                <div v-for="project in data.projects.filter(project => project.visible !== false)" :key="project.id" class="creative-entry">
                   <div class="flex justify-between items-start mb-1">
                     <h3 class="font-bold text-gray-900">{{ project.name }}</h3>
                     <span class="text-xs text-gray-500">{{ formatDateRange(project.startDate, project.endDate) }}</span>
@@ -114,7 +114,7 @@
             <div v-else-if="section === 'education' && data.education.some(edu => edu.visible !== false)" class="card">
               <h2 class="card-header card-title">{{ data.sectionTitles?.education || '教育背景' }}</h2>
               <div class="space-y-3">
-                <div v-for="edu in data.education.filter(edu => edu.visible !== false)" :key="edu.id" class="creative-entry">>
+                <div v-for="edu in data.education.filter(edu => edu.visible !== false)" :key="edu.id" class="creative-entry">
                   <h3 class="font-bold text-gray-900">{{ edu.school }}</h3>
                   <div class="text-sm text-gray-700">{{ edu.degree }} · {{ edu.major }}</div>
                 </div>
@@ -141,7 +141,7 @@
                 {{ getSectionTitle(section) }}
               </h2>
               <div v-if="Array.isArray(getCustomContent(section))" class="space-y-4">
-                <div v-for="item in getCustomItems(section)" :key="item.id" class="creative-entry">>
+                <div v-for="item in getCustomItems(section)" :key="item.id" class="creative-entry">
                   <div class="flex justify-between items-start mb-1">
                     <h3 v-if="item.title" class="font-bold text-gray-900">{{ item.title }}</h3>
                     <span v-if="item.date" class="text-xs text-gray-500">{{ item.date }}</span>
