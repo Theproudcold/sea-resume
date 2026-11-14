@@ -102,6 +102,8 @@ const slideDuration = () => {
   return duration + 40;
 };
 
+let resizePending = false;
+
 const enableSlide = () => {
   cancelAnimationFrame(enableFrame);
   enableFrame = requestAnimationFrame(() => {
@@ -147,13 +149,9 @@ const placeThumb = (animate: boolean) => {
   window.clearTimeout(slideTimer);
   slideTimer = window.setTimeout(() => {
     sliding = false;
-    const current = tagElements.get(props.activeCategory);
-    if (!current || !thumb.ready) return;
-    const stale = current.offsetLeft !== thumb.x
-      || current.offsetTop !== thumb.y
-      || current.offsetWidth !== thumb.width
-      || current.offsetHeight !== thumb.height;
-    if (stale) placeThumb(false);
+    if (!resizePending) return;
+    resizePending = false;
+    placeThumb(false);
   }, slideDuration());
 };
 
@@ -161,7 +159,10 @@ onMounted(() => {
   placeThumb(false);
   if (categoryRow.value && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => {
-      if (sliding) return;
+      if (sliding) {
+        resizePending = true;
+        return;
+      }
       placeThumb(false);
     });
     resizeObserver.observe(categoryRow.value);
