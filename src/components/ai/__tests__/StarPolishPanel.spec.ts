@@ -13,7 +13,7 @@ vi.mock('@/services/ai/starPolish', async () => {
 let panel: VueWrapper;
 let resume: ResumeData;
 function setup() {
-  resume = parseResumeMarkdown('# 测试\n\n## 工作经历\n### 公司 | 工程师 | 2022.01 — 至今\n- 负责结算页面改版').resume;
+  resume = parseResumeMarkdown('# 测试\n\n## 工作经历\n### 公司 | 工程师 | 2022.01 — 至今\n负责结算页面改版').resume;
   panel = mount(StarPolishPanel, { props: { resume }, global: { components: { ElButton } } });
   return panel;
 }

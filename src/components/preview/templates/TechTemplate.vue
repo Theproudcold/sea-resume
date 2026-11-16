@@ -85,6 +85,9 @@
                   </div>
                   <div class="text-sm mb-1" style="color: var(--primary-color); opacity: 0.8">{{ exp.position }}</div>
                   <div class="text-sm text-gray-400 rich-text" v-html="exp.description"></div>
+                  <ul v-if="exp.highlights?.length" class="highlight-list">
+                    <li v-for="(highlight, index) in exp.highlights" :key="`${exp.id}-highlight-${index}`">{{ highlight }}</li>
+                  </ul>
                 </div>
               </div>
             </section>
@@ -242,6 +245,11 @@ const setActiveSection = (id: string) => {
 </script>
 
 <style scoped>
+.highlight-list {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
+}
+
 .tech-template {
   /* 深色纸是模板本身的样式，不跟随界面深浅色。 */
   color: #d7dee6;

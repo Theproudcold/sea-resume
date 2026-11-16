@@ -58,6 +58,7 @@
             <el-option label="创意设计" value="creative" />
             <el-option label="极简主义" value="minimal" />
             <el-option label="科技感" value="tech" />
+            <el-option label="AI Agent 技术" value="ai-agent" />
           </el-select>
         </el-form-item>
       </el-form>

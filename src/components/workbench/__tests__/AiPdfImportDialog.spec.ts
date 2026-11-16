@@ -18,6 +18,11 @@ vi.mock('@/services/ai/pdfResumeImport', () => ({
   MAX_VISION_PAGES: 12,
   // Pure helper kept in real wording (see buildVisionTruncationWarning) so the
   // dialog's truncation warning stays wired without loading pdfjs in jsdom.
+  buildTextTruncationWarning: (truncated?: boolean) => (
+    truncated
+      ? { code: 'truncated-pages', message: '提取文本超过 60,000 字符，只发送了前 60,000 字符；后文没有参与识别，请拆分后单独导入。' }
+      : null
+  ),
   buildVisionTruncationWarning: (pageCount: number, renderedPages: number) => (
     renderedPages >= pageCount
       ? null

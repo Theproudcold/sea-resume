@@ -12,6 +12,8 @@ export interface ExtractedPdfText {
   pageCount: number;
   /** 检测到纵向分栏的页数，用于提示识别质量。 */
   columnPages: number;
+  /** 提取文本超过单次上限时为 true；text 只保留前 60,000 字符。 */
+  truncated?: boolean;
 }
 
 export interface RenderedPdfPages {
@@ -143,11 +145,12 @@ export async function extractPdfText(file: File): Promise<ExtractedPdfText> {
       pages.push(layout.text);
     }
     const text = pages.filter(Boolean).join('\n\n');
-    if (text.replace(/\s/g, '').length < 20) {
+    const readable = text.replace(/\s/g, '');
+    if (readable.length < 20) {
       throw new Error('未能从 PDF 中提取到可选择文本。扫描图片版请改用「视觉识别」，或先做 OCR / 导入 Markdown。');
     }
-    if (text.length > MAX_EXTRACTED_TEXT) throw new Error('提取文本过长（超过 60,000 字符），请缩短 PDF 后再试。');
-    return { text, pageCount: pdfDocument.numPages, columnPages };
+    const truncated = text.length > MAX_EXTRACTED_TEXT;
+    return { text: truncated ? text.slice(0, MAX_EXTRACTED_TEXT) : text, pageCount: pdfDocument.numPages, columnPages, truncated };
   } finally {
     await loadingTask.destroy();
   }
@@ -215,6 +218,15 @@ export function buildVisionTruncationWarning(pageCount: number, renderedPages: n
   return {
     code: 'truncated-pages',
     message: `PDF 共 ${pageCount} 页，视觉识别单次最多发送 ${renderedPages} 页；后 ${pageCount - renderedPages} 页未识别，请拆分后单独导入。`,
+  };
+}
+
+/** 文本提取超过单次上限时截断发送，并在导入结果里说明后文没有参与识别。 */
+export function buildTextTruncationWarning(truncated: boolean | undefined): MarkdownImportWarning | null {
+  if (!truncated) return null;
+  return {
+    code: 'truncated-pages',
+    message: '提取文本超过 60,000 字符，只发送了前 60,000 字符；后文没有参与识别，请拆分后单独导入。',
   };
 }
 
