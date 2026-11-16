@@ -20,6 +20,37 @@ let runtimePromise: Promise<PdfMakeRuntime> | undefined;
 let fontInstall: Promise<void> = Promise.resolve();
 const sourceFonts = new Map<string, Promise<Uint8Array>>();
 
+/**
+ * Subsetting a full CJK face costs roughly a second, and re-exporting an unchanged
+ * resume repeats it. Cache by source URL plus the exact character set; the limit
+ * keeps a few recently exported resumes so memory stays bounded.
+ */
+const SUBSET_CACHE_LIMIT = 4;
+const subsetFonts = new Map<string, Promise<Uint8Array>>();
+
+function subsetFont(url: string, characters: string): Promise<Uint8Array> {
+  const key = `${url}\u0000${characters}`;
+  const cached = subsetFonts.get(key);
+  if (cached) {
+    // Refresh recency so the bounded cache evicts the least recently used subset.
+    subsetFonts.delete(key);
+    subsetFonts.set(key, cached);
+    return cached;
+  }
+  const pending = fetchFontBytes(url)
+    .then((bytes) => subsetOpenTypeFont(bytes, characters))
+    .catch((error) => {
+      subsetFonts.delete(key);
+      throw error;
+    });
+  subsetFonts.set(key, pending);
+  if (subsetFonts.size > SUBSET_CACHE_LIMIT) {
+    const oldest = subsetFonts.keys().next().value;
+    if (oldest !== undefined) subsetFonts.delete(oldest);
+  }
+  return pending;
+}
+
 function toBase64(bytes: Uint8Array): string {
   let binary = '';
   const chunkSize = 0x8000;
@@ -66,8 +97,8 @@ async function withSubsetFonts(pdfMake: PdfMakeRuntime, data: ResumeData, create
   try {
     const characters = collectResumeCharacters(data);
     const [regular, bold] = await Promise.all([
-      fetchFontBytes(notoSansScRegularUrl).then((bytes) => subsetOpenTypeFont(bytes, characters)),
-      fetchFontBytes(notoSansScBoldUrl).then((bytes) => subsetOpenTypeFont(bytes, characters)),
+      subsetFont(notoSansScRegularUrl, characters),
+      subsetFont(notoSansScBoldUrl, characters),
     ]);
     pdfMake.addVirtualFileSystem({
       [regularFile]: toBase64(regular),

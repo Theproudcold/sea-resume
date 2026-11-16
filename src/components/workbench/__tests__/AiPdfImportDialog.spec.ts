@@ -16,6 +16,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/services/ai/pdfResumeImport', () => ({
   MAX_VISION_PAGES: 12,
+  // Pure helper kept in real wording (see buildVisionTruncationWarning) so the
+  // dialog's truncation warning stays wired without loading pdfjs in jsdom.
+  buildVisionTruncationWarning: (pageCount: number, renderedPages: number) => (
+    renderedPages >= pageCount
+      ? null
+      : { code: 'truncated-pages', message: `PDF 共 ${pageCount} 页，视觉识别单次最多发送 ${renderedPages} 页；后 ${pageCount - renderedPages} 页未识别，请拆分后单独导入。` }
+  ),
   extractPdfText: mocks.extractPdfText,
   requestAiPdfMarkdown: mocks.requestAiPdfMarkdown,
   renderPdfPagesToImages: mocks.renderPdfPagesToImages,
@@ -270,6 +277,26 @@ describe('AiPdfImportDialog', () => {
       ['data:image/jpeg;base64,AAA', 'data:image/jpeg;base64,BBB'],
     );
     expect(wrapper.text()).toContain('视觉识别（上传了页面图片）');
+  });
+
+  it('warns in the result when vision mode cannot cover every page', async () => {
+    // Return a fresh result so the pushed warning cannot leak into other tests.
+    mocks.parseResumeMarkdown.mockReturnValue({ ...importedResult, warnings: [...importedResult.warnings] });
+    mocks.renderPdfPagesToImages.mockResolvedValue({
+      pageCount: 18,
+      renderedPages: 12,
+      images: ['data:image/jpeg;base64,AAA'],
+    });
+    const wrapper = createWrapper();
+    await switchToVision(wrapper);
+    await extractPdf(wrapper);
+    await wrapper.find('input[type="checkbox"]').setValue(true);
+    const parseButton = wrapper.findAll('button').find((button) => button.text().includes('发送页面图片并解析简历'));
+    await parseButton?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('PDF 共 18 页');
+    expect(wrapper.text()).toContain('后 6 页未识别');
   });
 
   it('offers the vision fallback when a PDF has no selectable text', async () => {

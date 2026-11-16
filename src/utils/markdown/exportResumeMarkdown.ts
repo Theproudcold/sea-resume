@@ -1,5 +1,13 @@
 import type { CustomBlock, ResumeData } from '@/types/resume';
 
+function isVisible<T extends { visible?: boolean }>(item: T): boolean {
+  return item.visible !== false;
+}
+
+function isSectionHidden(resume: ResumeData, id: string): boolean {
+  return (resume.hiddenSections ?? []).includes(id);
+}
+
 function htmlToMarkdown(value: string): string {
   if (!value) return '';
   if (typeof DOMParser !== 'undefined') {
@@ -33,7 +41,7 @@ function dateRange(start: string, end: string): string {
 
 function renderCustomBlock(block: CustomBlock): string {
   if (Array.isArray(block.content)) {
-    return block.content.map((item) => [
+    return block.content.filter(isVisible).map((item) => [
       `### ${item.title}`,
       item.subtitle ? `**${item.subtitle}**` : '',
       item.date ? `_${item.date}_` : '',
@@ -50,38 +58,50 @@ export function resumeToMarkdown(resume: ResumeData): string {
     .filter(Boolean)
     .map((value) => value === resume.basic.website ? `[${value}](${value})` : value);
   if (contacts.length) lines.push('', contacts.join(' · '));
+  const customContacts = (resume.basic.customContacts ?? []).filter((contact) => contact.label && contact.value);
+  if (customContacts.length) {
+    lines.push('', ...customContacts.map((contact) => `- **${contact.label}**：${contact.value}`));
+  }
   if (resume.basic.summary) lines.push('', '## 个人简介', '', htmlToMarkdown(resume.basic.summary));
 
-  if (resume.experiences.length) {
+  // Hidden entries and hidden sections stay in the JSON copy but never reach the shared Markdown.
+  const experiences = resume.experiences.filter(isVisible);
+  if (experiences.length && !isSectionHidden(resume, 'experience')) {
     lines.push('', `## ${resume.sectionTitles.experience || '工作经历'}`);
-    for (const item of resume.experiences) {
+    for (const item of experiences) {
       lines.push('', `### ${[item.company, item.position].filter(Boolean).join(' | ')}${item.startDate || item.endDate ? ` | ${dateRange(item.startDate, item.endDate)}` : ''}`);
       if (item.description) lines.push('', htmlToMarkdown(item.description));
       if (item.highlights?.length) lines.push('', ...item.highlights.map((highlight) => `- ${highlight}`));
     }
   }
-  if (resume.projects.length) {
+  const projects = resume.projects.filter(isVisible);
+  if (projects.length && !isSectionHidden(resume, 'projects')) {
     lines.push('', `## ${resume.sectionTitles.projects || '项目经验'}`);
-    for (const item of resume.projects) {
+    for (const item of projects) {
       lines.push('', `### ${[item.name, item.role].filter(Boolean).join(' | ')}${item.startDate || item.endDate ? ` | ${dateRange(item.startDate, item.endDate)}` : ''}`);
       if (item.link) lines.push('', `链接：[${item.link}](${item.link})`);
       if (item.techStack?.length) lines.push('', `技术栈：${item.techStack.join('、')}`);
       if (item.description) lines.push('', htmlToMarkdown(item.description));
     }
   }
-  if (resume.education.length) {
+  const education = resume.education.filter(isVisible);
+  if (education.length && !isSectionHidden(resume, 'education')) {
     lines.push('', `## ${resume.sectionTitles.education || '教育背景'}`);
-    for (const item of resume.education) {
+    for (const item of education) {
       lines.push('', `### ${[item.school, item.degree, item.major].filter(Boolean).join(' | ')}${item.startDate || item.endDate ? ` | ${dateRange(item.startDate, item.endDate)}` : ''}`);
       if (item.gpa) lines.push('', `GPA：${item.gpa}`);
     }
   }
-  if (resume.skills.length) {
+  const skills = resume.skills.filter(isVisible);
+  if (skills.length && !isSectionHidden(resume, 'skills')) {
     lines.push('', `## ${resume.sectionTitles.skills || '技能证书'}`);
-    for (const item of resume.skills) lines.push('', `### ${item.category}`, '', ...item.items.map((skill) => `- ${skill}`));
+    for (const item of skills) lines.push('', `### ${item.category}`, '', ...item.items.map((skill) => `- ${skill}`));
   }
   for (const block of [...resume.customBlocks].sort((a, b) => a.order - b.order)) {
-    lines.push('', `## ${block.title}`, '', renderCustomBlock(block));
+    if (isSectionHidden(resume, block.id)) continue;
+    const content = renderCustomBlock(block);
+    if (!content) continue;
+    lines.push('', `## ${block.title}`, '', content);
   }
   return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
 }

@@ -223,7 +223,7 @@ import type { ResumeData } from '@/types/resume';
 import type { MarkdownImportResult } from '@/types/markdown-import';
 import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
-import { extractPdfText, renderPdfPagesToImages, requestAiPdfMarkdown, requestAiPdfMarkdownFromImages, MAX_VISION_PAGES, type ExtractedPdfText, type PdfImportMode, type RenderedPdfPages } from '@/services/ai/pdfResumeImport';
+import { extractPdfText, renderPdfPagesToImages, requestAiPdfMarkdown, requestAiPdfMarkdownFromImages, buildVisionTruncationWarning, MAX_VISION_PAGES, type ExtractedPdfText, type PdfImportMode, type RenderedPdfPages } from '@/services/ai/pdfResumeImport';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { markdownToSafeHtml } from '@/utils/markdown/markdownSafety';
 
@@ -350,6 +350,10 @@ async function parseWithAi() {
       ? await requestAiPdfMarkdown(config, fileName.value, extracted.value?.text ?? '')
       : await requestAiPdfMarkdownFromImages(config, fileName.value, rendered.value?.images ?? []);
     const imported = parseResumeMarkdown(result.markdown, fileName.value.replace(/\.pdf$/i, '.md'));
+    if (mode.value === 'vision' && rendered.value) {
+      const truncation = buildVisionTruncationWarning(rendered.value.pageCount, rendered.value.renderedPages);
+      if (truncation) imported.warnings.push(truncation);
+    }
     parsed.value = imported;
     draftResume.value = JSON.parse(JSON.stringify(imported.resume)) as ResumeData;
     explanation.value = result.explanation;

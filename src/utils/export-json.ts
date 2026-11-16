@@ -14,6 +14,23 @@ const text = (value: unknown, field: string, fallback = ''): string => {
   return value;
 };
 
+/** Section titles are display-only labels, so an invalid value falls back instead of failing the whole import. */
+function sectionTitle(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+const STANDARD_SECTION_TITLE_KEYS = new Set(['experience', 'education', 'projects', 'skills']);
+
+/** Custom section ids are spread before the typed titles, so they must be strings only. */
+function customSectionTitles(titles: Record<string, unknown>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(titles)) {
+    if (STANDARD_SECTION_TITLE_KEYS.has(key)) continue;
+    if (typeof value === 'string') result[key] = value;
+  }
+  return result;
+}
+
 function normalizeRecords(value: unknown, field: string, required: string[]): Array<Record<string, unknown>> {
   if (value === undefined) return [];
   if (!Array.isArray(value) || value.length > 500) throw new Error(`JSON 简历字段「${field}」格式无效。`);
@@ -124,11 +141,13 @@ export function validateResumeData(input: unknown): ResumeData {
     sectionOrder: Array.isArray(input.sectionOrder) ? input.sectionOrder.map((value) => text(value, 'sectionOrder')) : ['experience', 'projects', 'education', 'skills'],
     hiddenSections: Array.isArray(input.hiddenSections) ? input.hiddenSections.map((value) => text(value, 'hiddenSections')) : [],
     sectionTitles: {
-      experience: text(titles.experience, 'sectionTitles.experience', '工作经历'),
-      education: text(titles.education, 'sectionTitles.education', '教育背景'),
-      projects: text(titles.projects, 'sectionTitles.projects', '项目经验'),
-      skills: text(titles.skills, 'sectionTitles.skills', '技能证书'),
-      ...titles as Record<string, string>,
+      // Custom ids first: an unvalidated key must never overwrite the four typed
+      // titles below, otherwise {"experience": 123} would slip past validation.
+      ...customSectionTitles(titles),
+      experience: sectionTitle(titles.experience, '工作经历'),
+      education: sectionTitle(titles.education, '教育背景'),
+      projects: sectionTitle(titles.projects, '项目经验'),
+      skills: sectionTitle(titles.skills, '技能证书'),
     },
     createdAt: text(input.createdAt, 'createdAt', now),
     updatedAt: text(input.updatedAt, 'updatedAt', now),

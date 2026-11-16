@@ -2,7 +2,7 @@ import type { ResumeData } from './resume';
 
 export interface MarkdownImportWarning {
   code: 'unknown-frontmatter' | 'unknown-section' | 'unmapped-link' | 'uncertain-date' | 'unsafe-html' | 'parse'
-    | 'missing-company' | 'missing-school' | 'missing-project-name';
+    | 'missing-company' | 'missing-school' | 'missing-project-name' | 'truncated-pages';
   message: string;
   detail?: string;
 }

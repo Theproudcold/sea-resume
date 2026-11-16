@@ -1,6 +1,7 @@
 import { getDocument, GlobalWorkerOptions, Util } from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { AiProviderConfig } from '@/types/ai';
+import type { MarkdownImportWarning } from '@/types/markdown-import';
 import { CELL_SEPARATOR, layoutPageText, LEFT_COLUMN_MARKER, RIGHT_COLUMN_MARKER, type PositionedTextItem } from '@/utils/pdf/layoutText';
 import { requestAiJson, requestAiVisionJson } from './AiClient';
 
@@ -185,10 +186,8 @@ export async function renderPdfPagesToImages(file: File, maxWidth = VISION_IMAGE
   }
 }
 
-export function parseAiPdfMarkdownResponse(content: string): AiPdfMarkdownResult {
-  const source = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  let result: unknown;
-  try { result = JSON.parse(source); } catch { throw new Error('AI 返回内容不是有效 JSON。'); }
+/** Validate an already-parsed AI response object; shared by the text and vision paths. */
+export function toAiPdfMarkdownResult(result: unknown): AiPdfMarkdownResult {
   if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('AI 返回结构无效。');
   const data = result as Record<string, unknown>;
   if (typeof data.markdown !== 'string' || !data.markdown.trim()) throw new Error('AI 没有返回可导入的简历 Markdown。');
@@ -199,12 +198,32 @@ export function parseAiPdfMarkdownResponse(content: string): AiPdfMarkdownResult
   };
 }
 
+export function parseAiPdfMarkdownResponse(content: string): AiPdfMarkdownResult {
+  const source = content.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  let result: unknown;
+  try { result = JSON.parse(source); } catch { throw new Error('AI 返回内容不是有效 JSON。'); }
+  return toAiPdfMarkdownResult(result);
+}
+
+/**
+ * Vision mode renders at most MAX_VISION_PAGES pages. Surface the shortfall in the
+ * import warnings so a partially recognised PDF is never mistaken for a complete one.
+ */
+export function buildVisionTruncationWarning(pageCount: number, renderedPages: number): MarkdownImportWarning | null {
+  if (!Number.isFinite(pageCount) || !Number.isFinite(renderedPages)) return null;
+  if (renderedPages >= pageCount) return null;
+  return {
+    code: 'truncated-pages',
+    message: `PDF 共 ${pageCount} 页，视觉识别单次最多发送 ${renderedPages} 页；后 ${pageCount - renderedPages} 页未识别，请拆分后单独导入。`,
+  };
+}
+
 /** Send only locally extracted text, and only after the user explicitly consents in the UI. */
 export async function requestAiPdfMarkdown(config: AiProviderConfig, filename: string, extractedText: string): Promise<AiPdfMarkdownResult> {
   if (!extractedText.trim()) throw new Error('PDF 没有可发送的文本。');
   if (extractedText.length > MAX_EXTRACTED_TEXT) throw new Error('提取文本超过 60,000 字符。');
   const result = await requestAiJson(config, TEXT_EXTRACTION_PROMPT, { filename, documentText: extractedText }, { temperature: 0.1 });
-  return parseAiPdfMarkdownResponse(JSON.stringify(result));
+  return toAiPdfMarkdownResult(result);
 }
 
 /** Send rendered page images; requires explicit consent because the images leave the device. */
@@ -219,7 +238,7 @@ export async function requestAiPdfMarkdownFromImages(
       text: `文件名：${filename}；共 ${images.length} 页图片，按顺序发送。`,
       images,
     }, { temperature: 0.1 });
-    return parseAiPdfMarkdownResponse(JSON.stringify(result));
+    return toAiPdfMarkdownResult(result);
   } catch (error) {
     // 纯文本模型收到图片时通常返回 400 / 422，这里给出可操作的提示。
     if (error instanceof Error && /HTTP (400|404|415|422)/.test(error.message)) {

@@ -136,4 +136,60 @@ hypoy9040@163.com
     expect(roundtrip.skills.flatMap((skill) => skill.items)).toEqual(expect.arrayContaining(['TypeScript', 'Python', 'Vue', 'Node.js']));
     expect(roundtrip.customBlocks.some((block) => block.title === '开源贡献')).toBe(true);
   });
+
+  it('omits hidden entries and hidden sections from the exported Markdown', () => {
+    const parsed = parseResumeMarkdown(`# 李明 | 工程师
+
+liming@example.com
+
+## 工作经历
+### 甲公司 | 工程师 | 2022-01 - 2024-01
+- 保留的经历
+
+### 乙公司 | 工程师 | 2020-01 - 2022-01
+- 隐藏的经历
+
+## 技能
+### 编程语言
+- TypeScript
+
+## 开源贡献
+### Parser
+- 维护解析器
+`).resume;
+
+    parsed.experiences[1]!.visible = false;
+    const hiddenBlock = parsed.customBlocks.find((block) => block.title === '开源贡献')!;
+    parsed.hiddenSections = [hiddenBlock.id, 'skills'];
+
+    const markdown = resumeToMarkdown(parsed);
+    expect(markdown).toContain('甲公司');
+    expect(markdown).toContain('保留的经历');
+    expect(markdown).not.toContain('乙公司');
+    expect(markdown).not.toContain('隐藏的经历');
+    expect(markdown).not.toContain('开源贡献');
+    expect(markdown).not.toContain('TypeScript');
+    expect(markdown).toContain('liming@example.com');
+  });
+
+  it('round-trips custom contacts without losing the primary contact fields', () => {
+    const imported = parseResumeMarkdown(source).resume;
+    imported.basic.customContacts = [
+      { id: 'contact-1', icon: 'Link', label: '微信', value: 'sea-resume' },
+      // A numeric contact must stay a custom contact instead of becoming the phone number.
+      { id: 'contact-2', icon: 'Link', label: 'QQ', value: '123456789' },
+    ];
+
+    const normalized = resumeToMarkdown(imported);
+    expect(normalized).toContain('- **微信**：sea-resume');
+    expect(normalized).toContain('- **QQ**：123456789');
+
+    const roundtrip = parseResumeMarkdown(normalized).resume;
+    expect(roundtrip.basic.customContacts?.map(({ label, value }) => ({ label, value }))).toEqual([
+      { label: '微信', value: 'sea-resume' },
+      { label: 'QQ', value: '123456789' },
+    ]);
+    expect(roundtrip.basic.phone).toBe(imported.basic.phone);
+    expect(roundtrip.basic.website).toBe(imported.basic.website);
+  });
 });
