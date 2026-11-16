@@ -34,7 +34,7 @@
               <el-button link :disabled="!canRedo" aria-label="重做" title="重做 (Ctrl/⌘+Shift+Z)" @click="redoEdit">重做</el-button>
             </div>
             <div class="editor-toolbar__group" role="group" aria-label="检查">
-              <el-button v-if="qualityIssues.length" link @click="showQualityPanel = true">质量问题 {{ qualityIssues.length }}</el-button>
+              <el-button v-if="qualityIssues.length" link @click="showQualityPanel = true">{{ qualityButtonLabel }}</el-button>
             </div>
             <div class="editor-toolbar__group" role="group" aria-label="去向">
               <el-button link :disabled="privacyMode" @click="showAiAssistant = true">AI 助手</el-button>
@@ -46,7 +46,7 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="privacy"><el-icon><Hide /></el-icon>{{ privacyMode ? '关闭隐私打码' : '隐私打码' }}</el-dropdown-item>
-                  <el-dropdown-item v-if="!qualityIssues.length" command="quality"><el-icon><CircleCheck /></el-icon>质量检查</el-dropdown-item>
+                  <el-dropdown-item command="quality"><el-icon><CircleCheck /></el-icon>质量检查</el-dropdown-item>
                   <el-dropdown-item command="external-ai" :disabled="privacyMode"><el-icon><Connection /></el-icon>外部 AI · Codex / Claude Code</el-dropdown-item>
                   <el-dropdown-item command="shortcuts"><el-icon><Key /></el-icon>快捷键</el-dropdown-item>
                   <el-dropdown-item command="fullscreen"><el-icon><FullScreen /></el-icon>全屏预览</el-dropdown-item>
@@ -224,7 +224,8 @@ const AiProviderSettingsPanel = lazyFeature(() => import('@/components/workbench
 const ExternalAiPanel = defineAsyncComponent(() => import('@/components/ai/ExternalAiPanel.vue'));
 import { createPrivacyMaskedResume } from '@/utils/privacyMask';
 import ResumeQualityPanel from '@/components/editor/ResumeQualityPanel.vue';
-import { checkResumeQuality } from '@/utils/resumeQuality';
+import { checkResumeQuality, type ResumeQualityIssue } from '@/utils/resumeQuality';
+import { focusQualityTarget, waitForElement } from '@/utils/focusQualityTarget';
 import { resolveEditorShortcut } from '@/utils/editorShortcuts';
 
 const route = useRoute();
@@ -281,6 +282,13 @@ const unsubscribePreviewNavigation = resumeStore.$onAction(({ name }) => {
 
 const previewData = computed(() => privacyMode.value ? createPrivacyMaskedResume(data.value) : data.value);
 const qualityIssues = computed(() => checkResumeQuality(data.value));
+const qualityWarningCount = computed(() => qualityIssues.value.filter((issue) => issue.severity === 'warning').length);
+/** Only real problems justify "质量问题"; suggestions alone must not look like errors. */
+const qualityButtonLabel = computed(() => qualityWarningCount.value
+  ? `质量问题 ${qualityIssues.value.length}`
+  : `${qualityIssues.value.length} 项建议`);
+// Bumped on every jump and on unmount so an outdated retry loop stops touching a stale page.
+let qualityJumpToken = 0;
 const togglePrivacyMode = () => {
   privacyMode.value = !privacyMode.value;
   if (privacyMode.value) {
@@ -314,6 +322,7 @@ watch(editorContainerRef, (element) => {
 onUnmounted(() => {
   disconnectContainerObserver?.();
   disconnectContainerObserver = null;
+  qualityJumpToken++;
 });
 
 let routeLoadGeneration = 0;
@@ -466,17 +475,19 @@ async function redoEdit() {
   catch (error) { ElMessage.error(`重做失败：${error instanceof Error ? error.message : '未知错误'}`); }
 }
 
-async function jumpToQualitySection(section: 'basic' | 'experience' | 'projects' | 'education' | 'skills', target?: string) {
+/** Closes the panel, opens the section and reveals the issue's field once the editor has mounted it. */
+async function jumpToQualitySection(section: ResumeQualityIssue['section'], target: string | null) {
+  const token = ++qualityJumpToken;
   showQualityPanel.value = false;
   activeTab.value = 'edit';
   resumeStore.setActiveSection(section);
   await nextTick();
-  window.setTimeout(() => {
-    const root = document.getElementById(section === 'basic' ? 'editor-section-basic' : `editor-section-${section}`);
-    const field = target ? root?.querySelector<HTMLElement>(`[data-quality-id="${CSS.escape(target)}"]`) : null;
-    (field ?? root)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    field?.querySelector<HTMLElement>('input, textarea, [contenteditable="true"]')?.focus();
-  }, 150);
+  const root = await waitForElement(
+    () => document.getElementById(`editor-section-${section}`),
+    { timeoutMs: 300, isCancelled: () => token !== qualityJumpToken },
+  );
+  if (!root || token !== qualityJumpToken) return;
+  await focusQualityTarget(root, target);
 }
 
 const handleResumeTitleUpdate = async (title: string) => {
