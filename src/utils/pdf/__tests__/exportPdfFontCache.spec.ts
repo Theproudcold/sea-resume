@@ -6,16 +6,26 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const subsetCalls = vi.hoisted(() => ({ count: 0 }));
+// `vi.mock` factories run before module-level `const` initialisation, so all
+// mutable state used by the factory has to live in `vi.hoisted`.
+const mocks = vi.hoisted(() => ({
+  calls: 0,
+  realSubset: undefined as Promise<Uint8Array> | undefined,
+}));
 
-// Count real subsetting work while still producing a valid font for pdfmake.
+/**
+ * Count how often real subsetting is requested while doing the expensive work
+ * once: the cache assertions only need the invocation count, and repeating a
+ * full ~8MB CJK subset four times would add a multi-second CPU burst to the suite.
+ */
 vi.mock('@/utils/pdf/subsetFont', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/utils/pdf/subsetFont')>();
   return {
     ...actual,
     subsetOpenTypeFont: (bytes: Uint8Array, text: string) => {
-      subsetCalls.count += 1;
-      return actual.subsetOpenTypeFont(bytes, text);
+      mocks.calls += 1;
+      mocks.realSubset ??= actual.subsetOpenTypeFont(bytes, text);
+      return mocks.realSubset;
     },
   };
 });
@@ -31,7 +41,7 @@ async function fontResponse(fileName: string): Promise<Response> {
 
 describe('searchable PDF font subset cache', () => {
   beforeEach(() => {
-    subsetCalls.count = 0;
+    mocks.calls = 0;
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes('NotoSansSC-Regular')) return fontResponse('NotoSansSC-Regular.otf');
@@ -46,17 +56,19 @@ describe('searchable PDF font subset cache', () => {
     const data: ResumeData = structuredClone(templateDemoData);
 
     // One regular and one bold subset for the first export.
-    await createResumePdfBlob(data);
-    expect(subsetCalls.count).toBe(2);
+    const first = await createResumePdfBlob(data);
+    expect(mocks.calls).toBe(2);
+    expect(first.size).toBeGreaterThan(1000);
 
     // Same text: both subsets come from the cache.
     await createResumePdfBlob(structuredClone(data));
-    expect(subsetCalls.count).toBe(2);
+    expect(mocks.calls).toBe(2);
 
     // A character that is not in the demo data must invalidate the cache.
     const changed = structuredClone(data);
     changed.basic.name = '龘';
-    await createResumePdfBlob(changed);
-    expect(subsetCalls.count).toBe(4);
+    const rerendered = await createResumePdfBlob(changed);
+    expect(mocks.calls).toBe(4);
+    expect(rerendered.size).toBeGreaterThan(1000);
   });
 });
