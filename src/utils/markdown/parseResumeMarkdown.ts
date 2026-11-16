@@ -4,9 +4,18 @@ import { generateId } from '@/utils/helpers';
 import { markdownToSafeHtml, sanitizeMarkdownUrl } from './markdownSafety';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 
-const DATE_TOKEN = '(?:\\d{4}(?:[./-]\\d{1,2})?|至今|现在|目前|present|current)';
-const DATE_RANGE = new RegExp(`(${DATE_TOKEN})\\s*(?:-|–|—|~|至|到|to)\\s*(${DATE_TOKEN})`, 'i');
+const CHINESE_MONTH = String.raw`年\s*\d{1,2}\s*月?`;
+const ENGLISH_MONTH = '(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+const DATE_TOKEN = String.raw`(?:\d{4}(?:[./-]\d{1,2}|${CHINESE_MONTH})?|${ENGLISH_MONTH}\s*\d{4}|\d{4}\s*${ENGLISH_MONTH}|至今|现在|目前|present|current)`;
+const DATE_RANGE = new RegExp(String.raw`(${DATE_TOKEN})\s*(?:-|–|—|~|至|到|to)\s*(${DATE_TOKEN})`, 'i');
+const DATE_RANGE_LINE = new RegExp(String.raw`^\s*(?:${DATE_RANGE.source})\s*$`, 'i');
 const HEADING = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
+const MONTHS: Record<string, string> = {
+  jan: '01', january: '01', feb: '02', february: '02', mar: '03', march: '03',
+  apr: '04', april: '04', may: '05', jun: '06', june: '06', jul: '07', july: '07',
+  aug: '08', august: '08', sep: '09', sept: '09', september: '09', oct: '10', october: '10',
+  nov: '11', november: '11', dec: '12', december: '12',
+};
 
 interface MarkdownBlock { title: string; level: number; lines: string[] }
 interface ResumeSection { title: string; kind: string | null; lines: string[] }
@@ -50,10 +59,10 @@ function parseFrontmatter(source: string, warnings: MarkdownImportWarning[]) {
 
 function sectionKind(title: string): string | null {
   const key = title.toLowerCase().replace(/[\s_—–-]/g, '');
-  if (/^(个人简介|个人概况|自我介绍|简介|summary|profile|aboutme)$/.test(key)) return 'summary';
-  if (/^(工作经历|工作经验|职业经历|任职经历|experience|experiences|workexperience|employment)$/.test(key)) return 'experience';
+  if (/^(个人简介|个人概况|自我介绍|自我评价|简介|summary|profile|aboutme)$/.test(key)) return 'summary';
+  if (/^(工作经历|工作经验|职业经历|任职经历|实习经历|实习经验|实习|experience|experiences|workexperience|employment|professionalexperience|internship|internships)$/.test(key)) return 'experience';
   if (/^(教育经历|教育背景|学历|education|academic)$/.test(key)) return 'education';
-  if (/^(项目经历|项目经验|项目|projects|projectexperience)$/.test(key)) return 'projects';
+  if (/^(项目经历|项目经验|项目|校园经历|社会实践|projects|projectexperience)$/.test(key)) return 'projects';
   if (/^(技能|技能证书|专业技能|技术栈|技能清单|skills|techstack|technologies)$/.test(key)) return 'skills';
   return null;
 }
@@ -76,18 +85,31 @@ function sectionBlocks(lines: string[]): MarkdownBlock[] {
   return blocks;
 }
 
+function normalizeDate(value: string): string {
+  const text = value.trim().replace(/\s+/g, ' ').replace(/[./]/g, '-');
+  if (/^(至今|现在|目前|present|current)$/i.test(text)) return 'present';
+  const chinese = text.match(/^(\d{4})年\s*(\d{1,2})月?$/);
+  if (chinese) return `${chinese[1]}-${(chinese[2] ?? '').padStart(2, '0')}`;
+  const leadingMonth = text.match(/^([A-Za-z]+)-?\s+(\d{4})$/);
+  if (leadingMonth) {
+    const month = MONTHS[(leadingMonth[1] ?? '').toLowerCase()];
+    if (month) return `${leadingMonth[2]}-${month}`;
+  }
+  const trailingMonth = text.match(/^(\d{4})\s+([A-Za-z]+)$/);
+  if (trailingMonth) {
+    const month = MONTHS[(trailingMonth[2] ?? '').toLowerCase()];
+    if (month) return `${trailingMonth[1]}-${month}`;
+  }
+  if (/^\d{4}-\d{1,2}$/.test(text)) return text.replace(/-(\d)$/, '-0$1');
+  if (/^\d{4}$/.test(text)) return text;
+  return '';
+}
+
 function parseDateRange(source: string, warnings: MarkdownImportWarning[]): [string, string] {
   const match = source.match(DATE_RANGE);
   if (!match) return ['', ''];
-  const normalize = (value: string): string => {
-    const date = value.trim().replace(/[./]/g, '-');
-    if (/^(至今|现在|目前|present|current)$/i.test(date)) return 'present';
-    if (/^\d{4}-\d{1,2}$/.test(date)) return date.replace(/-(\d)$/, '-0$1');
-    if (/^\d{4}$/.test(date)) return date;
-    return '';
-  };
-  const start = normalize(match[1] ?? '');
-  const end = normalize(match[2] ?? '');
+  const start = normalizeDate(match[1] ?? '');
+  const end = normalizeDate(match[2] ?? '');
   if (!start || !end) warnings.push({ code: 'uncertain-date', message: `日期范围“${match[0]}”未能可靠转换，已保留在条目文本中。` });
   return [start, end];
 }
@@ -158,6 +180,12 @@ function parseContact(lines: string[], resume: ResumeData, warnings: MarkdownImp
   const phone = source.match(/(?:\+?\d[\d\s().-]{6,}\d)/)?.[0]?.trim();
   if (email) resume.basic.email = email;
   if (phone) resume.basic.phone = phone;
+  if (!resume.basic.location) {
+    const withoutLinks = source.replace(/\[[^\]]*\]\([^)]*\)/g, ' ').replace(/https?:\/\/\S+/g, ' ');
+    const location = withoutLinks.split(/[·•]/).map((part) => cleanInline(part))
+      .find((part) => part && !part.includes('@') && !/\d/.test(part) && !/https?:/i.test(part));
+    if (location) resume.basic.location = location;
+  }
   const markdownLinks: Array<[string, string]> = [...source.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g)].map((m) => [m[1] ?? '', m[2] ?? '']);
   const rawLinks: Array<[string, string]> = [...source.matchAll(/https?:\/\/[^\s)<>]+/g)].map((m) => [m[0] ?? '', m[0] ?? '']);
   const links = [...markdownLinks, ...rawLinks].filter(([, url]) => !!sanitizeMarkdownUrl(url));
@@ -190,7 +218,24 @@ function looksLikeEntryHeader(line: string): boolean {
   if (!text || text.length > ENTRY_HEADER_MAX_LENGTH) return false;
   if (/^[*_`>#]/.test(text)) return false;
   if (/[:：]/.test(text)) return false;
+  if (DATE_RANGE_LINE.test(text)) return false;
   return /[|｜]/.test(text) || /\s[—–]\s/.test(text);
+}
+
+/** 模型没写 ### 时，正文里的每一行条目标题都单独成条；标题前的说明归到第一条。 */
+function splitPlainEntries(lines: string[]): MarkdownBlock[] {
+  const blocks: MarkdownBlock[] = [];
+  let current: MarkdownBlock | null = null;
+  const preamble: string[] = [];
+  for (const line of lines) {
+    if (looksLikeEntryHeader(line)) {
+      if (current) blocks.push(current);
+      current = { title: line.trim().replace(/^\s*[-*+]\s+/, ''), level: 0, lines: current ? [] : [...preamble] };
+    } else if (current) current.lines.push(line);
+    else if (line.trim()) preamble.push(line);
+  }
+  if (current) blocks.push(current);
+  return blocks;
 }
 
 function entryParts(block: MarkdownBlock, warnings: MarkdownImportWarning[]) {
@@ -204,29 +249,32 @@ function entryParts(block: MarkdownBlock, warnings: MarkdownImportWarning[]) {
       lines.splice(firstIndex, 1);
     }
   }
-  const allText = `${blockTitle}\n${lines.join('\n')}`;
-  const [startDate, endDate] = parseDateRange(allText, warnings);
+  const titleRange = parseDateRange(blockTitle, warnings);
+  const [startDate, endDate] = titleRange[0] ? titleRange : parseDateRange(lines.join('\n'), warnings);
   const labeled: Record<string, string> = {};
-  const descriptionLines: string[] = [];
+  const prose: string[] = [];
+  const bullets: string[] = [];
   for (const line of lines.map((value) => value.trim()).filter(Boolean)) {
+    if (DATE_RANGE_LINE.test(line)) continue;
     const match = line.match(/^\s*(?:[-*+]\s*)?(?:\*\*)?([^:*：|]+?)(?:\*\*)?\s*[:：]\s*(.+)$/);
     if (match) {
       const key = (match[1] ?? '').toLowerCase().replace(/[\s_-]/g, '');
       const rawValue = match[2] ?? '';
       const link = rawValue.match(/\[[^\]]+\]\((https?:\/\/[^)]+)\)/i)?.[1];
       labeled[key] = (key === 'link' || key === 'url' || key === '链接') && link ? link : cleanInline(rawValue);
+      continue;
     }
-    else descriptionLines.push(line);
+    if (/^[-*+]\s+/.test(line)) bullets.push(cleanInline(line.replace(/^[-*+]\s+/, '')));
+    else prose.push(line);
   }
-  const title = cleanInline(blockTitle.replace(DATE_RANGE, '').replace(/[|｜—–]+$/, ''));
+  const title = cleanInline(blockTitle.replace(DATE_RANGE, ' ').replace(/[|｜—–]+$/, ''));
   const parts = title.split(/\s*[|｜]\s*|\s+[—–]\s+/).map(cleanInline).filter(Boolean);
-  const bullets = descriptionLines.filter((line) => /^[-*+]\s+/.test(line)).map((line) => line.replace(/^[-*+]\s+/, ''));
-  return { title, parts, labeled, descriptionLines, bullets, startDate, endDate };
+  return { title, parts, labeled, prose, bullets, startDate, endDate };
 }
 
 function mapEntry(kind: string, block: MarkdownBlock, resume: ResumeData, warnings: MarkdownImportWarning[]) {
   const parsed = entryParts(block, warnings);
-  const description = markdownToSafeHtml(parsed.descriptionLines.join('\n'));
+  const description = markdownToSafeHtml(parsed.prose.join('\n'));
   if (kind === 'experience') {
     const company = field(parsed.labeled, '公司', 'company', '组织') || parsed.parts[0] || parsed.title;
     if (!company) warnOnce(warnings, 'missing-company', '有一条工作经历没有识别出「公司 / 职位」，请对照原 PDF 手动补充。');
@@ -238,6 +286,8 @@ function mapEntry(kind: string, block: MarkdownBlock, resume: ResumeData, warnin
   } else if (kind === 'education') {
     const school = field(parsed.labeled, '学校', '院校', 'school', 'university') || parsed.parts[0] || parsed.title;
     if (!school) warnOnce(warnings, 'missing-school', '有一条教育经历没有识别出「学校 / 专业」，请对照原 PDF 手动补充。');
+    const note = [...parsed.prose, ...parsed.bullets].map(cleanInline).filter(Boolean).join('；');
+    if (note) warnOnce(warnings, 'unmapped-education-note', '教育经历中的课程、论文或荣誉没有独立字段，已写在导入提示里，请手动补到简历中。');
     resume.education.push({
       id: generateId(), school,
       degree: field(parsed.labeled, '学历', '学位', 'degree') || parsed.parts[1] || '',
@@ -245,6 +295,8 @@ function mapEntry(kind: string, block: MarkdownBlock, resume: ResumeData, warnin
       startDate: parsed.startDate, endDate: parsed.endDate,
       gpa: field(parsed.labeled, 'gpa', '绩点') || undefined,
     });
+    const warning = warnings.find((item) => item.code === 'unmapped-education-note');
+    if (note && warning) warning.detail = [warning.detail, `${school || '未命名学校'}：${note}`].filter(Boolean).join('\n');
   } else if (kind === 'projects') {
     const link = field(parsed.labeled, '链接', 'link', 'url');
     const name = field(parsed.labeled, '项目', '项目名称', 'name') || parsed.parts[0] || parsed.title;
@@ -261,9 +313,13 @@ function mapEntry(kind: string, block: MarkdownBlock, resume: ResumeData, warnin
 
 function toCustomBlock(title: string, lines: string[], order: number): CustomBlock {
   const chunks = sectionBlocks(lines);
-  const items: CustomItem[] = chunks.filter((chunk) => chunk.title).map((chunk) => ({
-    id: generateId(), title: chunk.title, description: markdownToSafeHtml(chunk.lines.join('\n')),
-  }));
+  const items: CustomItem[] = chunks.filter((chunk) => chunk.title).map((chunk) => {
+    const parsed = entryParts(chunk, []);
+    const subtitle = parsed.parts[1] || undefined;
+    const date = [parsed.startDate, parsed.endDate].filter(Boolean).join(' — ') || undefined;
+    const description = markdownToSafeHtml([...parsed.prose, ...parsed.bullets.map((bullet) => `- ${bullet}`)].join('\n'));
+    return { id: generateId(), title: parsed.parts[0] || chunk.title, subtitle, date, description };
+  });
   return {
     id: generateId(), title, type: items.length ? 'list' : 'text',
     content: items.length ? items : markdownToSafeHtml(lines.join('\n')), order,
@@ -346,8 +402,9 @@ export function parseResumeMarkdown(source: string, filename = 'resume.md'): Mar
       continue;
     }
     const entries = sectionBlocks(section.lines).filter((block) => block.title || block.lines.some((line) => line.trim()));
-    const normalizedEntries = entries.length ? entries : [{ title: '', level: 0, lines: section.lines }];
-    for (const entry of normalizedEntries) mapEntry(section.kind, entry, resume, warnings);
+    const normalizedEntries = entries.length ? entries.flatMap((entry) => entry.title ? [entry] : splitPlainEntries(entry.lines)) : splitPlainEntries(section.lines);
+    const blocks = normalizedEntries.length ? normalizedEntries : [{ title: '', level: 0, lines: section.lines }];
+    for (const entry of blocks) mapEntry(section.kind, entry, resume, warnings);
   }
   if (!recognizedSections.length) warnings.push({ code: 'parse', message: '未识别到标准简历章节；原文中可识别的章节已保留为自定义模块。' });
   return {

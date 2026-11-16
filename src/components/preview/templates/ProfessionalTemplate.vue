@@ -130,6 +130,9 @@
                     </div>
                     <div class="font-semibold mb-2" style="color: var(--primary-color); font-size: var(--font-size)">{{ exp.position }}</div>
                     <div class="text-gray-600 rich-text" v-html="exp.description" style="font-size: var(--font-size); line-height: var(--line-height)"></div>
+                    <ul v-if="exp.highlights?.length" class="highlight-list">
+                      <li v-for="(highlight, index) in exp.highlights" :key="`${exp.id}-highlight-${index}`">{{ highlight }}</li>
+                    </ul>
                   </div>
                 </div>
               </div>
@@ -277,6 +280,11 @@ const setActiveSection = (id: string) => {
 </script>
 
 <style scoped>
+.highlight-list {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
+}
+
 .professional-template {
   color: var(--resume-ink);
   background: var(--resume-paper);

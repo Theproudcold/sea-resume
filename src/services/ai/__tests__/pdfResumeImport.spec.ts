@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildTextTruncationWarning,
   buildVisionTruncationWarning,
   parseAiPdfMarkdownResponse,
   positionedItems,
@@ -39,6 +40,13 @@ describe('AI PDF resume import helpers', () => {
     expect(buildVisionTruncationWarning(12, 12)).toBeNull();
     expect(buildVisionTruncationWarning(8, 12)).toBeNull();
     expect(buildVisionTruncationWarning(Number.NaN, 12)).toBeNull();
+  });
+
+  it('warns when extracted text was truncated before it was sent', () => {
+    expect(buildTextTruncationWarning(true)?.code).toBe('truncated-pages');
+    expect(buildTextTruncationWarning(true)?.message).toContain('60,000');
+    expect(buildTextTruncationWarning(false)).toBeNull();
+    expect(buildTextTruncationWarning(undefined)).toBeNull();
   });
 
   it('uses local keyless transport with optional JSON mode and validates the result', async () => {

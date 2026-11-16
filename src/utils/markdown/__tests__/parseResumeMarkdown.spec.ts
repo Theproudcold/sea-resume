@@ -59,7 +59,8 @@ describe('parseResumeMarkdown', () => {
     expect(result.resume.basic.phone).toContain('138-0000-0000');
     expect(result.resume.basic.website).toBe('https://github.com/example-user');
     expect(result.resume.experiences[0]).toMatchObject({ company: 'Sea Labs', position: 'AI Agent 工程师', startDate: '2022-09', endDate: 'present' });
-    expect(result.resume.experiences[0]?.highlights).toContain('构建可观测的 Agent 平台');
+    expect(result.resume.experiences[0]?.highlights).toEqual(['构建可观测的 Agent 平台', '服务支持 10 万用户']);
+    expect(result.resume.experiences[0]?.description).not.toContain('构建可观测的 Agent 平台');
     expect(result.resume.education[0]).toMatchObject({ school: '北京大学', degree: '硕士', major: '计算机科学', startDate: '2018-09', endDate: '2022-07' });
     expect(result.resume.projects[0]).toMatchObject({ name: 'Resume Copilot', role: '负责人', link: 'https://example.com/resume', techStack: ['Vue', 'TypeScript'] });
     expect(result.resume.skills.map((skill) => skill.category)).toEqual(['编程语言', '框架']);
@@ -101,6 +102,7 @@ hypoy9040@163.com
     });
     expect(result.resume.experiences[0]?.description).toContain('参与企业级智能体研发');
     expect(result.resume.experiences[0]?.description).not.toContain('杭州唐梨科技有限公司');
+    expect(result.resume.experiences[0]?.description).not.toContain('2026');
     expect(result.resume.education[0]).toMatchObject({
       school: '浙江大学', degree: '本科', major: '计算机科学与技术', startDate: '2022-09', endDate: '2026-07',
     });
@@ -130,7 +132,10 @@ hypoy9040@163.com
     const roundtrip = parseResumeMarkdown(normalized).resume;
     expect(normalized).toContain('[https://github.com/example-user](https://github.com/example-user)');
     expect(roundtrip.basic.name).toBe(imported.basic.name);
+    expect(roundtrip.basic.location).toBe('北京');
     expect(roundtrip.basic.email).toBe(imported.basic.email);
+    expect(roundtrip.experiences[0]?.highlights).toEqual(imported.experiences[0]?.highlights);
+    expect(roundtrip.experiences[0]?.description).not.toContain('构建可观测的 Agent 平台');
     expect(roundtrip.experiences[0]?.company).toBe(imported.experiences[0]?.company);
     expect(roundtrip.projects[0]?.link).toBe(imported.projects[0]?.link);
     expect(roundtrip.skills.flatMap((skill) => skill.items)).toEqual(expect.arrayContaining(['TypeScript', 'Python', 'Vue', 'Node.js']));
@@ -191,5 +196,43 @@ liming@example.com
     ]);
     expect(roundtrip.basic.phone).toBe(imported.basic.phone);
     expect(roundtrip.basic.website).toBe(imported.basic.website);
+  });
+
+  it('reads the location from the exported contact line and splits plain entry headers', () => {
+    const result = parseResumeMarkdown(`# 于海波 | 工程师
+
+liming@example.com · 13800000000 · 杭州 · [主页](https://example.com)
+
+## 工作经历
+
+甲公司 | 工程师 | 2022年9月 - 2024年1月
+负责平台建设。
+- 完成上线
+
+乙公司 | 工程师
+Sep 2020 - Dec 2021
+负责维护。
+
+## 教育背景
+
+浙江大学 | 本科 | 计算机
+2022-09 - 2026-07
+- 优秀毕业生
+
+## 开源贡献
+### Parser | 维护者 | 2024-01 — 2025-01
+- 修复导入
+`);
+    expect(result.resume.basic.location).toBe('杭州');
+    expect(result.resume.experiences.map((item) => item.company)).toEqual(['甲公司', '乙公司']);
+    expect(result.resume.experiences[0]).toMatchObject({ startDate: '2022-09', endDate: '2024-01', highlights: ['完成上线'] });
+    expect(result.resume.experiences[0]?.description).not.toContain('完成上线');
+    expect(result.resume.experiences[1]).toMatchObject({ startDate: '2020-09', endDate: '2021-12' });
+    expect(result.resume.experiences[1]?.description).not.toContain('Sep');
+    expect(result.warnings.some((warning) => warning.code === 'unmapped-education-note' && warning.detail?.includes('优秀毕业生'))).toBe(true);
+    const contribution = result.resume.customBlocks.find((block) => block.title === '开源贡献');
+    expect(Array.isArray(contribution?.content) ? contribution.content[0] : null).toMatchObject({
+      title: 'Parser', subtitle: '维护者', date: '2024-01 — 2025-01',
+    });
   });
 });

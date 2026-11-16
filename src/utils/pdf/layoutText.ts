@@ -36,10 +36,12 @@ const DEFAULT_LINE_TOLERANCE_RATIO = 0.6;
 const DEFAULT_CELL_GAP_RATIO = 1.5;
 const MIN_CELL_GAP = 8;
 const MIN_GUTTER_WIDTH = 8;
-const MIN_ITEMS_FOR_COLUMN_DETECTION = 20;
-const MIN_COLUMN_ITEM_SHARE = 0.15;
-const GUTTER_SEARCH_MIN_RATIO = 0.28;
-const GUTTER_SEARCH_MAX_RATIO = 0.72;
+const MIN_ITEMS_FOR_COLUMN_DETECTION = 12;
+const MIN_COLUMN_ITEM_SHARE = 0.12;
+const GUTTER_SEARCH_MIN_RATIO = 0.12;
+const GUTTER_SEARCH_MAX_RATIO = 0.88;
+const FULL_WIDTH_COVERAGE = 0.55;
+const CJK = /[\u3400-\u9fff]/;
 
 function median(values: number[]): number {
   if (!values.length) return 0;
@@ -78,7 +80,11 @@ function renderLine(line: PositionedTextItem[], cellGapRatio: number, fallbackCh
       const gap = item.x - previousEnd;
       const cellThreshold = Math.max(MIN_CELL_GAP, cellGapRatio * previousCharWidth);
       if (gap > cellThreshold) text += CELL_SEPARATOR;
-      else if (gap > previousCharWidth * 0.25 && text && !/\s$/.test(text)) text += ' ';
+      else if (gap > previousCharWidth * 0.25 && text && !/\s$/.test(text)) {
+        const glyphs = [...text];
+        const previousGlyph = glyphs[glyphs.length - 1] ?? '';
+        if (!(CJK.test(previousGlyph) && CJK.test([...item.text][0] ?? ''))) text += ' ';
+      }
     }
     text += item.text;
     previousEnd = item.x + item.width;
@@ -87,13 +93,19 @@ function renderLine(line: PositionedTextItem[], cellGapRatio: number, fallbackCh
   return text.replace(/[ \t]+$/, '');
 }
 
+/** 横跨页面中部的通栏标题和页眉，不参与分栏留白的判断。 */
+function isFullWidth(item: PositionedTextItem, contentWidth: number): boolean {
+  return item.width >= contentWidth * FULL_WIDTH_COVERAGE;
+}
+
 /**
- * 寻找贯穿整页的纵向留白：只有所有文本项都不跨越该区间时才判定为分栏。
- * 单栏简历中的居中标题、右对齐日期不会形成贯穿留白，因此不会误判。
+ * 寻找正文区的纵向留白。通栏标题先剔除，所以页眉跨过中缝不会把双栏判成单栏。
+ * 单栏正文没有稳定留白，居中标题和右对齐日期也不会被当成分栏。
  */
-function detectGutter(items: PositionedTextItem[], pageWidth: number): number | null {
-  if (items.length < MIN_ITEMS_FOR_COLUMN_DETECTION) return null;
-  const spans = items
+function detectGutter(items: PositionedTextItem[], contentLeft: number, contentWidth: number): number | null {
+  const body = items.filter((item) => !isFullWidth(item, contentWidth));
+  if (body.length < MIN_ITEMS_FOR_COLUMN_DETECTION) return null;
+  const spans = body
     .map((item): [number, number] => [item.x, item.x + item.width])
     .sort((a, b) => a[0] - b[0]);
   const gaps: Array<[number, number]> = [];
@@ -102,8 +114,8 @@ function detectGutter(items: PositionedTextItem[], pageWidth: number): number | 
     if (start > cursor) gaps.push([cursor === Number.NEGATIVE_INFINITY ? start : cursor, start]);
     cursor = Math.max(cursor, end);
   }
-  const searchFrom = pageWidth * GUTTER_SEARCH_MIN_RATIO;
-  const searchTo = pageWidth * GUTTER_SEARCH_MAX_RATIO;
+  const searchFrom = contentLeft + contentWidth * GUTTER_SEARCH_MIN_RATIO;
+  const searchTo = contentLeft + contentWidth * GUTTER_SEARCH_MAX_RATIO;
   let best: [number, number] | null = null;
   for (const [start, end] of gaps) {
     const from = Math.max(start, searchFrom);
@@ -113,10 +125,10 @@ function detectGutter(items: PositionedTextItem[], pageWidth: number): number | 
   }
   if (!best) return null;
   const middle = (best[0] + best[1]) / 2;
-  const leftCount = items.filter((item) => item.x + item.width <= middle).length;
-  const rightCount = items.filter((item) => item.x >= middle).length;
-  if (leftCount < items.length * MIN_COLUMN_ITEM_SHARE) return null;
-  if (rightCount < items.length * MIN_COLUMN_ITEM_SHARE) return null;
+  const leftCount = body.filter((item) => item.x + item.width <= middle).length;
+  const rightCount = body.filter((item) => item.x >= middle).length;
+  if (leftCount < body.length * MIN_COLUMN_ITEM_SHARE) return null;
+  if (rightCount < body.length * MIN_COLUMN_ITEM_SHARE) return null;
   return middle;
 }
 
@@ -130,24 +142,28 @@ export function layoutPageText(items: PositionedTextItem[], options: LayoutTextO
   const tolerance = Math.max(2, fallbackHeight * (options.lineToleranceRatio ?? DEFAULT_LINE_TOLERANCE_RATIO));
   const cellGapRatio = options.cellGapRatio ?? DEFAULT_CELL_GAP_RATIO;
   const fallbackCharWidth = fallbackHeight / 2;
-  const pageWidth = Math.max(...usable.map((item) => item.x + item.width));
+  const contentLeft = Math.min(...usable.map((item) => item.x));
+  const contentRight = Math.max(...usable.map((item) => item.x + item.width));
+  const contentWidth = Math.max(1, contentRight - contentLeft);
   const render = (subset: PositionedTextItem[]): string =>
     groupLines(subset, tolerance)
       .map((line) => renderLine(line, cellGapRatio, fallbackCharWidth))
       .filter((line) => line.length)
       .join('\n');
 
-  const gutter = detectGutter(usable, pageWidth);
+  const gutter = detectGutter(usable, contentLeft, contentWidth);
   if (gutter === null) return { text: render(usable), columnCount: 1 };
 
-  const left = usable.filter((item) => item.x < gutter);
-  const right = usable.filter((item) => item.x >= gutter);
+  const banner = usable.filter((item) => isFullWidth(item, contentWidth));
+  const left = usable.filter((item) => !isFullWidth(item, contentWidth) && item.x < gutter);
+  const right = usable.filter((item) => !isFullWidth(item, contentWidth) && item.x >= gutter);
   const text = [
+    render(banner),
     LEFT_COLUMN_MARKER,
     render(left),
     '',
     RIGHT_COLUMN_MARKER,
     render(right),
-  ].filter((part, index) => part.length || index === 2).join('\n');
+  ].filter((part, index) => part.length || index === 3).join('\n');
   return { text, columnCount: 2 };
 }

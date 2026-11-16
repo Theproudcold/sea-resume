@@ -6,10 +6,9 @@ import type { ResumeData } from '@/types/resume';
 vi.mock('../AiClient', () => ({ requestAiJson: vi.fn() }));
 const config = { baseUrl: 'https://example.test/v1', model: 'test', apiKey: 'secret' };
 function resume(): ResumeData {
-  const parsed = parseResumeMarkdown('# 私密姓名\n\n## 个人简介\n负责前端工作\n\n## 工作经历\n### 私密公司 | 工程师 | 2022.01 — 至今\n- 在业务增长期负责结算页面，完成改版\n\n## 项目经验\n### 内部系统 | 负责人 | 2023.01 — 2023.06\n- 使用 Vue 重构列表').resume;
+  const parsed = parseResumeMarkdown('# 私密姓名\n\n## 个人简介\n负责前端工作\n\n## 工作经历\n### 私密公司 | 工程师 | 2022.01 — 至今\n在业务增长期负责结算页面，完成改版\n- 推动评审\n\n## 项目经验\n### 内部系统 | 负责人 | 2023.01 — 2023.06\n使用 Vue 重构列表').resume;
   parsed.basic.phone = 'private-phone';
   parsed.basic.email = 'private@example.test';
-  parsed.experiences[0]!.highlights = ['推动评审'];
   return parsed;
 }
 describe('STAR polish', () => {
