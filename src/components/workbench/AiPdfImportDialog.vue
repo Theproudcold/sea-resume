@@ -47,6 +47,8 @@
         </details>
         <el-alert v-if="extracted?.columnPages" class="column-hint" type="info" :closable="false" show-icon
           :title="`检测到 ${extracted.columnPages} 页为分栏排版，已按栏还原阅读顺序；若结果仍错乱，可改用视觉识别。`" />
+        <el-alert v-if="extracted?.truncated" class="column-hint" type="warning" :closable="false" show-icon
+          title="提取文本超过 60,000 字符，只会发送前 60,000 字符。后文请拆分后单独导入。" />
       </template>
       <template v-else>
         <div class="page-thumbnails" aria-label="待发送的页面图片">
@@ -223,7 +225,7 @@ import type { ResumeData } from '@/types/resume';
 import type { MarkdownImportResult } from '@/types/markdown-import';
 import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
-import { extractPdfText, renderPdfPagesToImages, requestAiPdfMarkdown, requestAiPdfMarkdownFromImages, buildVisionTruncationWarning, MAX_VISION_PAGES, type ExtractedPdfText, type PdfImportMode, type RenderedPdfPages } from '@/services/ai/pdfResumeImport';
+import { extractPdfText, renderPdfPagesToImages, requestAiPdfMarkdown, requestAiPdfMarkdownFromImages, buildVisionTruncationWarning, buildTextTruncationWarning, MAX_VISION_PAGES, type ExtractedPdfText, type PdfImportMode, type RenderedPdfPages } from '@/services/ai/pdfResumeImport';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { markdownToSafeHtml } from '@/utils/markdown/markdownSafety';
 
@@ -352,6 +354,10 @@ async function parseWithAi() {
     const imported = parseResumeMarkdown(result.markdown, fileName.value.replace(/\.pdf$/i, '.md'));
     if (mode.value === 'vision' && rendered.value) {
       const truncation = buildVisionTruncationWarning(rendered.value.pageCount, rendered.value.renderedPages);
+      if (truncation) imported.warnings.push(truncation);
+    }
+    if (mode.value === 'text') {
+      const truncation = buildTextTruncationWarning(extracted.value?.truncated);
       if (truncation) imported.warnings.push(truncation);
     }
     parsed.value = imported;

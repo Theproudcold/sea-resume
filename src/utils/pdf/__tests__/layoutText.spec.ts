@@ -51,6 +51,25 @@ describe('layoutPageText', () => {
     expect(right).toContain('正文内容 1');
   });
 
+  it('keeps a banner above two columns instead of mixing the columns', () => {
+    const banner = item('于海波 · Agent 应用开发工程师', 40, 20, { width: 520 });
+    const sidebar = Array.from({ length: 8 }, (_, index) => item(`技能 ${index + 1}`, 40, 60 + index * 20, { width: 70 }));
+    const body = Array.from({ length: 8 }, (_, index) => item(`正文内容 ${index + 1}`, 280, 60 + index * 20, { width: 280 }));
+    const layout = layoutPageText([banner, ...sidebar, ...body]);
+    expect(layout.columnCount).toBe(2);
+    const [head, columns] = layout.text.split(LEFT_COLUMN_MARKER);
+    expect(head).toContain('于海波');
+    const [left, right] = (columns ?? '').split(RIGHT_COLUMN_MARKER);
+    expect(left).toContain('技能 1');
+    expect(left).not.toContain('正文内容 1');
+    expect(right).toContain('正文内容 1');
+  });
+
+  it('joins adjacent CJK glyphs instead of inserting a space between them', () => {
+    const glyphs = [...'于海波'].map((glyph, index) => item(glyph, 40 + index * 12, 40, { width: 11, charWidth: 11 }));
+    expect(layoutPageText(glyphs).text).toBe('于海波');
+  });
+
   it('keeps a single-column resume single-column when text crosses the middle', () => {
     const items = Array.from({ length: 12 }, (_, index) => item(`这是一段很长的项目描述文字 ${index + 1}`, 40, 40 + index * 20, { width: 420 }));
     expect(layoutPageText(items).columnCount).toBe(1);

@@ -127,6 +127,9 @@
                   </div>
                 </div>
                 <div class="ql-editor px-0" v-html="exp.description" style="font-size: var(--font-size); line-height: var(--line-height)"></div>
+                <ul v-if="exp.highlights?.length" class="highlight-list">
+                  <li v-for="(highlight, index) in exp.highlights" :key="`${exp.id}-highlight-${index}`">{{ highlight }}</li>
+                </ul>
               </div>
             </div>
           </section>
@@ -333,6 +336,11 @@ const setActiveSection = (id: string) => {
 
 .section {
   page-break-inside: avoid;
+}
+
+.highlight-list {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
 }
 
 .section-title {

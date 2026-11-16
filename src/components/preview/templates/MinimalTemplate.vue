@@ -74,6 +74,9 @@
                 <div class="text-sm text-gray-600 mb-1">{{ exp.position }}</div>
                 <div class="text-xs text-gray-500 mb-3">{{ formatDateRange(exp.startDate, exp.endDate) }}</div>
                 <div class="text-sm text-gray-700 max-w-2xl mx-auto rich-text" v-html="exp.description"></div>
+                <ul v-if="exp.highlights?.length" class="highlight-list">
+                  <li v-for="(highlight, index) in exp.highlights" :key="`${exp.id}-highlight-${index}`">{{ highlight }}</li>
+                </ul>
               </div>
             </div>
           </section>
@@ -216,6 +219,12 @@ const setActiveSection = (id: string) => {
 </script>
 
 <style scoped>
+.highlight-list {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
+  text-align: left;
+}
+
 .minimal-template {
   background: var(--resume-paper);
   color: var(--resume-ink);
