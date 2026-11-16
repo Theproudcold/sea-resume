@@ -113,8 +113,47 @@ function field(record: Record<string, string>, ...names: string[]): string {
   return '';
 }
 
+/** `- **微信**：sea-resume` — the Markdown export writes custom contacts as header bullets. */
+const CUSTOM_CONTACT_LINE = /^\s*[-*+]\s+(?:\*\*)?([^*：:|]{1,24}?)(?:\*\*)?\s*[:：]\s*(.+?)\s*$/;
+
+/** Keep the URL when the value is written as a link; otherwise strip emphasis markers. */
+function contactValue(raw: string): string {
+  const link = raw.match(/\[[^\]]*\]\(([^)]+)\)/);
+  const value = (link ? link[1] ?? '' : raw.replace(/[*`~]/g, '')).trim();
+  // A value that names a scheme must be an allowed one; otherwise drop it entirely.
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return sanitizeMarkdownUrl(value) ?? '';
+  return value;
+}
+
+/**
+ * Pull exported custom contacts out of the header before email/phone detection,
+ * so a contact such as「QQ：123456789」is never misread as the phone number.
+ */
+function extractCustomContacts(lines: string[], resume: ResumeData): string[] {
+  const remaining: string[] = [];
+  for (const line of lines) {
+    const match = line.match(CUSTOM_CONTACT_LINE);
+    if (!match) {
+      remaining.push(line);
+      continue;
+    }
+    const label = cleanInline(match[1] ?? '');
+    const value = contactValue(match[2] ?? '');
+    if (!label || !value) {
+      remaining.push(line);
+      continue;
+    }
+    resume.basic.customContacts = [
+      ...(resume.basic.customContacts ?? []),
+      { id: generateId(), label, value, icon: 'Link' },
+    ];
+  }
+  return remaining;
+}
+
 function parseContact(lines: string[], resume: ResumeData, warnings: MarkdownImportWarning[]) {
-  const source = lines.join('\n');
+  const rawSource = lines.join('\n');
+  const source = extractCustomContacts(lines, resume).join('\n');
   const email = source.match(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/)?.[0];
   const phone = source.match(/(?:\+?\d[\d\s().-]{6,}\d)/)?.[0]?.trim();
   if (email) resume.basic.email = email;
@@ -131,7 +170,7 @@ function parseContact(lines: string[], resume: ResumeData, warnings: MarkdownImp
       warnings.push({ code: 'unmapped-link', message: '检测到多个个人链接，主链接已放入个人信息，其余链接保存在“其他链接”模块。' });
     }
   }
-  if (/\b(?:javascript|data):|<\/?[a-z][^>]*>/i.test(source)) {
+  if (/\b(?:javascript|data):|<\/?[a-z][^>]*>/i.test(rawSource)) {
     warnings.push({ code: 'unsafe-html', message: '检测到 HTML 或不安全链接；原始 HTML 不会执行，危险链接不会创建。' });
   }
 }
