@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildVisionTruncationWarning,
   parseAiPdfMarkdownResponse,
   positionedItems,
   requestAiPdfMarkdown,
   requestAiPdfMarkdownFromImages,
+  toAiPdfMarkdownResult,
   validatePdfFileMetadata,
 } from '../pdfResumeImport';
 afterEach(() => vi.unstubAllGlobals());
@@ -22,6 +24,23 @@ describe('AI PDF resume import helpers', () => {
     expect(() => parseAiPdfMarkdownResponse('{"markdown":""}')).toThrow('没有返回');
     expect(() => parseAiPdfMarkdownResponse('not-json')).toThrow('JSON');
   });
+  it('validates an already-parsed AI object without a round trip through JSON', () => {
+    expect(toAiPdfMarkdownResult({ markdown: ' # 林晓 ', explanation: 'ok' })).toEqual({ markdown: ' # 林晓 ', explanation: 'ok' });
+    expect(toAiPdfMarkdownResult({ markdown: '# A' }).explanation).toBe('请检查 AI 识别出的简历信息。');
+    expect(() => toAiPdfMarkdownResult([{ markdown: '# A' }])).toThrow('结构无效');
+    expect(() => toAiPdfMarkdownResult({ markdown: 42 })).toThrow('没有返回');
+  });
+
+  it('warns when vision mode cannot cover every PDF page', () => {
+    expect(buildVisionTruncationWarning(18, 12)).toEqual({
+      code: 'truncated-pages',
+      message: 'PDF 共 18 页，视觉识别单次最多发送 12 页；后 6 页未识别，请拆分后单独导入。',
+    });
+    expect(buildVisionTruncationWarning(12, 12)).toBeNull();
+    expect(buildVisionTruncationWarning(8, 12)).toBeNull();
+    expect(buildVisionTruncationWarning(Number.NaN, 12)).toBeNull();
+  });
+
   it('uses local keyless transport with optional JSON mode and validates the result', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: '{"markdown":"# Candidate"}' } }] })));
     vi.stubGlobal('fetch', fetcher);
