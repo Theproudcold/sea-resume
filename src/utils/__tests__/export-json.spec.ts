@@ -34,6 +34,21 @@ describe('validateResumeData', () => {
     ]);
   });
 
+  it('keeps the four typed section titles when untrusted keys try to overwrite them', () => {
+    const parsed = parseResumeMarkdown('# Jia').resume;
+    const imported = validateResumeData({
+      ...parsed,
+      sectionTitles: { experience: 123, education: null, custom: '证书', projects: { nested: true } },
+    });
+
+    expect(imported.sectionTitles.experience).toBe('工作经历');
+    expect(imported.sectionTitles.education).toBe('教育背景');
+    expect(imported.sectionTitles.projects).toBe('项目经验');
+    expect(imported.sectionTitles.skills).toBe('技能证书');
+    // Custom ids survive only as strings; non-string values are dropped.
+    expect(imported.sectionTitles.custom).toBe('证书');
+  });
+
   it('rejects malformed structures and sanitizes rich-text HTML', () => {
     const parsed = parseResumeMarkdown('# Jia\n\n## 工作经历\n### Acme | Engineer\n- Ship product').resume;
     const untrusted = {
