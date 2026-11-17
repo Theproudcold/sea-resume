@@ -3,30 +3,13 @@ import type { ResumeData, ResumeMeta } from './resume';
 /**
  * 存储类型
  */
-export type StorageType = 'local_storage' | 'file_system' | 'webdav' | 'baidu_disk';
-
-/**
- * 同步状态
- */
-export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+export type StorageType = 'local_storage' | 'file_system';
 
 /**
  * 存储配置
  */
 export interface StorageConfig {
   type: StorageType;
-  // WebDAV 配置
-  webdav?: {
-    endpoint: string;
-    username: string;
-    password: string;  // 应该加密存储
-  };
-  // 百度网盘配置
-  baiduDisk?: {
-    accessToken: string;
-    refreshToken: string;
-    expiresAt: number;
-  };
   // 文件系统配置
   fileSystem?: {
     directoryHandle?: FileSystemDirectoryHandle;  // 存储在 IndexedDB 中
@@ -61,15 +44,6 @@ export interface IStorageAdapter {
 
   /** 检查是否已初始化/已授权 */
   isReady(): boolean;
-}
-
-/**
- * 存储操作结果
- */
-export interface StorageOperationResult {
-  success: boolean;
-  error?: string;
-  data?: any;
 }
 
 /**
