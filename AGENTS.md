@@ -1,5 +1,28 @@
 # 项目协作规则
 
+## Git 工作规范
+
+### 分支模型
+- `master`：稳定可发布分支，任何时刻都应可构建、可发布。只接受来自 `dev` 的合并与 `hotfix/*` 的紧急修复，不要在 `master` 上直接开发；推送 `master` 会触发 GitHub Pages 部署（`.github/workflows/deploy-pages.yml`）。
+- `dev`：开发集成分支。所有新功能、新特性、重构、普通修复先合入 `dev`，在 `dev` 上验证通过后再并入 `master`。
+- 功能分支：一律从 `dev` 切出，命名为 `<type>/<简短说明>`，`type` 与提交信息的语义类型一致，说明用小写短横线连接的英文短语，例如 `feat/ai-relay`、`fix/pdf-font-subset`、`refactor/template-store`。
+- `hotfix/*`：线上紧急问题从 `master` 切出，修复后先合回 `master`，再同步回 `dev`，避免修复在开发分支上丢失。
+
+### 开发流程
+1. 同步基线：`git switch dev && git pull --ff-only`
+2. 新建分支：`git switch -c feat/xxx`，不要在 `master` 或 `dev` 上直接改代码
+3. 小步提交，提交信息遵守下面的「Git 提交信息」一节
+4. 自测：`pnpm test`、`pnpm build`（Node ≥ 22.13.0、pnpm 10.30.2）
+5. 合并前先对齐基线：`git fetch origin && git rebase origin/dev`，冲突在功能分支内解决
+6. 合入 `dev` 并推送：`git switch dev && git merge --no-ff feat/xxx`
+7. 发布：`dev` 验证通过后 `git switch master && git merge --no-ff dev && git push`，推送即部署
+
+### 合并与历史
+- 合入 `dev`、`master` 使用 `git merge --no-ff` 生成合并提交，保留特性边界；合并提交信息写作 `merge(中文范围): 中文说明`。
+- `master` 与 `dev` 禁止 `git push --force`，禁止改写已推送历史；功能分支整理历史前，先确认提交尚未推送。
+- 分支合并后及时删除（本地与远端），保持分支列表干净。
+- 并行开发使用 `git worktree`（例如 `.worktrees/<分支名>`），不要在同一工作区反复切换分支。
+
 ## Git 提交信息
 - 提交标题统一为 `<type>(<中文范围>): <中文说明>`，例如 `feat(编辑器): 支持恢复章节状态`。
 - 根据实际改动选择语义类型：`feat`（新功能）、`fix`（修复）、`refactor`（重构）、`test`（测试）、`docs`（文档）、`chore`（维护）、`perf`（性能）、`build`（构建）、`ci`（持续集成）、`style`（格式/样式）、`revert`（回滚）；不要把非功能改动统称为 `feat`。合并提交使用 `merge(中文范围): 中文说明`。

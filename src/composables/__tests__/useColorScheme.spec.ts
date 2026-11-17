@@ -73,8 +73,27 @@ describe('color scheme preference', () => {
   });
 
   it('paints the document class without touching storage', () => {
-    applyColorScheme(true);
+    applyColorScheme('dark');
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(localStorage.getItem(COLOR_SCHEME_KEY)).toBeNull();
+  });
+
+  it('keeps the color-scheme meta in sync so pre-CSS paint matches the theme', () => {
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', 'color-scheme');
+    document.head.append(meta);
+    vi.stubGlobal('matchMedia', () => ({ matches: false, media: '' }));
+
+    applyColorScheme('dark');
+    expect(meta.getAttribute('content')).toBe('dark');
+
+    applyColorScheme('light');
+    expect(meta.getAttribute('content')).toBe('light');
+
+    // 跟随系统时必须交还给浏览器，否则系统切到浅色后首屏仍是深色。
+    applyColorScheme('system');
+    expect(meta.getAttribute('content')).toBe('light dark');
+
+    meta.remove();
   });
 });

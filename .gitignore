@@ -27,6 +27,7 @@ dist-ssr
 .worktrees/
 .hallmark/
 .pi/
+.superpowers/
 
 # 本地包管理缓存
 .pnpm-store/

@@ -195,4 +195,125 @@ describe('resume job versions', () => {
     expect(merged.customBlocks[0]?.content).toEqual(expect.arrayContaining([expect.objectContaining({ visible: false })]));
   });
 
+  it('records format-only changes and applies B markup when adopted', () => {
+    const before = resume();
+    before.experiences = [{ id: 'exp', company: 'Acme', position: '工程师', startDate: '', endDate: '', description: '建设平台' }];
+    const after = JSON.parse(JSON.stringify(before)) as ResumeData;
+    after.experiences[0]!.description = '<p>建设<strong>平台</strong></p>';
+
+    const differences = compareResumeVersions(before, after);
+    expect(differences).toEqual([
+      expect.objectContaining({
+        section: '工作经历', item: 'Acme · 工程师', field: '工作内容',
+        before: '建设平台', after: '建设平台', type: 'formatted', scope: 'field',
+        beforePath: ['experiences', 0, 'description'], afterPath: ['experiences', 0, 'description'],
+      }),
+    ]);
+
+    const merged = applyResumeDifferences(before, after, differences, differences.map((difference) => difference.id));
+    expect(merged.experiences[0]?.description).toBe('<p>建设<strong>平台</strong></p>');
+    expect(before.experiences[0]?.description).toBe('建设平台');
+  });
+
+  it('ignores markup-only differences inside unordered fields', () => {
+    const before = resume();
+    before.skills = [{ id: 'skill', category: '技术', items: ['<p>Vue</p>', 'TypeScript'] }];
+    const after = JSON.parse(JSON.stringify(before)) as ResumeData;
+    after.skills[0]!.items = ['TypeScript', '<p>Vue</p>'];
+
+    expect(compareResumeVersions(before, after)).toEqual([]);
+
+    const marked = JSON.parse(JSON.stringify(before)) as ResumeData;
+    marked.skills[0]!.items = ['<p><strong>Vue</strong></p>', 'TypeScript'];
+    expect(compareResumeVersions(before, marked)).toEqual([]);
+  });
+
+  it('compares unordered skill lists by member and merges them as a set', () => {
+    const before = resume();
+    before.skills = [{ id: 'skill', category: '技术', items: ['Vue', 'TypeScript'] }];
+    const after = JSON.parse(JSON.stringify(before)) as ResumeData;
+    after.skills[0]!.items = ['TypeScript', 'React'];
+
+    const differences = compareResumeVersions(before, after);
+    expect(differences).toEqual([
+      expect.objectContaining({ section: '技能', item: '技术', field: '技能清单', before: 'Vue', after: '', type: 'removed', member: 'Vue' }),
+      expect.objectContaining({ section: '技能', item: '技术', field: '技能清单', before: '', after: 'React', type: 'added', member: 'React' }),
+    ]);
+
+    const onlyAdded = differences.find((difference) => difference.type === 'added');
+    const partial = applyResumeDifferences(before, after, differences, onlyAdded ? [onlyAdded.id] : []);
+    expect(partial.skills[0]?.items).toEqual(['Vue', 'TypeScript', 'React']);
+
+    const merged = applyResumeDifferences(before, after, differences, differences.map((difference) => difference.id));
+    expect(merged.skills[0]?.items).toEqual(['TypeScript', 'React']);
+  });
+
+  it('keeps adopted custom modules in the editor section order', () => {
+    const before = resume();
+    before.sectionOrder = ['experience', 'projects', 'awards', 'education', 'skills'];
+    before.customBlocks = [{ id: 'awards', title: '奖项', type: 'list', content: [], order: 2 }];
+    const after = JSON.parse(JSON.stringify(before)) as ResumeData;
+    after.customBlocks = [
+      { id: 'awards', title: '奖项', type: 'list', content: [], order: 2 },
+      { id: 'languages', title: '语言', type: 'list', content: [], order: 3 },
+    ];
+    after.sectionOrder = ['experience', 'projects', 'awards', 'languages', 'education', 'skills'];
+
+    const differences = compareResumeVersions(before, after);
+    expect(differences.filter((difference) => difference.scope === 'item')).toHaveLength(1);
+
+    const merged = applyResumeDifferences(before, after, differences, differences.map((difference) => difference.id));
+    expect(merged.customBlocks.map((block) => block.id)).toEqual(['awards', 'languages']);
+    expect(merged.sectionOrder).toEqual(['experience', 'projects', 'awards', 'languages', 'education', 'skills']);
+    expect(before.sectionOrder).toEqual(['experience', 'projects', 'awards', 'education', 'skills']);
+
+    const withModule = JSON.parse(JSON.stringify(before)) as ResumeData;
+    withModule.sectionOrder = ['experience', 'languages', 'projects', 'awards', 'education', 'skills'];
+    withModule.hiddenSections = ['languages'];
+    withModule.customBlocks = [...before.customBlocks, { id: 'languages', title: '语言', type: 'list', content: [], order: 3 }];
+    const dropped = compareResumeVersions(withModule, before);
+    const trimmed = applyResumeDifferences(withModule, before, dropped, dropped.map((difference) => difference.id));
+    expect(trimmed.customBlocks.map((block) => block.id)).toEqual(['awards']);
+    expect(trimmed.sectionOrder).toEqual(['experience', 'projects', 'awards', 'education', 'skills']);
+    expect(trimmed.hiddenSections).toEqual([]);
+  });
+
+  it('treats a changed position at the same company as a replacement, not an edit', () => {
+    const before = resume();
+    before.experiences = [{ id: 'old', company: 'Acme', position: '工程师', startDate: '', endDate: '', description: '甲' }];
+    const after = JSON.parse(JSON.stringify(before)) as ResumeData;
+    after.experiences = [{ id: 'new', company: 'Acme', position: '设计师', startDate: '', endDate: '', description: '乙' }];
+
+    const differences = compareResumeVersions(before, after);
+    expect(differences.map((difference) => difference.type)).toEqual(['removed', 'added']);
+    expect(differences.every((difference) => difference.scope === 'item')).toBe(true);
+  });
+
+  it('still matches records when the stronger identity fields are empty', () => {
+    const before = resume();
+    before.education = [{ id: 'old', school: 'A 大学', degree: '', major: '', startDate: '', endDate: '' }];
+    const after = JSON.parse(JSON.stringify(before)) as ResumeData;
+    after.education = [{ id: 'new', school: 'A 大学', degree: '本科', major: '', startDate: '', endDate: '' }];
+
+    expect(compareResumeVersions(before, after)).toEqual([
+      expect.objectContaining({ section: '教育背景', item: 'A 大学', field: '学历', before: '', after: '本科', type: 'added', scope: 'field' }),
+    ]);
+  });
+
+  it('compares optional basic fields and standard module titles', () => {
+    const before = resume();
+    const after = JSON.parse(JSON.stringify(before)) as ResumeData;
+    after.basic.birthDate = '1998-05';
+    after.basic.showAge = true;
+    after.basic.showExperienceYears = false;
+    after.sectionTitles = { ...after.sectionTitles, experience: '实习与工作' };
+
+    const fields = compareResumeVersions(before, after).map((difference) => `${difference.section}:${difference.field}`);
+    expect(fields).toContain('个人信息:生日');
+    expect(fields).toContain('个人信息:显示年龄');
+    expect(fields).toContain('工作经历:标题');
+    // 未设置与显式关闭是同一状态。
+    expect(fields).not.toContain('个人信息:显示工作年限');
+  });
+
 });

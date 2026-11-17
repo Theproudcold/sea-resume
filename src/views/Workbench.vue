@@ -108,7 +108,7 @@
         placeholder="输入新名称"
         maxlength="50"
         show-word-limit
-        @keyup.enter="confirmRename"
+        @keydown.enter="onRenameEnter"
       />
       <template #footer>
         <el-button @click="showRenameDialog = false">取消</el-button>
@@ -146,6 +146,7 @@ import { useWorkbenchStore } from '@/stores/workbench';
 import { useStorageStore } from '@/stores/storage';
 import { storageManager } from '@/services/storage/StorageManager';
 import { exportToJSON, importFromJSON } from '@/utils/export-json';
+import { imeSafeKeyHandler } from '@/utils/imeSafeKeys';
 import ResumeCard from '@/components/workbench/ResumeCard.vue';
 import SettingsCenter, { type SettingsSection } from '@/components/workbench/SettingsCenter.vue';
 import { lazyFeature } from '@/utils/lazyFeature';
@@ -310,6 +311,9 @@ const confirmRename = async () => {
     renaming.value = false;
   }
 };
+
+// 输入法用 Enter 确认候选词（中文简历名很常见），不能当成「确定重命名」。
+const onRenameEnter = imeSafeKeyHandler(() => { void confirmRename(); });
 
 const handleDuplicate = async (id: string) => {
   try {

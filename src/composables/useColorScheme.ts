@@ -26,16 +26,22 @@ export function resolveColorScheme(preference: ColorSchemePreference): ColorSche
   return preference;
 }
 
-export function applyColorScheme(dark: boolean) {
+export function applyColorScheme(preference: ColorSchemePreference) {
+  const dark = resolveColorScheme(preference) === 'dark';
   document.documentElement.classList.toggle('dark', dark);
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? THEME_COLOR.dark : THEME_COLOR.light);
+  // `color-scheme` meta 决定 CSS 生效前的首屏配色：跟随系统时保持 "light dark"，
+  // 用户固定主题时写成具体值，避免深色偏好下先闪一帧浅色浏览器 UI。
+  document.querySelector('meta[name="color-scheme"]')
+    ?.setAttribute('content', preference === 'system' ? 'light dark' : preference);
 }
 
 /**
  * 新主题从点击处按水滴扩开，旧主题留在涟圈外。
  * 不支持视图过渡、用户关闭动画或没有点击位置时直接切换。
  */
-export function revealColorScheme(dark: boolean, origin?: { x: number; y: number }) {
+export function revealColorScheme(preference: ColorSchemePreference, origin?: { x: number; y: number }) {
+  const dark = resolveColorScheme(preference) === 'dark';
   const root = document.documentElement;
   const reduceMotion = typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -49,7 +55,7 @@ export function revealColorScheme(dark: boolean, origin?: { x: number; y: number
     || typeof startViewTransition !== 'function'
     || root.classList.contains('scheme-rippling')
   ) {
-    applyColorScheme(dark);
+    applyColorScheme(preference);
     return;
   }
 
@@ -71,12 +77,12 @@ export function revealColorScheme(dark: boolean, origin?: { x: number; y: number
     root.classList.remove('scheme-rippling');
   };
   const fail = () => {
-    applyColorScheme(dark);
+    applyColorScheme(preference);
     settle();
   };
   let transition: SchemeViewTransition;
   try {
-    transition = startViewTransition(() => applyColorScheme(dark));
+    transition = startViewTransition(() => applyColorScheme(preference));
   } catch {
     fail();
     return;
@@ -111,5 +117,5 @@ export function persistColorScheme(preference: ColorSchemePreference, origin?: {
   if (preference === 'system') delete document.documentElement.dataset.mode;
   else document.documentElement.dataset.mode = preference;
   localStorage.setItem(COLOR_SCHEME_KEY, preference);
-  revealColorScheme(resolveColorScheme(preference) === 'dark', origin);
+  revealColorScheme(preference, origin);
 }

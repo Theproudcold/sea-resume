@@ -12,8 +12,8 @@
               ref="titleInputRef"
               aria-label="编辑模块标题"
               @blur="saveTitle"
-              @keyup.enter="saveTitle"
-              @keyup.esc="cancelTitleEdit"
+              @keydown.enter="onTitleEnter"
+              @keydown.esc="onTitleEsc"
             />
           </div>
           <button v-else type="button" class="section-title-button" @click="startEditingTitle">
@@ -66,6 +66,7 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue';
 import { Rank, ArrowDown, EditPen, Hide, View, Delete } from '@element-plus/icons-vue';
+import { imeSafeKeyHandler } from '@/utils/imeSafeKeys';
 
 const props = withDefaults(defineProps<{
   id: string;
@@ -121,6 +122,10 @@ const saveTitle = () => {
     emit('update:title', localTitle.value.trim());
   }
 };
+
+// 输入法用 Enter 确认候选词、Esc 取消候选，不能当成「保存 / 放弃」。
+const onTitleEnter = imeSafeKeyHandler(() => saveTitle());
+const onTitleEsc = imeSafeKeyHandler(() => cancelTitleEdit());
 </script>
 
 <style scoped>

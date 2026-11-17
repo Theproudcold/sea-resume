@@ -64,6 +64,21 @@ describe('A4 fit helpers', () => {
       moduleMargins: { top: 0, bottom: 4, left: 0, right: 0 },
     });
   });
+
+  it('never lets a non-finite token escape into the theme', () => {
+    const compact = getCompactThemeSettings(themeWith({
+      fontSize: Number.NaN,
+      lineHeight: Number.NaN,
+      pageMargins: Number.NaN,
+      moduleMargins: { top: Number.NaN, bottom: Number.NaN, left: Number.NaN, right: Number.NaN },
+    }));
+    expect(compact).toEqual({
+      fontSize: 12,
+      lineHeight: 1.2,
+      pageMargins: 12,
+      moduleMargins: { top: 0, bottom: 4, left: 0, right: 0 },
+    });
+  });
 });
 
 describe('nextFitStep ladder', () => {

@@ -5,6 +5,7 @@
     <link rel="icon" type="image/png" href="%BASE_URL%brand/sea-resume-logo-generated.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f4f6f8" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="description" content="Sea Resume — 简洁、灵活的中文简历制作工具" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,6 +18,10 @@
           var dark = mode === 'dark' || ((mode !== 'light') && matchMedia('(prefers-color-scheme: dark)').matches);
           if (mode === 'light' || mode === 'dark') document.documentElement.dataset.mode = mode;
           document.documentElement.classList.toggle('dark', dark);
+          // 固定主题时把 color-scheme 写成具体值，跟随系统时保持 light dark：
+          // CSS 生效前浏览器就按正确配色渲染滚动条、原生表单控件与画布底色。
+          var scheme = document.querySelector('meta[name="color-scheme"]');
+          if (scheme) scheme.setAttribute('content', mode === 'light' || mode === 'dark' ? mode : 'light dark');
           var meta = document.querySelector('meta[name="theme-color"]');
           if (meta) meta.setAttribute('content', dark ? '#141820' : '#f4f6f8');
         } catch (e) {}

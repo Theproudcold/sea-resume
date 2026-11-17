@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
@@ -148,5 +149,109 @@ describe('ResumeVersionManager comparison', () => {
     expect(readResume).toHaveBeenCalledWith('base');
     expect(readResume).toHaveBeenCalledWith('target');
     expect(wrapper.text()).toContain('工作经历');
+  });
+
+  it('lists job versions from the index without reading their bodies', async () => {
+    const indexed = resumes.map((resume) => (resume.id === 'target'
+      ? { ...resume, jobTarget: { versionName: 'AI Agent 技术简历', company: 'Acme', position: 'Agent 工程师', sourceResumeId: 'base' } }
+      : resume));
+    const wrapper = mount(ResumeVersionManager, {
+      props: { modelValue: true, resumes: indexed },
+      global: { stubs },
+    });
+    await wrapper.find('.open-history').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('AI Agent 技术简历');
+    expect(wrapper.text()).toContain('来源：基础简历');
+    // 索引里已有岗位版本的简历不再读正文；没有索引的旧简历仍会回落读一次。
+    expect(readResume).not.toHaveBeenCalledWith('target');
+    expect(readResume).toHaveBeenCalledWith('base');
+  });
+
+  function selectionCount(wrapper: ReturnType<typeof mountManager>) {
+    const match = wrapper.text().match(/已选 (\d+) \/ (\d+) 项/);
+    return match ? { selected: Number(match[1]), total: Number(match[2]) } : null;
+  }
+
+  async function openComparison(wrapper: ReturnType<typeof mountManager>) {
+    await wrapper.findAll('button').find((button) => button.text() === '查看差异')!.trigger('click');
+    await flushPromises();
+  }
+
+  it('scopes the select-all toggle to the filtered differences', async () => {
+    readResume.mockImplementation(async (id: string) => id === 'base' ? before : after);
+    const wrapper = mountManager();
+    await openComparison(wrapper);
+
+    const initial = selectionCount(wrapper);
+    expect(initial).not.toBeNull();
+    expect(initial!.selected).toBe(initial!.total);
+
+    await wrapper.get('select[aria-label="按变化类型筛选"]').setValue('added');
+    expect(wrapper.text()).toContain('当前显示 2 项');
+
+    const selectAll = wrapper.get('input[aria-label="全选当前筛选的差异"]').element as HTMLInputElement;
+    expect(selectAll.indeterminate).toBe(false);
+
+    await wrapper.get('input[aria-label="全选当前筛选的差异"]').setValue(false);
+    // 只取消当前筛选出来的两条，未显示的修改保持勾选。
+    expect(selectionCount(wrapper)!.selected).toBe(initial!.total - 2);
+    expect(selectAll.indeterminate).toBe(false);
+
+    // 只勾回其中一条，全选进入半选状态。
+    await wrapper.get('input[aria-label="采纳版本 B：智能助手 · 开发者 整项"]').setValue(true);
+    expect(selectionCount(wrapper)!.selected).toBe(initial!.total - 1);
+    expect(selectAll.indeterminate).toBe(true);
+  });
+
+  it('adopts one section without touching the other sections', async () => {
+    readResume.mockImplementation(async (id: string) => id === 'base' ? before : after);
+    const wrapper = mountManager();
+    await openComparison(wrapper);
+
+    const initial = selectionCount(wrapper);
+    const row = wrapper.get('input[aria-label="采纳版本 B：Acme · 工程师 工作内容"]');
+    expect((row.element as HTMLInputElement).checked).toBe(true);
+
+    await wrapper.get('input[aria-label="采纳本节版本 B：工作经历"]').setValue(false);
+    expect((row.element as HTMLInputElement).checked).toBe(false);
+    expect(selectionCount(wrapper)!.selected).toBe(initial!.total - 1);
+  });
+
+  it('shows format-only changes with a dedicated badge and filter', async () => {
+    const styled = JSON.parse(JSON.stringify(before)) as ResumeData;
+    styled.id = 'target';
+    styled.experiences[0]!.description = '<p>开发<strong>内部平台</strong></p>';
+    readResume.mockImplementation(async (id: string) => id === 'base' ? before : styled);
+    const wrapper = mountManager();
+    await openComparison(wrapper);
+
+    expect(wrapper.text()).toContain('格式');
+    await wrapper.get('select[aria-label="按变化类型筛选"]').setValue('formatted');
+    expect(wrapper.text()).toContain('工作经历');
+    expect(wrapper.text()).toContain('仅看格式');
+  });
+
+  it('discards a comparison that finishes after the version selection changed', async () => {
+    let resolveBase: ((value: ResumeData) => void) | undefined;
+    readResume.mockImplementation((id: string) => {
+      if (id !== 'base') return Promise.resolve(after);
+      return new Promise<ResumeData>((resolve) => { resolveBase = resolve; });
+    });
+    const wrapper = mountManager();
+    await wrapper.findAll('button').find((button) => button.text() === '查看差异')!.trigger('click');
+    await nextTick();
+
+    expect(wrapper.findAll('button').find((button) => button.text() === '查看差异')!.attributes('disabled')).toBeDefined();
+
+    await wrapper.findAll('select')[1]!.setValue('target');
+    await wrapper.findAll('select')[2]!.setValue('base');
+    resolveBase?.(before);
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('另存为新简历');
+    expect(wrapper.text()).toContain('选择两份简历后查看正文变化');
+    expect(wrapper.findAll('button').find((button) => button.text() === '查看差异')!.attributes('disabled')).toBeUndefined();
   });
 });

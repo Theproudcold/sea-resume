@@ -8,7 +8,7 @@ export interface JobTarget {
   sourceResumeId: string;
 }
 
-export type ResumeDifferenceType = 'added' | 'removed' | 'modified';
+export type ResumeDifferenceType = 'added' | 'removed' | 'modified' | 'formatted';
 export type ResumePathSegment = string | number;
 
 export interface ResumeDifference {
@@ -22,12 +22,15 @@ export interface ResumeDifference {
   scope: 'field' | 'item';
   beforePath?: ResumePathSegment[];
   afterPath?: ResumePathSegment[];
+  /** 技能清单、技术栈等无序字段里的单个成员；按增删采纳而不是整段覆盖。 */
+  member?: string;
 }
 
 interface DifferenceLocation {
   scope?: 'field' | 'item';
   beforePath?: ResumePathSegment[];
   afterPath?: ResumePathSegment[];
+  member?: string;
 }
 
 interface FieldDefinition {
@@ -110,6 +113,21 @@ function readableText(value: string): string {
     .trim();
 }
 
+/**
+ * 只比较 HTML 结构（加粗、链接、列表标记等），不比较可读文本。
+ * 非字符串字段没有格式概念，统一返回空串，避免 undefined 与 false 这类等价取值产生噪音。
+ */
+function normalizedMarkup(value: unknown): string {
+  if (Array.isArray(value)) return value.map((entry) => normalizedMarkup(entry)).filter(Boolean).join('\n');
+  if (typeof value !== 'string') return '';
+  return decodeHtmlEntities(value).replace(/>\s+</g, '><').trim();
+}
+
+function comparableLines(value: string, unordered: boolean): string {
+  if (!unordered) return value;
+  return value.split('\n').map((line) => line.trim()).filter(Boolean).sort().join('\n');
+}
+
 function formatValue(value: unknown): string {
   if (value === undefined || value === null || value === '') return '';
   if (typeof value === 'string') return readableText(value);
@@ -134,6 +152,11 @@ function formatDate(value: unknown): string {
   return text === 'present' ? '至今' : text;
 }
 
+/** 开关类字段：未设置与显式关闭视为同一状态。 */
+function formatFlag(value: unknown): string {
+  return value ? '开启' : '关闭';
+}
+
 function normalizedIdentity(value: unknown): string {
   return formatValue(value).trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
@@ -141,6 +164,10 @@ function normalizedIdentity(value: unknown): string {
 function asRecords(value: unknown): ResumeRecord[] {
   if (!Array.isArray(value)) return [];
   return value.filter((entry): entry is ResumeRecord => !!entry && typeof entry === 'object' && !Array.isArray(entry));
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
 }
 
 function identityKey(record: ResumeRecord, fields: string[]): string | null {
@@ -178,11 +205,15 @@ function pairRecords(
       : undefined;
 
     if (matchedIndex === undefined) {
+      // 身份组合按强到弱排列。只有更强的组合在 A 侧填不全时才退到更弱的组合，
+      // 并且要求该组合在两边都唯一；否则「同公司不同职位」会被误判成修改，
+      // 而不是一条删除加一条新增。
       for (const identity of identityCounts) {
         const key = identityKey(before, identity.fields);
-        if (!key || identity.before.get(key) !== 1 || identity.after.get(key) !== 1) continue;
+        if (!key) continue;
+        if (identity.before.get(key) !== 1 || identity.after.get(key) !== 1) break;
         matchedIndex = [...remainingAfter].find((index) => identityKey(afterRecords[index] ?? {}, identity.fields) === key);
-        if (matchedIndex !== undefined) break;
+        break;
       }
     }
 
@@ -225,14 +256,28 @@ function pushDifference(
 ): void {
   const before = format(beforeValue);
   const after = format(afterValue);
-  if (before === after) return;
-  const comparableBefore = unordered ? before.split('\n').map((line) => line.trim()).sort().join('\n') : before;
-  const comparableAfter = unordered ? after.split('\n').map((line) => line.trim()).sort().join('\n') : after;
-  if (comparableBefore === comparableAfter) return;
-  const type = forcedType ?? (!before ? 'added' : !after ? 'removed' : 'modified');
+  const comparableBefore = comparableLines(before, unordered);
+  const comparableAfter = comparableLines(after, unordered);
+  const textEqual = comparableBefore === comparableAfter;
+
+  if (textEqual) {
+    // 读起来一样时，结构仍有差别（加粗、链接、列表标记）就记为一条格式差异；
+    // 两边格式也一致则确实没有变化。
+    const markupBefore = comparableLines(normalizedMarkup(beforeValue), unordered);
+    const markupAfter = comparableLines(normalizedMarkup(afterValue), unordered);
+    if (markupBefore === markupAfter) return;
+  }
+
+  const type = textEqual ? 'formatted' : (forcedType ?? (!before ? 'added' : !after ? 'removed' : 'modified'));
   const beforePath = location.beforePath ? [...location.beforePath] : undefined;
   const afterPath = location.afterPath ? [...location.afterPath] : undefined;
-  const id = [section, field, JSON.stringify(beforePath ?? null), JSON.stringify(afterPath ?? null)].join(':');
+  const id = [
+    section,
+    field,
+    JSON.stringify(beforePath ?? null),
+    JSON.stringify(afterPath ?? null),
+    JSON.stringify(location.member ?? null),
+  ].join(':');
   differences.push({
     id,
     section,
@@ -244,6 +289,46 @@ function pushDifference(
     scope: location.scope ?? 'field',
     ...(beforePath ? { beforePath } : {}),
     ...(afterPath ? { afterPath } : {}),
+    ...(location.member === undefined ? {} : { member: location.member }),
+  });
+}
+
+/**
+ * 无序字段（技能清单、技术栈）按成员增删比较：纯排序变化不产生差异，
+ * 真正新增或删除的成员各记一条，采纳时按集合合并而不是整段覆盖。
+ */
+function compareUnorderedMembers(
+  differences: ResumeDifference[],
+  section: string,
+  item: string,
+  field: string,
+  beforeMembers: string[],
+  afterMembers: string[],
+  beforePath: ResumePathSegment[],
+  afterPath: ResumePathSegment[],
+): void {
+  // 按可读文本认成员：纯排序、纯格式（加粗、包一层标签）都不算变化，
+  // 只有真正新增或删除的成员各记一条。
+  const remaining = afterMembers.map((member) => ({ member, used: false }));
+  beforeMembers.forEach((member) => {
+    const key = normalizedIdentity(member);
+    const matched = remaining.find((entry) => !entry.used && normalizedIdentity(entry.member) === key);
+    if (matched) {
+      matched.used = true;
+      return;
+    }
+    pushDifference(differences, section, item, field, member, '', 'removed', formatValue, false, {
+      beforePath,
+      afterPath,
+      member,
+    });
+  });
+  remaining.filter((entry) => !entry.used).forEach((entry) => {
+    pushDifference(differences, section, item, field, '', entry.member, 'added', formatValue, false, {
+      beforePath,
+      afterPath,
+      member: entry.member,
+    });
   });
 }
 
@@ -266,19 +351,27 @@ function compareRecordList(
     if (before && after && beforeIndex !== undefined && afterIndex !== undefined) {
       definition.fields.forEach((field) => {
         const format = field.format ?? formatValue;
+        const beforeField = before[field.key];
+        const afterField = after[field.key];
+        const beforeFieldPath = [...beforeListPath, beforeIndex, field.key];
+        const afterFieldPath = [...afterListPath, afterIndex, field.key];
+        if (field.unordered && isStringArray(beforeField) && isStringArray(afterField)) {
+          compareUnorderedMembers(differences, section, item, field.label, beforeField, afterField, beforeFieldPath, afterFieldPath);
+          return;
+        }
         pushDifference(
           differences,
           section,
           item,
           field.label,
-          before[field.key],
-          after[field.key],
+          beforeField,
+          afterField,
           undefined,
           format,
           field.unordered,
           {
-            beforePath: [...beforeListPath, beforeIndex, field.key],
-            afterPath: [...afterListPath, afterIndex, field.key],
+            beforePath: beforeFieldPath,
+            afterPath: afterFieldPath,
           },
         );
       });
@@ -422,9 +515,26 @@ export function applyResumeDifferences(
   const accepted = differences.filter((difference) => selected.has(difference.id));
   const merged = cloneValue(before);
 
-  accepted.filter((difference) => difference.scope === 'field').forEach((difference) => {
-    if (!difference.beforePath || !difference.afterPath) return;
-    writePath(merged, difference.beforePath, readPath(after, difference.afterPath));
+  accepted.filter((difference) => difference.scope === 'field' && difference.member === undefined)
+    .forEach((difference) => {
+      if (!difference.beforePath || !difference.afterPath) return;
+      writePath(merged, difference.beforePath, readPath(after, difference.afterPath));
+    });
+
+  // 无序字段（技能清单、技术栈）逐个成员增删，勾选一部分也能得到合理的集合。
+  accepted.filter((difference) => difference.member !== undefined).forEach((difference) => {
+    const path = difference.beforePath ?? difference.afterPath;
+    if (!path) return;
+    const list = readPath(merged, path);
+    if (!Array.isArray(list)) return;
+    const member = difference.member as string;
+    const key = normalizedIdentity(member);
+    const index = list.findIndex((entry) => typeof entry === 'string' && normalizedIdentity(entry) === key);
+    if (difference.type === 'added') {
+      if (index < 0) list.push(cloneValue(member));
+      return;
+    }
+    if (index >= 0) list.splice(index, 1);
   });
 
   accepted.filter((difference) => difference.scope === 'item' && difference.type === 'added')
@@ -456,33 +566,88 @@ export function applyResumeDifferences(
       if (Array.isArray(list) && typeof index === 'number' && index >= 0 && index < list.length) list.splice(index, 1);
     });
 
+  // 整项采纳自定义模块时同步模块顺序：编辑器侧栏读的是 sectionOrder，
+  // 只改 customBlocks 会出现“导航里没有、预览里却有”的不一致。
+  // 排序本身仍然不计入差异，这里只增删被采纳模块对应的 id，其他模块相对顺序不动。
+  const sectionOrder = Array.isArray(merged.sectionOrder) ? [...merged.sectionOrder] : [];
+  let sectionOrderTouched = false;
+  accepted.filter((difference) => difference.scope === 'item').forEach((difference) => {
+    const path = difference.type === 'added' ? difference.afterPath : difference.beforePath;
+    if (!path || path.length !== 2 || path[0] !== 'customBlocks') return;
+    const block = readPath(difference.type === 'added' ? after : before, path) as { id?: unknown } | undefined;
+    const blockId = block && typeof block.id === 'string' ? block.id : undefined;
+    if (!blockId) return;
+
+    if (difference.type === 'removed') {
+      const remaining = sectionOrder.filter((id) => id !== blockId);
+      if (remaining.length !== sectionOrder.length) {
+        sectionOrder.length = 0;
+        sectionOrder.push(...remaining);
+        sectionOrderTouched = true;
+      }
+      merged.hiddenSections = (merged.hiddenSections ?? []).filter((id) => id !== blockId);
+      return;
+    }
+
+    if (sectionOrder.includes(blockId)) return;
+    // 尽量跟在版本 B 里它前一个模块之后；对不上就放到末尾。
+    const afterBlocks = asRecords(after.customBlocks);
+    const index = typeof path[1] === 'number' ? path[1] : -1;
+    let insertAt = sectionOrder.length;
+    for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+      const previousId = afterBlocks[cursor]?.id;
+      const position = typeof previousId === 'string' ? sectionOrder.indexOf(previousId) : -1;
+      if (position >= 0) {
+        insertAt = position + 1;
+        break;
+      }
+    }
+    sectionOrder.splice(insertAt, 0, blockId);
+    sectionOrderTouched = true;
+    const addedBlock = merged.customBlocks.find((candidate) => candidate.id === blockId);
+    if (addedBlock) addedBlock.order = insertAt;
+  });
+  if (sectionOrderTouched) merged.sectionOrder = sectionOrder;
+
   return merged;
 }
+
+/** 标准模块标题所在分组，与模块内容差异保持同一个章节名。 */
+const STANDARD_SECTION_TITLES: Array<[string, string]> = [
+  ['experience', '工作经历'],
+  ['projects', '项目经验'],
+  ['education', '教育背景'],
+  ['skills', '技能'],
+];
 
 export function compareResumeVersions(before: ResumeData, after: ResumeData): ResumeDifference[] {
   const differences: ResumeDifference[] = [];
   const oldBasic = before.basic as unknown as ResumeRecord;
   const newBasic = after.basic as unknown as ResumeRecord;
 
-  [
-    ['name', '姓名'],
-    ['title', '求职意向'],
-    ['email', '邮箱'],
-    ['phone', '手机'],
-    ['location', '所在地'],
-    ['website', '个人网站'],
-    ['summary', '个人简介'],
-  ].forEach(([key, label]) => pushDifference(
+  const basicFields: Array<[string, string, (value: unknown) => string]> = [
+    ['name', '姓名', formatValue],
+    ['title', '求职意向', formatValue],
+    ['email', '邮箱', formatValue],
+    ['phone', '手机', formatValue],
+    ['location', '所在地', formatValue],
+    ['website', '个人网站', formatValue],
+    ['summary', '个人简介', formatValue],
+    ['birthDate', '生日', formatValue],
+    ['showAge', '显示年龄', formatFlag],
+    ['showExperienceYears', '显示工作年限', formatFlag],
+  ];
+  basicFields.forEach(([key, label, format]) => pushDifference(
     differences,
     '个人信息',
     '基本信息',
-    label ?? key ?? '',
-    oldBasic?.[key ?? ''],
-    newBasic?.[key ?? ''],
+    label,
+    oldBasic?.[key],
+    newBasic?.[key],
     undefined,
-    formatValue,
+    format,
     false,
-    { beforePath: ['basic', key ?? ''], afterPath: ['basic', key ?? ''] },
+    { beforePath: ['basic', key], afterPath: ['basic', key] },
   ));
 
   compareRecordList(differences, before.basic?.customContacts, after.basic?.customContacts, '个人信息', {
@@ -493,6 +658,22 @@ export function compareResumeVersions(before: ResumeData, after: ResumeData): Re
       { key: 'value', label: '联系方式内容' },
     ],
   }, ['basic', 'customContacts']);
+
+  // 标准模块标题存在 sectionTitles 里；自定义模块标题由 compareCustomBlocks 比较，这里不重复。
+  const oldTitles = (before.sectionTitles ?? {}) as Record<string, string>;
+  const newTitles = (after.sectionTitles ?? {}) as Record<string, string>;
+  STANDARD_SECTION_TITLES.forEach(([id, label]) => pushDifference(
+    differences,
+    label,
+    '模块标题',
+    '标题',
+    oldTitles[id],
+    newTitles[id],
+    undefined,
+    formatValue,
+    false,
+    { beforePath: ['sectionTitles', id], afterPath: ['sectionTitles', id] },
+  ));
 
   compareRecordList(differences, before.experiences, after.experiences, '工作经历', {
     identityFields: [['company', 'position'], ['company']],

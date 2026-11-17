@@ -41,7 +41,7 @@
               <el-option v-for="resume in resumes" :key="`b-${resume.id}`" :label="resumeOptionLabel(resume)" :value="resume.id" />
             </el-select>
           </label>
-          <el-button :type="compared && differences.length ? 'default' : 'primary'" :loading="comparing" :disabled="!beforeId || !afterId || beforeId === afterId" @click="compare">查看差异</el-button>
+          <el-button :type="compared && differences.length ? 'default' : 'primary'" :loading="comparing" :disabled="!beforeId || !afterId || beforeId === afterId || comparing" @click="compare">查看差异</el-button>
         </div>
         <p class="compare-hint">仅比较简历正文；模板、配色和排版设置不会计入差异。</p>
 
@@ -59,14 +59,21 @@
               <span class="count-chip added">新增 <b>{{ changeCounts.added }}</b></span>
               <span class="count-chip modified">修改 <b>{{ changeCounts.modified }}</b></span>
               <span class="count-chip removed">删除 <b>{{ changeCounts.removed }}</b></span>
+              <span v-if="changeCounts.formatted" class="count-chip formatted">格式 <b>{{ changeCounts.formatted }}</b></span>
             </div>
           </header>
           <div class="merge-actions">
             <label class="select-all-differences">
-              <input type="checkbox" :checked="allDifferencesSelected" @change="toggleAllDifferences" />
-              <span>全选</span>
+              <input
+                type="checkbox"
+                :checked="allFilteredSelected"
+                :indeterminate="someFilteredSelected && !allFilteredSelected"
+                aria-label="全选当前筛选的差异"
+                @change="toggleAllDifferences"
+              />
+              <span>全选当前结果</span>
             </label>
-            <span>{{ selectedDifferenceIds.length }} / {{ differences.length }} 项采纳版本 B</span>
+            <span>已选 {{ selectedDifferenceIds.length }} / {{ differences.length }} 项采纳版本 B；当前显示 {{ filteredDifferences.length }} 项</span>
             <input v-model="mergeTitle" type="text" maxlength="80" aria-label="新简历名称" placeholder="输入合并后新简历名称" />
             <el-button type="primary" :loading="savingMerged" :disabled="!selectedDifferenceIds.length || !mergeTitle.trim()" @click="createMergedVersion">另存为新简历</el-button>
           </div>
@@ -83,6 +90,7 @@
               <option value="added">仅看新增</option>
               <option value="modified">仅看修改</option>
               <option value="removed">仅看删除</option>
+              <option value="formatted">仅看格式</option>
             </select>
           </div>
 
@@ -94,25 +102,59 @@
             </div>
             <section v-for="group in groupedDifferences" :key="group.section" class="diff-section">
               <header class="diff-section-head">
-                <h3>{{ group.section }}</h3>
-                <span>{{ group.differences.length }} 处</span>
+                <div class="diff-section-title">
+                  <h3>{{ group.section }}</h3>
+                  <span>{{ group.rows.length }} 处</span>
+                  <label class="adopt-toggle section-adopt">
+                    <input
+                      type="checkbox"
+                      :checked="sectionSelectionState(group).all"
+                      :indeterminate="sectionSelectionState(group).some"
+                      :aria-label="`采纳本节版本 B：${group.section}`"
+                      @change="toggleSectionDifferences(group, $event)"
+                    />
+                    <span>采纳本节</span>
+                  </label>
+                </div>
+                <p v-if="hasReplacementPair(group.rows)" class="swap-hint">本节的整项新增与删除未能按身份对应；同时勾选两边会用新条目替换旧条目。</p>
               </header>
-              <article v-for="(difference, index) in group.differences" :key="`${difference.item}-${difference.field}-${index}`" class="diff-row" :class="`is-${difference.type}`">
+              <article
+                v-for="row in group.rows"
+                :key="row.difference.id"
+                class="diff-row"
+                :class="`is-${row.difference.type}`"
+              >
                 <div class="diff-description">
-                  <span class="change-badge" :class="`badge-${difference.type}`">{{ changeTypeLabel(difference.type) }}</span>
-                  <div><strong>{{ difference.item }}</strong><small>{{ difference.field }}</small></div>
+                  <span class="change-badge" :class="`badge-${row.difference.type}`">{{ changeTypeLabel(row.difference.type) }}</span>
+                  <div><strong>{{ row.difference.item }}</strong><small>{{ row.difference.field }}</small></div>
                   <label class="adopt-toggle">
-                    <input v-model="selectedDifferenceIds" type="checkbox" :value="difference.id" :aria-label="`采纳版本 B：${difference.item} ${difference.field}`" />
+                    <input v-model="selectedDifferenceIds" type="checkbox" :value="row.difference.id" :aria-label="`采纳版本 B：${row.difference.item} ${row.difference.field}`" />
                     <span>采纳 B</span>
                   </label>
                 </div>
                 <div class="diff-value">
                   <span class="mobile-version-label"><span>版本 A</span><span>{{ selectedTitle(beforeId) }}</span></span>
-                  <p>{{ displayedValue(difference, 'before') }}</p>
+                  <p v-if="row.before.length">
+                    <span
+                      v-for="(segment, index) in row.before"
+                      :key="`b-${index}`"
+                      class="diff-line"
+                      :class="{ 'is-changed': segment.changed }"
+                    >{{ segment.text || ' ' }}</span>
+                  </p>
+                  <p v-else>{{ displayedValue(row.difference, 'before') }}</p>
                 </div>
                 <div class="diff-value">
                   <span class="mobile-version-label"><span>版本 B</span><span>{{ selectedTitle(afterId) }}</span></span>
-                  <p>{{ displayedValue(difference, 'after') }}</p>
+                  <p v-if="row.after.length">
+                    <span
+                      v-for="(segment, index) in row.after"
+                      :key="`a-${index}`"
+                      class="diff-line"
+                      :class="{ 'is-changed': segment.changed }"
+                    >{{ segment.text || ' ' }}</span>
+                  </p>
+                  <p v-else>{{ displayedValue(row.difference, 'after') }}</p>
                 </div>
               </article>
             </section>
@@ -147,7 +189,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import type { ResumeMeta, ResumeData } from '@/types/resume';
+import type { ResumeMeta, ResumeData, ResumeJobTarget } from '@/types/resume';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { storageManager } from '@/services/storage/StorageManager';
 import { applyResumeDifferences, compareResumeVersions, type ResumeDifference, type ResumeDifferenceType } from '@/utils/resumeVersions';
@@ -155,8 +197,19 @@ import { describeError } from '@/utils/globalErrorReporting';
 
 interface JobVersionHistoryEntry {
   resume: ResumeMeta;
-  jobTarget: NonNullable<ResumeData['jobTarget']>;
+  jobTarget: ResumeJobTarget;
   sourceTitle: string;
+}
+
+interface DiffSegment {
+  text: string;
+  changed: boolean;
+}
+
+interface DiffRow {
+  difference: ResumeDifference;
+  before: DiffSegment[];
+  after: DiffSegment[];
 }
 
 const props = defineProps<{ modelValue: boolean; resumes: ResumeMeta[] }>();
@@ -185,6 +238,11 @@ const historyEntries = ref<JobVersionHistoryEntry[]>([]);
 const historyLoading = ref(false);
 const historyError = ref('');
 let historyLoadGeneration = 0;
+/** 比较结果对应的版本与更新时间；简历被改动后用它判断快照是否过期。 */
+const comparisonStamp = ref('');
+let compareGeneration = 0;
+/** 索引里没有岗位版本的旧简历，读一次正文后在这里留档。 */
+const legacyJobTargets = new Map<string, ResumeJobTarget | null>();
 
 watch(() => props.resumes, (resumes) => {
   if (!resumes.some((resume) => resume.id === sourceId.value)) sourceId.value = resumes[0]?.id || '';
@@ -193,15 +251,32 @@ watch(() => props.resumes, (resumes) => {
 }, { immediate: true });
 
 watch([beforeId, afterId], () => {
+  // 切换版本会作废在途比较，这里同时收起 loading，否则按钮会一直卡在比较中。
+  compareGeneration += 1;
+  comparing.value = false;
   compared.value = false;
   compareError.value = '';
   differences.value = [];
   comparisonSnapshot.value = null;
+  comparisonStamp.value = '';
   selectedDifferenceIds.value = [];
   mergeTitle.value = '';
   searchText.value = '';
   sectionFilter.value = 'all';
   typeFilter.value = 'all';
+});
+
+// 被比较的简历在别处保存后，快照就过期了：清空结果，避免把旧内容另存出去。
+watch(() => props.resumes.map((resume) => `${resume.id}:${resume.updatedAt}`).join('|'), () => {
+  if (!compared.value || !comparisonStamp.value || comparisonStamp.value === comparisonKey()) return;
+  compareGeneration += 1;
+  comparing.value = false;
+  compared.value = false;
+  differences.value = [];
+  comparisonSnapshot.value = null;
+  comparisonStamp.value = '';
+  selectedDifferenceIds.value = [];
+  compareError.value = '所选简历已更新，请重新比较后再另存。';
 });
 
 watch([activeTab, () => props.modelValue, () => props.resumes.map((resume) => `${resume.id}:${resume.updatedAt}`).join('|')], ([tab, visible]) => {
@@ -216,10 +291,10 @@ const changeCounts = computed(() => ({
   added: differences.value.filter((difference) => difference.type === 'added').length,
   modified: differences.value.filter((difference) => difference.type === 'modified').length,
   removed: differences.value.filter((difference) => difference.type === 'removed').length,
+  formatted: differences.value.filter((difference) => difference.type === 'formatted').length,
 }));
 
 const sectionOptions = computed(() => [...new Set(differences.value.map((difference) => difference.section))]);
-const allDifferencesSelected = computed(() => differences.value.length > 0 && selectedDifferenceIds.value.length === differences.value.length);
 const filteredDifferences = computed(() => {
   const query = searchText.value.trim().toLocaleLowerCase();
   return differences.value.filter((difference) => {
@@ -230,15 +305,71 @@ const filteredDifferences = computed(() => {
       .some((value) => value.toLocaleLowerCase().includes(query));
   });
 });
+
+/** 行级对照：只标出在对侧找不到同名的行，不改动落盘内容。 */
+function lineSegments(difference: ResumeDifference, side: 'before' | 'after'): DiffSegment[] {
+  const value = difference[side];
+  if (!value) return [];
+  const otherLines = new Set((difference[side === 'before' ? 'after' : 'before'] || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean));
+  return value.split('\n').map((line) => ({
+    text: line,
+    changed: line.trim() !== '' && !otherLines.has(line.trim()),
+  }));
+}
+
 const groupedDifferences = computed(() => {
-  const groups = new Map<string, ResumeDifference[]>();
+  const groups = new Map<string, DiffRow[]>();
   filteredDifferences.value.forEach((difference) => {
     const group = groups.get(difference.section) ?? [];
-    group.push(difference);
+    group.push({
+      difference,
+      before: lineSegments(difference, 'before'),
+      after: lineSegments(difference, 'after'),
+    });
     groups.set(difference.section, group);
   });
-  return [...groups].map(([section, groupDifferences]) => ({ section, differences: groupDifferences }));
+  return [...groups].map(([section, rows]) => ({ section, rows }));
 });
+
+const selectedIdSet = computed(() => new Set(selectedDifferenceIds.value));
+const filteredIdList = computed(() => filteredDifferences.value.map((difference) => difference.id));
+const allFilteredSelected = computed(() => filteredIdList.value.length > 0
+  && filteredIdList.value.every((id) => selectedIdSet.value.has(id)));
+const someFilteredSelected = computed(() => filteredIdList.value.some((id) => selectedIdSet.value.has(id)));
+
+function setSelection(ids: string[], checked: boolean) {
+  const next = new Set(selectedDifferenceIds.value);
+  ids.forEach((id) => {
+    if (checked) next.add(id);
+    else next.delete(id);
+  });
+  selectedDifferenceIds.value = [...next];
+}
+
+/** 全选只作用于当前筛选出来的差异，不动的勾选保持原样。 */
+function toggleAllDifferences(event: Event) {
+  setSelection(filteredIdList.value, (event.target as HTMLInputElement).checked);
+}
+
+function sectionSelectionState(group: { rows: DiffRow[] }) {
+  const ids = group.rows.map((row) => row.difference.id);
+  const selected = ids.filter((id) => selectedIdSet.value.has(id)).length;
+  return { all: ids.length > 0 && selected === ids.length, some: selected > 0 && selected < ids.length };
+}
+
+function toggleSectionDifferences(group: { rows: DiffRow[] }, event: Event) {
+  setSelection(group.rows.map((row) => row.difference.id), (event.target as HTMLInputElement).checked);
+}
+
+/** 同一节里整项删除与整项新增并存，说明身份没能对应上，提示这是替换。 */
+function hasReplacementPair(rows: DiffRow[]): boolean {
+  const itemRows = rows.filter((row) => row.difference.scope === 'item' && row.difference.field === '整项');
+  return itemRows.some((row) => row.difference.type === 'added')
+    && itemRows.some((row) => row.difference.type === 'removed');
+}
 
 function resumeOptionLabel(resume: ResumeMeta): string {
   const date = formatUpdatedAt(resume.updatedAt);
@@ -263,7 +394,13 @@ function formatUpdatedAt(value: number): string {
 }
 
 function changeTypeLabel(type: ResumeDifferenceType): string {
-  return { added: '新增', modified: '修改', removed: '删除' }[type];
+  return { added: '新增', modified: '修改', removed: '删除', formatted: '格式' }[type];
+}
+
+/** 当前所比较的两个版本及其更新时间。 */
+function comparisonKey(): string {
+  const updatedAt = (id: string) => props.resumes.find((resume) => resume.id === id)?.updatedAt ?? 0;
+  return `${beforeId.value}:${updatedAt(beforeId.value)}|${afterId.value}:${updatedAt(afterId.value)}`;
 }
 
 function displayedValue(difference: ResumeDifference, side: 'before' | 'after'): string {
@@ -293,10 +430,13 @@ async function createVersion() {
 }
 
 async function compare() {
+  // 连续点击或中途切换版本时，只让最后一次比较写回结果。
+  const generation = ++compareGeneration;
   compared.value = false;
   compareError.value = '';
   differences.value = [];
   comparisonSnapshot.value = null;
+  comparisonStamp.value = '';
   selectedDifferenceIds.value = [];
   mergeTitle.value = '';
   comparing.value = true;
@@ -304,6 +444,7 @@ async function compare() {
   const selectedAfterId = afterId.value;
   try {
     const [before, after] = await Promise.all([storageManager.read(selectedBeforeId), storageManager.read(selectedAfterId)]);
+    if (generation !== compareGeneration) return;
     if (!before || !after) throw new Error('无法读取所选简历，请刷新工作台后重试。');
     if (beforeId.value !== selectedBeforeId || afterId.value !== selectedAfterId) return;
     const beforeData = before as ResumeData;
@@ -315,17 +456,13 @@ async function compare() {
     };
     selectedDifferenceIds.value = differences.value.map((difference) => difference.id);
     mergeTitle.value = `${afterData.title} - 合并版`;
+    comparisonStamp.value = comparisonKey();
     compared.value = true;
   } catch (error) {
-    compareError.value = describeError(error);
+    if (generation === compareGeneration) compareError.value = describeError(error);
   } finally {
-    comparing.value = false;
+    if (generation === compareGeneration) comparing.value = false;
   }
-}
-
-function toggleAllDifferences(event: Event) {
-  const checked = (event.target as HTMLInputElement).checked;
-  selectedDifferenceIds.value = checked ? differences.value.map((difference) => difference.id) : [];
 }
 
 async function createMergedVersion() {
@@ -352,18 +489,32 @@ async function createMergedVersion() {
   }
 }
 
+/**
+ * 岗位版本信息优先读列表索引；早期保存的简历索引里没有，才回落到读取正文，
+ * 并把结果缓存下来，避免每次切到历史页签都重读一遍。
+ */
+async function jobTargetOf(resume: ResumeMeta): Promise<ResumeJobTarget | null> {
+  if (resume.jobTarget) return resume.jobTarget;
+  const cached = legacyJobTargets.get(resume.id);
+  if (cached !== undefined) return cached;
+  const data = await storageManager.read(resume.id);
+  const jobTarget = data?.jobTarget ?? null;
+  legacyJobTargets.set(resume.id, jobTarget);
+  return jobTarget;
+}
+
 async function loadJobVersionHistory() {
   const generation = ++historyLoadGeneration;
   historyLoading.value = true;
   historyError.value = '';
   try {
     const entries = await Promise.all(props.resumes.map(async (resume) => {
-      const data = await storageManager.read(resume.id);
-      if (!data?.jobTarget) return null;
+      const jobTarget = await jobTargetOf(resume);
+      if (!jobTarget) return null;
       return {
         resume,
-        jobTarget: data.jobTarget,
-        sourceTitle: props.resumes.find((candidate) => candidate.id === data.jobTarget?.sourceResumeId)?.title || '',
+        jobTarget,
+        sourceTitle: props.resumes.find((candidate) => candidate.id === jobTarget.sourceResumeId)?.title || '',
       } satisfies JobVersionHistoryEntry;
     }));
     if (generation !== historyLoadGeneration) return;
@@ -424,6 +575,7 @@ async function openVersionComparison(entry: JobVersionHistoryEntry) {
 .count-chip.added, .badge-added { color: var(--color-success); background: var(--color-success-wash); }
 .count-chip.modified, .badge-modified { color: var(--color-accent); background: var(--color-accent-wash); }
 .count-chip.removed, .badge-removed { color: var(--color-error); background: var(--color-error-wash); }
+.count-chip.formatted, .badge-formatted { color: var(--color-ink-2); background: var(--color-paper-2); }
 .diff-filters { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(140px, auto) minmax(140px, auto); gap: 8px; }
 .diff-filters input, .diff-filters select { min-width: 0; height: 36px; padding: 0 10px; border: 1px solid var(--color-rule-2); border-radius: var(--radius-input); color: var(--color-ink); background: var(--color-paper-3); font: inherit; }
 .diff-list { min-height: 0; overflow: auto; border-top: 1px solid var(--color-rule); }
@@ -432,8 +584,11 @@ async function openVersionComparison(entry: JobVersionHistoryEntry) {
 .version-heading { display: grid; gap: 2px; min-width: 0; padding: 0 12px; }
 .version-heading > span, .version-heading small { color: var(--color-muted); font-size: 12px; }
 .version-heading strong { overflow: hidden; color: var(--color-ink); text-overflow: ellipsis; white-space: nowrap; }
-.diff-section h3 { display: flex; align-items: center; gap: 8px; margin: 0; padding: 12px 10px 8px; color: var(--color-ink); font-size: 14px; }
-.diff-section h3 span { color: var(--color-muted); font-size: 12px; font-weight: 400; }
+.diff-section-head { padding: 12px 10px 8px; }
+.diff-section-title { display: flex; align-items: center; gap: 8px; }
+.diff-section-title h3 { margin: 0; color: var(--color-ink); font-size: 14px; }
+.diff-section-title > span { color: var(--color-muted); font-size: 12px; font-weight: 400; }
+.swap-hint { margin: 6px 0 0; color: var(--color-muted); font-size: 12px; }
 .diff-row { border-top: 1px solid var(--color-rule); }
 .diff-description, .diff-value { min-width: 0; padding: 12px 10px; }
 .diff-description { display: flex; align-items: flex-start; gap: 8px; }
@@ -443,6 +598,8 @@ async function openVersionComparison(entry: JobVersionHistoryEntry) {
 .change-badge { flex: none; padding: 2px 6px; border-radius: var(--radius-s); font-size: 11px; line-height: 1.5; }
 .diff-value { border-left: 1px solid var(--color-rule); }
 .diff-value p { margin: 0; overflow-wrap: anywhere; color: var(--color-ink-2); font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+.diff-line { display: block; }
+.diff-line.is-changed { border-radius: 3px; background: var(--color-accent-wash); }
 .mobile-version-label { display: none; margin-bottom: 5px; }
 .merge-actions { display: grid; grid-template-columns: auto minmax(120px, 1fr) minmax(180px, 260px) auto; align-items: center; gap: 10px; }
 .merge-actions > span { color: var(--color-muted); font-size: 12px; }

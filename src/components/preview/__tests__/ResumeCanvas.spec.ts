@@ -232,6 +232,32 @@ describe('ResumeCanvas pagination', () => {
     expect(markers[0]!.text()).toBe('Page 2');
   });
 
+  it('publishes the measured page count so panels reuse the same pagination', async () => {
+    type Exposed = { pageCount: number | null; pending: boolean };
+    const view = render();
+    const exposed = () => view.vm as unknown as Exposed;
+    expect(exposed().pageCount).toBeNull();
+    expect(exposed().pending).toBe(true);
+
+    await flushFrame();
+    // 内容 2400px / 每页 1000px → 3 页，压着的破页线是 2 条。
+    expect(view.findAll('.page-break-line')).toHaveLength(2);
+    expect(exposed().pageCount).toBe(3);
+    expect(exposed().pending).toBe(false);
+
+    contentHeight = 1500;
+    resize();
+    await flushFrame();
+    expect(exposed().pageCount).toBe(2);
+
+    // 隐藏时不再对外发布过期页数，界面应显示「计算中」而不是旧值。
+    visible = false;
+    resize();
+    await flushFrame();
+    expect(exposed().pageCount).toBeNull();
+    expect(exposed().pending).toBe(true);
+  });
+
   it('disconnects observers, cancels rAF and ignores late callbacks after unmount', async () => {
     const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect');
     const view = render();

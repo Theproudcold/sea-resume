@@ -100,6 +100,16 @@ export interface ResumeMeta {
   updatedAt: number;       // 时间戳
   thumbnail?: string;      // 缩略图 Base64（可选）
   isSynced?: boolean;      // 同步状态标记
+  /** 岗位版本索引：带上它就能不读取简历正文直接列出岗位版本历史。 */
+  jobTarget?: ResumeJobTarget;
+}
+
+/** 岗位版本目标，正文与列表索引共用同一份结构。 */
+export interface ResumeJobTarget {
+  versionName: string;
+  company: string;
+  position: string;
+  sourceResumeId: string;
 }
 
 // 主题配置
@@ -131,12 +141,7 @@ export interface ResumeData {
   projects: Project[];
   customBlocks: CustomBlock[];
   templateId: string;
-  jobTarget?: {
-    versionName: string;
-    company: string;
-    position: string;
-    sourceResumeId: string;
-  };
+  jobTarget?: ResumeJobTarget;
   theme: ThemeConfig;
   sectionOrder: string[];
   hiddenSections?: string[];

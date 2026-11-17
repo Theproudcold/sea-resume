@@ -11,8 +11,8 @@
               maxlength="120"
               aria-label="简历名称"
               @blur="saveTitleEdit"
-              @keyup.enter="saveTitleEdit"
-              @keyup.esc="cancelTitleEdit"
+              @keydown.enter="onTitleEnter"
+              @keydown.esc="onTitleEsc"
             />
           </div>
           <button
@@ -110,6 +110,7 @@ import {
   type ColorSchemePreference,
 } from '@/composables/useColorScheme';
 import { ArrowLeft, EditPen } from '@element-plus/icons-vue';
+import { imeSafeKeyHandler } from '@/utils/imeSafeKeys';
 
 const props = withDefaults(defineProps<{
   title: string;
@@ -162,6 +163,10 @@ const cancelTitleEdit = () => {
   isEditingTitle.value = false;
 };
 
+// 输入法用 Enter 确认候选词、Esc 取消候选，不能当成「保存 / 放弃」。
+const onTitleEnter = imeSafeKeyHandler(() => saveTitleEdit());
+const onTitleEsc = imeSafeKeyHandler(() => cancelTitleEdit());
+
 const logoUrl = `${import.meta.env.BASE_URL}brand/sea-resume-logo-generated.png`;
 const SUN_ICON = 'M12 4.2a.9.9 0 0 1 .9.9V6a.9.9 0 0 1-1.8 0V5.1a.9.9 0 0 1 .9-.9Zm0 12.9a.9.9 0 0 1 .9.9v.9a.9.9 0 0 1-1.8 0v-.9a.9.9 0 0 1 .9-.9ZM4.2 12a.9.9 0 0 1 .9-.9H6a.9.9 0 0 1 0 1.8H5.1a.9.9 0 0 1-.9-.9Zm12.9 0a.9.9 0 0 1 .9-.9h.9a.9.9 0 0 1 0 1.8h-.9a.9.9 0 0 1-.9-.9ZM6.4 6.4a.9.9 0 0 1 1.27 0l.64.64a.9.9 0 1 1-1.27 1.27l-.64-.64a.9.9 0 0 1 0-1.27Zm9.29 9.29a.9.9 0 0 1 1.27 0l.64.64a.9.9 0 1 1-1.27 1.27l-.64-.64a.9.9 0 0 1 0-1.27Zm1.27-9.29a.9.9 0 0 1 0 1.27l-.64.64a.9.9 0 1 1-1.27-1.27l.64-.64a.9.9 0 0 1 1.27 0ZM7.68 15.05a.9.9 0 0 1 0 1.27l-.64.64a.9.9 0 1 1-1.27-1.27l.64-.64a.9.9 0 0 1 1.27 0ZM12 8.1A3.9 3.9 0 1 1 12 15.9 3.9 3.9 0 0 1 12 8.1Z';
 const MOON_ICON = 'M14.2 3.4a.9.9 0 0 1 .2 1 8.2 8.2 0 1 0 5.2 5.2.9.9 0 0 1 1.2-.2A9.9 9.9 0 1 1 14 3.2a.9.9 0 0 1 .2 1.2Z';
@@ -180,7 +185,7 @@ const schemeIndex = computed(() => {
 let schemeMedia: MediaQueryList | null = null;
 
 const paintScheme = () => {
-  applyColorScheme(resolveColorScheme(schemePreference.value) === 'dark');
+  applyColorScheme(schemePreference.value);
 };
 
 const selectScheme = (preference: ColorSchemePreference, event: MouseEvent) => {
