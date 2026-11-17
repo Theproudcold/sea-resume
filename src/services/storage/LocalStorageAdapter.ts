@@ -144,30 +144,4 @@ export class LocalStorageAdapter implements IStorageAdapter {
     const jsonStr = JSON.stringify(data, null, 2);
     return new Blob([jsonStr], { type: 'application/json' });
   }
-
-  /**
-   * 获取存储使用情况（估算）
-   */
-  getStorageSize(): number {
-    let total = 0;
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(STORAGE_PREFIX)) {
-        const value = localStorage.getItem(key);
-        if (value) {
-          total += key.length + value.length;
-        }
-      }
-    }
-    return total;
-  }
-
-  /**
-   * 获取存储使用百分比（假设 5MB 限制）
-   */
-  getStorageUsagePercent(): number {
-    const size = this.getStorageSize();
-    const limit = 5 * 1024 * 1024; // 5MB
-    return Math.round((size / limit) * 100);
-  }
 }

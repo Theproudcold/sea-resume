@@ -159,6 +159,7 @@
                 <el-button v-if="storageStore.currentType === 'file_system'" :loading="storageStore.isMigrating" @click="handleSwitchToBrowserStorage">迁回浏览器缓存</el-button>
               </div>
               <p class="settings-help">空目录会复制当前简历；已有简历时仅补入缺失项，同 ID 冲突保留目录版本。旧目录升级时保留原文件。</p>
+              <p class="settings-help">想同步到网盘（坚果云、OneDrive、iCloud 云盘等），把上面的目录选成网盘客户端的同步文件夹即可，由客户端负责上传；本站不保存网盘账号。客户端同步有延迟，建议一台设备编辑完成后再切换。</p>
             </section>
           </section>
 
