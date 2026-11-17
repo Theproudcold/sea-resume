@@ -126,7 +126,11 @@ export class StorageManager {
   }
 
   /**
-   * 创建存储适配器
+   * 创建存储适配器。契约：`type` 必须是已校验的 `StorageType`。
+   *
+   * 已下线的存储类型（旧版本可能存进配置里）在进入这里之前就要被
+   * `coerceStorageType` 收敛掉；因此这里的 default 是「不可能到达」的分支，
+   * 写成穷尽检查，让新增 `StorageType` 却忘了适配器时编译失败。
    */
   private createAdapter(type: StorageType, config?: StorageConfig): IStorageAdapter {
     switch (type) {
@@ -136,9 +140,10 @@ export class StorageManager {
       case 'file_system':
         return new FileSystemAdapter(config?.fileSystem?.directoryHandle);
 
-      default:
-        // 旧版本可能存下已下线的存储类型，回退到浏览器缓存而不是让初始化失败。
-        return new LocalStorageAdapter();
+      default: {
+        const unknown: never = type;
+        throw new Error(`未知的存储类型: ${String(unknown)}`);
+      }
     }
   }
 
