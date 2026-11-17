@@ -7,16 +7,16 @@
           <strong>A4 页面适配</strong>
           <p>根据当前预览估算，不替代浏览器打印预览。</p>
         </div>
-        <el-tag :type="estimatedPages === null || estimatedPages > 1 ? 'warning' : 'success'" effect="plain">
-          {{ estimatedPages === null ? '计算中' : `预估 ${estimatedPages} 页` }}
+        <el-tag :type="fitUnavailable ? 'warning' : 'success'" effect="plain">
+          {{ fitUnavailable ? '计算中' : `预估 ${estimatedPages} 页` }}
         </el-tag>
       </div>
       <p class="fit-panel__note">尝试适配会逐档收紧边距、行高与字号，回到一页就停止；不删除任何文字，字号不会低于 {{ MIN_FONT_SIZE }}px。到下限仍超页时保留为多页。</p>
       <div class="fit-panel__actions">
-        <el-button type="primary" plain :loading="isFitting" :disabled="estimatedPages === null || estimatedPages <= 1 || isFitting" @click="fitToOnePage">尝试适配一页</el-button>
+        <el-button type="primary" plain :loading="isFitting" :disabled="fitUnavailable || (estimatedPages ?? 0) <= 1 || isFitting" @click="fitToOnePage">尝试适配一页</el-button>
         <el-button v-if="canRestore" text @click="restoreOriginalTheme">还原原排版</el-button>
       </div>
-      <el-alert v-if="estimatedPages !== null && estimatedPages > 1" class="fit-panel__alert" type="warning" :closable="false" title="当前内容预计需要多页；可尝试紧凑排版，或精简内容后再查看打印预览。" />
+      <el-alert v-if="!fitUnavailable && (estimatedPages ?? 0) > 1" class="fit-panel__alert" type="warning" :closable="false" title="当前内容预计需要多页；可尝试紧凑排版，或精简内容后再查看打印预览。" />
     </section>
     <!-- 主题色 -->
     <div class="form-item">
@@ -155,6 +155,8 @@ const pageMetrics = inject(previewPageMetricsKey, null) ?? {
   pageCount: computed(() => null),
 };
 const estimatedPages = pageMetrics.pageCount;
+/** 尚未完成首次有效测量：既没有页数，画布也明确报告 pending。 */
+const fitUnavailable = computed(() => pageMetrics.pending.value || estimatedPages.value === null);
 
 // 适配一页由 composable 负责，组件只渲染主题 token 与按钮状态。
 const { isFitting, canRestore, fitToOnePage, restoreOriginalTheme } = useOnePageFit(

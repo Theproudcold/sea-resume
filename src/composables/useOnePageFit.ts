@@ -9,7 +9,7 @@
  * 页数来自 `ResumeCanvas` 发布的权威值（见 `components/preview/previewPageMetrics.ts`），
  * 这里不做第二套 DOM 估算。
  */
-import { computed, ref, type ComputedRef, type Ref } from 'vue';
+import { computed, nextTick, ref, type ComputedRef, type Ref } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import type { ThemeConfig } from '@/types/resume';
 import { MAX_FIT_STEPS, MIN_FONT_SIZE, nextFitStep } from '@/utils/pageFit';
@@ -42,10 +42,15 @@ export function useOnePageFit(
   const isFitting = ref(false);
   const canRestore = computed(() => originalTheme.value !== null);
 
-  /** 每一步都等画布重测落定后再读页数，避免读到上一档的旧值。 */
+  /**
+   * 每一步都等画布重测落定后再读页数，避免读到上一档的旧值。
+   * ResumeCanvas 把测量排在 rAF 里，所以这里等一个 rAF 即可拿到新页数；
+   * 前后各补一次 nextTick，确保 DOM 已按新主题更新。
+   */
   async function settle() {
+    await nextTick();
     await nextFrame();
-    await nextFrame();
+    await nextTick();
   }
 
   async function fitToOnePage(): Promise<void> {
