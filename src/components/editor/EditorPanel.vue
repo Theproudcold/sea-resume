@@ -169,6 +169,7 @@ import ProjectEditor from './ProjectEditor.vue';
 import PanelSplitter from '@/components/common/PanelSplitter.vue';
 import { useEditorLayout } from '@/composables/useEditorLayout';
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from '@/utils/editorLayout';
+import { useSectionKeepAlive, useValidSectionFallback } from '@/composables/useSectionKeepAlive';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
@@ -383,42 +384,35 @@ const sectionsList = computed({
 });
 const selectedSection = computed(() => sectionsList.value.find(section => section.id === selectedSectionId.value));
 
-// Each visited section has its own component name so KeepAlive can prune just
-// removed modules via include, without rebuilding the other rich-text editors.
-const contentHosts = new Map<string, Component>();
-// KeepAlive splits string include patterns on commas; use comma-free names.
-const hostName = (id: string) => `EditorContent_${encodeURIComponent(JSON.stringify([data.value.id, id]))}`;
+// 有效分区：顺序里的模块，且要么是内置模块、要么自定义模块确实存在。
 const validSectionIds = computed(() => [
   'theme', 'basic',
   ...data.value.sectionOrder.filter(id => sectionConfig[id] || data.value.customBlocks.some(block => block.id === id)),
 ]);
-const cacheableHostNames = computed(() => validSectionIds.value.map(hostName));
-const selectedContentHost = computed(() => {
-  const name = hostName(selectedSectionId.value);
-  let host = contentHosts.get(name);
-  if (!host) {
-    host = markRaw({ ...EditorContentHost, name });
-    contentHosts.set(name, host);
-  }
-  return host;
+
+// 分区宿主按 (简历, 分区) 复用，规则与约束见 useSectionKeepAlive。
+const { host: selectedContentHost, cacheableHostNames } = useSectionKeepAlive({
+  hostComponent: EditorContentHost,
+  resumeId: computed(() => data.value.id),
+  sectionId: selectedSectionId,
+  validSectionIds,
 });
 
+// 顺序变化或当前分区被移出时，回落到仍然有效的分区。
+useValidSectionFallback({
+  sectionId: selectedSectionId,
+  validSectionIds,
+  sectionOrder: computed(() => data.value.sectionOrder),
+  select: selectSection,
+});
+
+// 换简历时除了作废宿主，还要清掉与上一份简历绑定的视图状态。
 watch(() => data.value.id, () => {
-  contentHosts.clear();
   selectedEditorRef.value = null;
   transitionMinHeight.value = '';
   selectedSectionId.value = validSectionIds.value.includes(resumeStore.activeSection || '')
     ? resumeStore.activeSection!
     : data.value.sectionOrder.find(id => validSectionIds.value.includes(id)) || 'basic';
-});
-watch([validSectionIds, selectedSectionId], ([ids]) => {
-  const names = new Set(cacheableHostNames.value);
-  for (const name of contentHosts.keys()) {
-    if (!names.has(name)) contentHosts.delete(name);
-  }
-  if (!ids.includes(selectedSectionId.value)) {
-    selectSection(data.value.sectionOrder.find(id => ids.includes(id)) || 'basic');
-  }
 });
 
 const transitionShell = ref<HTMLElement | null>(null);
