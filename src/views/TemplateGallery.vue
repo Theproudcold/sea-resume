@@ -63,6 +63,7 @@ import type { TemplateMetadata } from '@/types/resume';
 import { resumeFromCustomTemplate } from '@/utils/custom-template';
 import { buildTemplateResumeTitle, filterTemplates, sortTemplates, type TemplateSortKey } from '@/utils/template-gallery';
 import { getTemplateUsageMap, markTemplateUsed } from '@/utils/template-usage';
+import { describeError } from '@/utils/globalErrorReporting';
 
 const route = useRoute();
 const router = useRouter();
@@ -124,7 +125,7 @@ onMounted(async () => {
   try {
     templateStore.loadCustomTemplates();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '自定义模板读取失败');
+    ElMessage.error(describeError(error));
   }
   usageMap.value = getTemplateUsageMap();
 
@@ -132,7 +133,7 @@ onMounted(async () => {
     try {
       await resumeStore.loadResume(activeResumeId.value);
     } catch (error) {
-      ElMessage.error('当前简历加载失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      ElMessage.error('当前简历加载失败: ' + (describeError(error)));
       router.push('/');
     }
   }
@@ -175,7 +176,7 @@ const createResumeFromTemplate = async () => {
     ElMessage.success('已创建新简历');
     router.push(`/editor/${newId}`);
   } catch (error) {
-    ElMessage.error('创建失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('创建失败: ' + (describeError(error)));
   }
 };
 
@@ -201,7 +202,7 @@ const applyTemplateToCurrent = async () => {
     ElMessage.success('模板已应用到当前简历');
     router.push(`/editor/${activeResumeId.value}`);
   } catch (error) {
-    ElMessage.error('应用模板失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('应用模板失败: ' + (describeError(error)));
   }
 };
 
@@ -219,7 +220,7 @@ const renameCustomTemplate = async (templateId: string) => {
     ElMessage.success('模板已重命名');
   } catch (error) {
     if (error === 'cancel' || error === 'close') return;
-    ElMessage.error(error instanceof Error ? error.message : '重命名失败');
+    ElMessage.error(describeError(error));
   }
 };
 
@@ -237,7 +238,7 @@ const removeCustomTemplate = async (templateId: string) => {
     ElMessage.success('模板已删除');
   } catch (error) {
     if (error === 'cancel' || error === 'close') return;
-    ElMessage.error(error instanceof Error ? error.message : '删除失败');
+    ElMessage.error(describeError(error));
   }
 };
 

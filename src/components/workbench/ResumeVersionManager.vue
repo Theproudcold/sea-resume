@@ -151,6 +151,7 @@ import type { ResumeMeta, ResumeData } from '@/types/resume';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { storageManager } from '@/services/storage/StorageManager';
 import { applyResumeDifferences, compareResumeVersions, type ResumeDifference, type ResumeDifferenceType } from '@/utils/resumeVersions';
+import { describeError } from '@/utils/globalErrorReporting';
 
 interface JobVersionHistoryEntry {
   resume: ResumeMeta;
@@ -285,7 +286,7 @@ async function createVersion() {
     ElMessage.success('岗位版本已创建，原简历保持不变。');
     emit('created', id);
   } catch (error) {
-    ElMessage.error(`创建岗位版本失败：${error instanceof Error ? error.message : '未知错误'}`);
+    ElMessage.error(`创建岗位版本失败：${describeError(error)}`);
   } finally {
     creating.value = false;
   }
@@ -316,7 +317,7 @@ async function compare() {
     mergeTitle.value = `${afterData.title} - 合并版`;
     compared.value = true;
   } catch (error) {
-    compareError.value = error instanceof Error ? error.message : '读取简历失败。';
+    compareError.value = describeError(error);
   } finally {
     comparing.value = false;
   }
@@ -345,7 +346,7 @@ async function createMergedVersion() {
     ElMessage.success('已将所选修改另存为新简历；原有简历未更改。');
     emit('created', id);
   } catch (error) {
-    ElMessage.error(`另存失败：${error instanceof Error ? error.message : '未知错误'}`);
+    ElMessage.error(`另存失败：${describeError(error)}`);
   } finally {
     savingMerged.value = false;
   }
@@ -369,7 +370,7 @@ async function loadJobVersionHistory() {
     historyEntries.value = entries.filter((entry): entry is JobVersionHistoryEntry => entry !== null)
       .sort((left, right) => right.resume.updatedAt - left.resume.updatedAt);
   } catch (error) {
-    if (generation === historyLoadGeneration) historyError.value = error instanceof Error ? error.message : '读取岗位版本历史失败。';
+    if (generation === historyLoadGeneration) historyError.value = describeError(error);
   } finally {
     if (generation === historyLoadGeneration) historyLoading.value = false;
   }

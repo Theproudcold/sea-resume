@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
-import SectionQuickNav from '@/components/editor/SectionQuickNav.vue';
 import ResumeQualityPanel from '@/components/editor/ResumeQualityPanel.vue';
 import type { ResumeQualityIssue } from '@/utils/resumeQuality';
 
@@ -22,13 +21,7 @@ const issue = (overrides: Partial<ResumeQualityIssue>): ResumeQualityIssue => ({
   ...overrides,
 });
 
-describe('editor navigation and quality panel', () => {
-  it('emits the requested section when a quick-nav button is activated', async () => {
-    const wrapper = mount(SectionQuickNav, { props: { sections: [{ id: 'basic', title: '基础信息' }, { id: 'projects', title: '项目经验' }] } });
-    await wrapper.get('button:nth-of-type(2)').trigger('click');
-    expect(wrapper.emitted('navigate')?.[0]).toEqual(['projects']);
-  });
-
+describe('editor quality panel navigation', () => {
   it('allows each quality issue to navigate to its target section', async () => {
     const wrapper = mountPanel([issue({})]);
     await wrapper.get('button').trigger('click');

@@ -10,7 +10,11 @@ const recentMessages = new Map<string, number>();
 const CHUNK_ERROR_SCOPE = '页面加载失败';
 const CHUNK_ERROR_DETAIL = '页面资源已更新，请刷新后重试';
 
-function describe(error: unknown): string {
+/**
+ * 把任意抛出物转成一句可读文本。界面提示统一走这里，
+ * 不要再各自写 `error instanceof Error ? error.message : '未知错误'`。
+ */
+export function describeError(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === 'string' && error.trim()) return error.trim();
   if (error && typeof error === 'object') {
@@ -19,6 +23,8 @@ function describe(error: unknown): string {
   }
   return '未知错误';
 }
+
+const describe = describeError;
 
 /**
  * 统一的运行时错误上报：控制台保留完整错误，界面给出简短提示。

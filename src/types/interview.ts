@@ -1,5 +1,5 @@
 import type { AiResumeContext } from '@/services/ai/resumeContext';
-import type { AiUsage } from '@/services/ai/AiClient';
+import type { AiUsage } from '@/services/ai/transport';
 
 export type InterviewMode = 'training' | 'real';
 export type InterviewDirection = '综合' | '项目深挖' | '岗位专业' | '行为面试';

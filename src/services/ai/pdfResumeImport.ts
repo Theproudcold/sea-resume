@@ -3,7 +3,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { AiProviderConfig } from '@/types/ai';
 import type { MarkdownImportWarning } from '@/types/markdown-import';
 import { CELL_SEPARATOR, layoutPageText, LEFT_COLUMN_MARKER, RIGHT_COLUMN_MARKER, type PositionedTextItem } from '@/utils/pdf/layoutText';
-import { requestAiJson, requestAiVisionJson } from './AiClient';
+import { requestAiJson, requestAiVisionJson } from './transport';
 
 GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 

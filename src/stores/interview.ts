@@ -5,7 +5,7 @@ import type { ResumeData } from '@/types/resume';
 import type { InterviewSession, InterviewSettings, InterviewStage, InterviewQuestion } from '@/types/interview';
 import { buildResumeContext } from '@/services/ai/resumeContext';
 import { initializeInterview, nextInterviewQuestion, coachInterviewAnswer, reportInterview } from '@/services/ai/interview';
-import { AiCompatibilityError, emptyAiUsage, addAiUsage } from '@/services/ai/AiClient';
+import { AiCompatibilityError, emptyAiUsage, addAiUsage } from '@/services/ai/transport';
 import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
 import { generateId } from '@/utils/helpers';
 import { clearInterviewDraft } from '@/utils/interviewDraft';

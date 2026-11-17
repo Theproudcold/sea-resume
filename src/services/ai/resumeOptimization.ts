@@ -1,6 +1,6 @@
 import type { ResumeData } from '@/types/resume';
 import type { AiProviderConfig, OptimizationAnalysis, OptimizationFact, OptimizationOperation, OptimizationOptions, ResumeOptimizationRun, ResumeSuggestion } from '@/types/ai';
-import { requestAiJson, emptyAiUsage, type AiRequestOptions } from './AiClient';
+import { requestAiJson, emptyAiUsage, type AiRequestOptions } from './transport';
 import { buildResumeContext, contextSources, contextItemIds, type AiResumeContext } from './resumeContext';
 import { aiRecord, aiString, aiList, aiStrings, aiEnum, aiReferences } from './aiOutputValidation';
 import { applyResumeAiOperations } from './resumeTools';

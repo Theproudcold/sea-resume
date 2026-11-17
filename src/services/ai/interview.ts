@@ -1,6 +1,6 @@
 import type { AiProviderConfig } from '@/types/ai';
 import { INTERVIEW_WEAKNESS_TAGS, type InterviewSession, type InterviewSettings, type InterviewQuestion, type InterviewObservation, type InterviewFeedback, type InterviewReport, type InterviewEvidence } from '@/types/interview';
-import { requestAiJson, type AiRequestOptions } from './AiClient';
+import { requestAiJson, type AiRequestOptions } from './transport';
 import { contextItemIds, contextSources } from './resumeContext';
 import { aiRecord, aiString, aiList, aiStrings, aiEnum, aiReferences } from './aiOutputValidation';
 import { observationTagLabel } from '@/utils/interviewWeakness';

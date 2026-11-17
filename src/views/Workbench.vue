@@ -117,92 +117,17 @@
         </el-button>
       </template>
     </el-dialog>
-    <el-dialog v-model="showSettings" title="设置中心" width="var(--ui-dialog-width-lg)" align-center class="app-settings-dialog settings-dialog">
-      <div class="settings-layout">
-        <nav class="settings-sidebar" aria-label="设置分类">
-          <button type="button" class="settings-nav-item" :class="{ 'is-active': settingsSection === 'ai' }" @click="settingsSection = 'ai'">
-            <strong>AI 模型</strong><span>服务商与 API Key</span>
-          </button>
-          <button type="button" class="settings-nav-item" :class="{ 'is-active': settingsSection === 'storage' }" @click="settingsSection = 'storage'">
-            <strong>存储位置</strong><span>浏览器或本地目录</span>
-          </button>
-          <button type="button" class="settings-nav-item" :class="{ 'is-active': settingsSection === 'backup' }" @click="settingsSection = 'backup'">
-            <strong>备份与恢复</strong><span>单份简历与数据管理</span>
-          </button>
-          <button type="button" class="settings-nav-item" :class="{ 'is-active': settingsSection === 'about' }" @click="settingsSection = 'about'">
-            <strong>关于</strong><span>Sea Resume</span>
-          </button>
-        </nav>
-
-        <main class="settings-main">
-          <section v-if="settingsSection === 'ai'" class="settings-page">
-            <header class="settings-page-heading">
-              <h2>统一配置模型服务</h2>
-              <p>只需设置一次，编辑器助手和 PDF 简历解析会共用服务商、模型与本次会话密钥。</p>
-            </header>
-            <AiProviderSettingsPanel />
-          </section>
-
-          <section v-else-if="settingsSection === 'storage'" class="settings-page">
-            <header class="settings-page-heading">
-              <h2>存储位置</h2>
-              <p>选择简历保存在当前浏览器，或你授权的本地目录。</p>
-            </header>
-            <section class="settings-section">
-              <p class="storage-status">当前存储：<strong>{{ storageStore.storageTypeName }}</strong><span v-if="storageStore.currentType === 'file_system' && storageStore.config?.fileSystem?.directoryPath">（{{ storageStore.config.fileSystem.directoryPath }}）</span></p>
-              <el-alert v-if="storageStore.initializationWarning" class="settings-alert" type="warning" :closable="false" :title="storageStore.initializationWarning" />
-              <el-alert v-if="storageStore.currentType === 'local_storage'" class="settings-alert" type="warning" :closable="false" show-icon title="简历保存在当前浏览器缓存。清理浏览器数据可能导致丢失，请定期导出 JSON 备份。" />
-              <p v-else class="settings-help">简历保存在你授权的本地目录；浏览器可能在后续访问时要求重新授权。</p>
-              <div class="settings-actions">
-                <el-button :loading="storageStore.isMigrating" @click="handleChooseStorageDirectory">选择本地目录并迁移</el-button>
-                <el-button v-if="storageStore.hasFileSystemConfig && storageStore.currentType !== 'file_system'" type="primary" plain :loading="storageStore.isMigrating" @click="handleReauthorizeStorageDirectory">重新授权本地目录</el-button>
-                <el-button v-if="storageStore.currentType === 'file_system'" :loading="storageStore.isMigrating" @click="handleSwitchToBrowserStorage">迁回浏览器缓存</el-button>
-              </div>
-              <p class="settings-help">空目录会复制当前简历；已有简历时仅补入缺失项，同 ID 冲突保留目录版本。旧目录升级时保留原文件。</p>
-              <p class="settings-help">想同步到网盘（坚果云、OneDrive、iCloud 云盘等），把上面的目录选成网盘客户端的同步文件夹即可，由客户端负责上传；本站不保存网盘账号。客户端同步有延迟，建议一台设备编辑完成后再切换。</p>
-            </section>
-          </section>
-
-          <section v-else-if="settingsSection === 'backup'" class="settings-page">
-            <header class="settings-page-heading">
-              <h2>备份与恢复</h2>
-              <p>备份用于迁移或恢复；导入会创建副本，不会覆盖已有简历。</p>
-            </header>
-            <section class="settings-section">
-              <h3>单份简历备份</h3>
-              <div class="settings-actions backup-actions">
-                <el-select v-model="backupResumeId" placeholder="选择简历" class="backup-select">
-                  <el-option v-for="resume in resumeList" :key="resume.id" :label="resume.title" :value="resume.id" />
-                </el-select>
-                <el-button :disabled="!backupResumeId" @click="handleExportBackup">导出 JSON 备份</el-button>
-                <el-button @click="handleImportData">从 JSON 恢复为副本</el-button>
-              </div>
-            </section>
-            <section class="ui-danger-zone">
-              <h3 class="ui-danger-zone__title">清空所有简历</h3>
-              <p class="ui-danger-zone__description">删除当前存储位置中的全部简历，且无法撤销。</p>
-              <el-button type="danger" plain @click="handleResetData">
-                <el-icon class="mr-1"><Delete /></el-icon>
-                清空全部简历
-              </el-button>
-            </section>
-          </section>
-
-          <section v-else class="settings-page">
-            <header class="settings-page-heading">
-              <h2>关于 Sea Resume</h2>
-              <p>简洁、灵活的简历制作工具。</p>
-            </header>
-            <div class="about-card"><strong>Sea Resume</strong><span>版本 1.0.0</span></div>
-          </section>
-        </main>
-      </div>
-      <template #footer>
-        <div class="app-dialog-actions">
-          <el-button type="primary" @click="showSettings = false">完成</el-button>
-        </div>
-      </template>
-    </el-dialog>
+    <SettingsCenter
+      v-model="showSettings"
+      :resumes="resumeList"
+      :initial-section="settingsSection"
+      @choose-directory="handleChooseStorageDirectory"
+      @reauthorize-directory="handleReauthorizeStorageDirectory"
+      @switch-to-browser="handleSwitchToBrowserStorage"
+      @export-backup="handleExportBackup"
+      @import-backup="handleImportData"
+      @reset-all="handleResetData"
+    />
 
     <MarkdownImportDialog :active="showMarkdownImport" v-model="showMarkdownImport" :loading="creating" @confirm="handleMarkdownImport" />
     <AiPdfImportDialog :active="showPdfImport" v-model="showPdfImport" :loading="creating" @confirm="handlePdfImport" />
@@ -215,23 +140,22 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowDown, Plus, Upload, Delete, Document } from '@element-plus/icons-vue';
+import { ArrowDown, Plus, Upload, Document } from '@element-plus/icons-vue';
 import AppHeader from '@/components/common/AppHeader.vue';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { useStorageStore } from '@/stores/storage';
 import { storageManager } from '@/services/storage/StorageManager';
 import { exportToJSON, importFromJSON } from '@/utils/export-json';
 import ResumeCard from '@/components/workbench/ResumeCard.vue';
+import SettingsCenter, { type SettingsSection } from '@/components/workbench/SettingsCenter.vue';
 import { lazyFeature } from '@/utils/lazyFeature';
 const MarkdownImportDialog = lazyFeature(() => import('@/components/workbench/MarkdownImportDialog.vue'));
 const AiPdfImportDialog = lazyFeature(() => import('@/components/workbench/AiPdfImportDialog.vue'));
-const AiProviderSettingsPanel = lazyFeature(() => import('@/components/workbench/AiProviderSettingsPanel.vue'));
 const ResumeVersionManager = lazyFeature(() => import('@/components/workbench/ResumeVersionManager.vue'));
 const FullBackupManager = lazyFeature(() => import('@/components/workbench/FullBackupManager.vue'));
 import { getFullBackupReminderStatus } from '@/utils/fullBackup';
 import type { ResumeMeta } from '@/types/resume';
-
-type SettingsSection = 'ai' | 'storage' | 'backup' | 'about';
+import { describeError } from '@/utils/globalErrorReporting';
 
 const router = useRouter();
 const route = useRoute();
@@ -248,7 +172,6 @@ const showVersionManager = ref(false);
 const showFullBackupManager = ref(false);
 const backupReminderDue = ref(false);
 const backupReminderDismissed = ref(false);
-const backupResumeId = ref('');
 const creating = ref(false);
 const renaming = ref(false);
 
@@ -271,10 +194,6 @@ const visibleResumes = computed(() => {
     ? left.title.localeCompare(right.title, 'zh-CN')
     : right.updatedAt - left.updatedAt);
 });
-
-watch(resumeList, (list) => {
-  if (!list.some((resume) => resume.id === backupResumeId.value)) backupResumeId.value = list[0]?.id || '';
-}, { immediate: true });
 
 watch(visibleResumes, (list) => {
   if (!list.some((resume) => resume.id === activeResumeId.value)) activeResumeId.value = list[0]?.id || '';
@@ -305,7 +224,7 @@ onMounted(async () => {
     // 加载简历列表
     await workbenchStore.init();
   } catch (error) {
-    ElMessage.error('加载失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('加载失败: ' + (describeError(error)));
   } finally {
     const reminder = getFullBackupReminderStatus();
     backupReminderDue.value = reminder.available && reminder.due;
@@ -360,7 +279,7 @@ const handleMarkdownImport = async ({ resume, title, templateId }: { resume: imp
     ElMessage.success('Markdown 已导入为新简历');
     router.push(`/editor/${id}`);
   } catch (error) {
-    ElMessage.error('导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('导入失败: ' + (describeError(error)));
   } finally {
     creating.value = false;
   }
@@ -386,7 +305,7 @@ const confirmRename = async () => {
     ElMessage.success('重命名成功');
     showRenameDialog.value = false;
   } catch (error) {
-    ElMessage.error('重命名失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('重命名失败: ' + (describeError(error)));
   } finally {
     renaming.value = false;
   }
@@ -398,7 +317,7 @@ const handleDuplicate = async (id: string) => {
     ElMessage.success('复制成功');
     router.push(`/editor/${newId}`);
   } catch (error) {
-    ElMessage.error('复制失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('复制失败: ' + (describeError(error)));
   }
 };
 
@@ -419,7 +338,7 @@ const handleDelete = async (resume: ResumeMeta) => {
     ElMessage.success('删除成功');
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      ElMessage.error('删除失败: ' + (describeError(error)));
     }
   }
 };
@@ -433,7 +352,7 @@ const handleImportData = async () => {
     router.push(`/editor/${id}`);
   } catch (error) {
     if (!(error instanceof Error) || error.message !== '未选择文件') {
-      ElMessage.error('导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      ElMessage.error('导入失败: ' + (describeError(error)));
     }
   }
 };
@@ -446,7 +365,7 @@ const handlePdfImport = async ({ resume, title, templateId }: { resume: import('
     ElMessage.success('PDF 简历已导入为新简历');
     router.push(`/editor/${id}`);
   } catch (error) {
-    ElMessage.error('PDF 导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('PDF 导入失败: ' + (describeError(error)));
   } finally {
     creating.value = false;
   }
@@ -476,14 +395,14 @@ const handleResetData = async () => {
   }
 };
 
-const handleExportBackup = async () => {
+const handleExportBackup = async (resumeId: string) => {
   try {
-    const data = await storageManager.read(backupResumeId.value);
+    const data = await storageManager.read(resumeId);
     if (!data) throw new Error('所选简历不存在。');
     exportToJSON(data, `${data.title || 'resume'}-backup`);
     ElMessage.success('简历 JSON 备份已导出');
   } catch (error) {
-    ElMessage.error('备份失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('备份失败: ' + (describeError(error)));
   }
 };
 
@@ -512,7 +431,7 @@ const handleChooseStorageDirectory = async () => {
     }
   } catch (error) {
     if (error instanceof Error && (error.name === 'AbortError' || error.message === 'cancel')) return;
-    ElMessage.error('切换本地目录失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('切换本地目录失败: ' + (describeError(error)));
   }
 };
 
@@ -522,7 +441,7 @@ const handleReauthorizeStorageDirectory = async () => {
     await workbenchStore.init();
     ElMessage.success(`已重新授权本地目录（${directoryName}）并切换为该存储位置`);
   } catch (error) {
-    ElMessage.error('重新授权失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('重新授权失败: ' + (describeError(error)));
   }
 };
 
@@ -535,7 +454,7 @@ const handleSwitchToBrowserStorage = async () => {
     await workbenchStore.init();
     ElMessage.success('简历已复制回浏览器缓存');
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error('切换失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    if (error !== 'cancel') ElMessage.error('切换失败: ' + (describeError(error)));
   }
 };
 </script>
@@ -721,170 +640,6 @@ const handleSwitchToBrowserStorage = async () => {
   margin-left: 0;
 }
 
-/* Settings: a rail of square cells beside the page. */
-.settings-layout {
-  display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: var(--space-lg);
-  min-height: 400px;
-}
-
-.settings-sidebar {
-  display: flex;
-  flex-direction: column;
-  border-right: var(--rule-bar) solid var(--color-rule);
-}
-
-.settings-nav-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2xs);
-  min-height: 44px;
-  padding: var(--space-sm) var(--space-md);
-  border: 0;
-  border-bottom: var(--rule-hair) solid var(--color-rule);
-  background: transparent;
-  color: var(--color-ink);
-  text-align: left;
-  border-radius: var(--radius-input);
-  cursor: pointer;
-  transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out);
-}
-
-.settings-nav-item strong {
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.settings-nav-item span {
-  color: var(--color-muted);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-
-.settings-nav-item:hover {
-  background: var(--color-paper-2);
-}
-
-.settings-nav-item:active,
-.settings-nav-item.is-active {
-  background: var(--color-accent-wash);
-  color: var(--color-accent);
-}
-
-.settings-nav-item:active span,
-.settings-nav-item.is-active span {
-  color: var(--color-accent);
-}
-
-.settings-nav-item:focus-visible {
-  outline-offset: -2px;
-}
-
-.settings-main {
-  min-width: 0;
-  max-height: min(68vh, 680px);
-  overflow-y: auto;
-  padding: 0 var(--space-2xs) var(--space-2xs) 0;
-}
-
-.settings-page {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-}
-
-.settings-page-heading h2 {
-  margin: 0;
-  color: var(--color-ink);
-  font-size: var(--text-xl);
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.settings-page-heading p {
-  max-width: 62ch;
-  margin: var(--space-xs) 0 0;
-  color: var(--color-ink-2);
-  font-size: var(--text-sm);
-  line-height: var(--ui-line-height);
-}
-
-.settings-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
-  padding: var(--space-md) 0 0;
-  border-top: var(--rule-bar) solid var(--color-rule);
-}
-
-.settings-section h3 {
-  margin: 0;
-  color: var(--color-ink);
-  font-size: var(--text-md);
-  font-weight: 600;
-}
-
-.storage-status {
-  margin: 0;
-  color: var(--color-ink-2);
-  overflow-wrap: anywhere;
-}
-
-.storage-status strong {
-  color: var(--color-ink);
-  font-weight: 600;
-}
-
-.settings-help {
-  margin: 0;
-  color: var(--color-muted);
-  font-size: var(--text-sm);
-  line-height: var(--ui-line-height);
-}
-
-.settings-alert {
-  margin: 0;
-}
-
-.settings-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.settings-actions :deep(.el-button + .el-button) {
-  margin-left: 0;
-}
-
-.backup-select {
-  flex: 1 1 220px;
-  min-width: min(220px, 100%);
-  max-width: 100%;
-}
-
-.about-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: var(--space-md);
-  padding: var(--space-md) 0;
-  border-top: var(--rule-bar) solid var(--color-rule);
-  border-bottom: var(--rule-hair) solid var(--color-rule);
-}
-
-.about-card strong {
-  font-size: var(--text-lg);
-  font-weight: 600;
-}
-
-.about-card span {
-  color: var(--color-ink-2);
-  font-size: var(--text-sm);
-  font-variant-numeric: tabular-nums;
-}
-
 @media (max-width: 768px) {
   .workbench-content {
     padding: var(--space-lg) var(--ui-page-gutter);
@@ -903,52 +658,10 @@ const handleSwitchToBrowserStorage = async () => {
     gap: var(--space-md);
   }
 
-  .settings-layout {
-    grid-template-columns: 1fr;
-    gap: var(--space-md);
-  }
 
-  .settings-sidebar {
-    flex-direction: row;
-    overflow-x: auto;
-    border-right: 0;
-    border-bottom: var(--rule-bar) solid var(--color-rule);
-  }
-
-  .settings-nav-item {
-    flex: 0 0 auto;
-    min-width: 128px;
-    border-bottom: 0;
-    border-right: var(--rule-hair) solid var(--color-rule);
-  }
-
-  .settings-main {
-    max-height: min(64vh, 600px);
-    padding-right: 0;
-  }
-
-  .settings-actions,
-  .empty-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .empty-actions :deep(.el-button),
-  .settings-actions :deep(.el-button),
-  .backup-select {
-    width: 100%;
-  }
 }
 
 @media (max-width: 420px) {
-  .settings-nav-item span {
-    display: none;
-  }
-
-  .settings-nav-item {
-    min-width: 0;
-  }
-
   .empty-board {
     grid-template-columns: minmax(0, 1fr);
   }

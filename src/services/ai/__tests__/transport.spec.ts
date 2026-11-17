@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { aiEndpoint, AiCompatibilityError, requestAiJson } from '../AiClient';
+import { aiEndpoint, AiCompatibilityError, requestAiJson } from '../transport';
 
 const config = { baseUrl: 'https://example.com/v1', model: 'test', apiKey: 'only-in-memory' };
 const reply = (content: string) => new Response(JSON.stringify({ choices: [{ message: { content } }], usage: { prompt_tokens: 12, completion_tokens: 5 } }));

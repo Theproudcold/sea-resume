@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import type { StorageType, StorageConfig } from '@/types/storage';
+import { coerceStorageType } from '@/types/storage';
 import { storageManager } from '@/services/storage/StorageManager';
 
 const STORAGE_CONFIG_KEY = 'sea-resume_storage-config';
@@ -39,10 +40,14 @@ export const useStorageStore = defineStore('storage', {
       let wantsFileSystem = false;
       try {
         const savedConfig = localStorage.getItem(STORAGE_CONFIG_KEY);
-        const config: StorageConfig = savedConfig ? JSON.parse(savedConfig) : { type: 'local_storage' };
-        wantsFileSystem = config.type === 'file_system';
+        const parsed: unknown = savedConfig ? JSON.parse(savedConfig) : undefined;
+        const stored = (parsed && typeof parsed === 'object' ? parsed : {}) as Partial<StorageConfig>;
+        // 配置来自 localStorage，可能是旧版本写下的已下线存储类型，这里统一收敛。
+        const type = coerceStorageType(stored.type);
+        const config: StorageConfig = { ...stored, type };
+        wantsFileSystem = type === 'file_system';
         this.config = config;
-        this.currentType = config.type;
+        this.currentType = type;
         await storageManager.init(savedConfig ? config : undefined);
       } catch (error) {
         console.error('初始化存储配置失败:', error);

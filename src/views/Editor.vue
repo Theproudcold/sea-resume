@@ -227,6 +227,7 @@ import ResumeQualityPanel from '@/components/editor/ResumeQualityPanel.vue';
 import { checkResumeQuality, type ResumeQualityIssue } from '@/utils/resumeQuality';
 import { focusQualityTarget, waitForElement } from '@/utils/focusQualityTarget';
 import { resolveEditorShortcut } from '@/utils/editorShortcuts';
+import { describeError } from '@/utils/globalErrorReporting';
 
 const route = useRoute();
 const router = useRouter();
@@ -348,7 +349,7 @@ watch(() => route.params.id, async (routeId) => {
     await resumeStore.loadResume(id);
   } catch (error) {
     if (generation !== routeLoadGeneration) return;
-    ElMessage.error('加载简历失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('加载简历失败: ' + (describeError(error)));
     router.push('/');
   } finally {
     if (generation === routeLoadGeneration) loading.value = false;
@@ -394,7 +395,7 @@ const flushBeforeNavigation = async () => {
     await resumeStore.flushSave();
     return true;
   } catch (error) {
-    ElMessage.error(`保存失败，已留在编辑页：${error instanceof Error ? error.message : '未知错误'}`);
+    ElMessage.error(`保存失败，已留在编辑页：${describeError(error)}`);
     return false;
   }
 };
@@ -443,7 +444,7 @@ const applyAiChanges = async (proposal: ResumeChangeProposal, done: (saved: bool
     ElMessage.success('AI 修改已应用；可从助手面板撤销。');
     done(true);
   } catch (error) {
-    ElMessage.error('AI 修改未保存: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('AI 修改未保存: ' + (describeError(error)));
     done(false);
   }
 };
@@ -456,23 +457,23 @@ const undoAiChanges = async () => {
     aiUndoSnapshot.value = null;
     ElMessage.success('已撤销上一批 AI 修改');
   } catch (error) {
-    ElMessage.error('撤销失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('撤销失败: ' + (describeError(error)));
   }
 };
 
 async function retrySave() {
   try { await resumeStore.retrySave(); }
-  catch (error) { ElMessage.error(`保存失败：${error instanceof Error ? error.message : '未知错误'}`); }
+  catch (error) { ElMessage.error(`保存失败：${describeError(error)}`); }
 }
 
 async function undoEdit() {
   try { await resumeStore.undo(); }
-  catch (error) { ElMessage.error(`撤销失败：${error instanceof Error ? error.message : '未知错误'}`); }
+  catch (error) { ElMessage.error(`撤销失败：${describeError(error)}`); }
 }
 
 async function redoEdit() {
   try { await resumeStore.redo(); }
-  catch (error) { ElMessage.error(`重做失败：${error instanceof Error ? error.message : '未知错误'}`); }
+  catch (error) { ElMessage.error(`重做失败：${describeError(error)}`); }
 }
 
 /** Closes the panel, opens the section and reveals the issue's field once the editor has mounted it. */
@@ -500,7 +501,7 @@ const handleResumeTitleUpdate = async (title: string) => {
     await resumeStore.flushSave();
     await workbenchStore.refresh();
   } catch (error) {
-    ElMessage.error(`简历名称保存失败：${error instanceof Error ? error.message : '未知错误'}`);
+    ElMessage.error(`简历名称保存失败：${describeError(error)}`);
   }
 };
 
@@ -525,7 +526,7 @@ const saveCurrentAsTemplate = async (payload: { name: string; description: strin
     showSaveTemplate.value = false;
     ElMessage.success('已存为模板，可在模板库的「我的」分类中使用');
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存模板失败');
+    ElMessage.error(describeError(error));
   } finally {
     savingTemplate.value = false;
   }
@@ -540,7 +541,7 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
       router.push(`/editor/${id}`);
     } catch (error) {
       if (!(error instanceof Error) || error.message !== '未选择文件') {
-        ElMessage.error('导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
+        ElMessage.error('导入失败: ' + (describeError(error)));
       }
     }
     return;
@@ -563,7 +564,7 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
   try {
     await resumeStore.flushSave();
   } catch (error) {
-    ElMessage.error(`保存失败，未开始导出：${error instanceof Error ? error.message : '未知错误'}`);
+    ElMessage.error(`保存失败，未开始导出：${describeError(error)}`);
     return;
   }
   if (type === 'markdown') {
@@ -638,7 +639,7 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
     }
   } catch (error) {
     console.error('操作失败:', error);
-    ElMessage.error(type === 'pdf' || type === 'searchable-pdf' ? `PDF 导出失败：${error instanceof Error ? error.message : '未知错误'}` : `操作失败：${error instanceof Error ? error.message : '未知错误'}`);
+    ElMessage.error(type === 'pdf' || type === 'searchable-pdf' ? `PDF 导出失败：${describeError(error)}` : `操作失败：${describeError(error)}`);
   } finally {
     loadingInstance.close();
   }

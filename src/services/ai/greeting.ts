@@ -1,6 +1,6 @@
 import type { AiProviderConfig } from '@/types/ai';
 import type { ResumeData } from '@/types/resume';
-import { requestAiJson, type AiRequestOptions } from './AiClient';
+import { requestAiJson, type AiRequestOptions } from './transport';
 import { buildResumeContext } from './resumeContext';
 
 const PROMPT = [
