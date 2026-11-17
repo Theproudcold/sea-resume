@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import type { ResumeMeta, ResumeData } from '@/types/resume';
-import { storageManager } from '@/services/storage/StorageManager';
+import { storageManager, metaFromResume } from '@/services/storage/StorageManager';
 import { generateId } from '@/utils/helpers';
 import { isBuiltinLayoutId } from '@/utils/custom-template';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
@@ -65,6 +65,23 @@ export const useWorkbenchStore = defineStore('workbench', {
     },
 
     /**
+     * 把一份刚写盘的简历并入本地列表，替代整表重读。
+     *
+     * 列表本来就只展示索引，写入方已经知道索引内容，没有必要为此再拉一次全部
+     * 元数据；简历多的时候这一步是每次增删改的固定开销。外部改动（备份恢复、
+     * 切换存储位置）仍然走 `refresh()`。
+     */
+    upsertMeta(meta: ResumeMeta) {
+      const index = this.resumeList.findIndex((resume) => resume.id === meta.id);
+      if (index >= 0) this.resumeList[index] = meta;
+      else this.resumeList = [...this.resumeList, meta];
+    },
+
+    removeMeta(id: string) {
+      this.resumeList = this.resumeList.filter((resume) => resume.id !== id);
+    },
+
+    /**
      * 创建新简历
      * @param title 简历名称
      * @param templateId 模板 ID
@@ -116,17 +133,9 @@ export const useWorkbenchStore = defineStore('workbench', {
         updatedAt: now,
       };
 
-      const meta: ResumeMeta = {
-        id: newResume.id,
-        title: newResume.title,
-        templateId,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-
       try {
-        await storageManager.save(newResume, meta);
-        await this.refresh();
+        await storageManager.saveResume(newResume);
+        this.upsertMeta(metaFromResume(newResume));
         return newResume.id;
       } catch (error) {
         console.error('创建简历失败:', error);
@@ -161,10 +170,8 @@ export const useWorkbenchStore = defineStore('workbench', {
         createdAt: now,
         updatedAt: now,
       };
-      const timestamp = Date.now();
-      const meta: ResumeMeta = { id, title: newResume.title, templateId: newResume.templateId, createdAt: timestamp, updatedAt: timestamp };
-      await storageManager.save(newResume, meta);
-      await this.refresh();
+      await storageManager.saveResume(newResume);
+      this.upsertMeta(metaFromResume(newResume));
       return id;
     },
 
@@ -172,19 +179,10 @@ export const useWorkbenchStore = defineStore('workbench', {
       const source = await storageManager.read(sourceId);
       if (!source) throw new Error('源简历不存在。');
       const version = createJobResumeVersion(source, target, generateId());
-      const timestamp = Date.now();
-      const meta: ResumeMeta = {
-        id: version.id,
-        title: version.title,
-        templateId: version.templateId,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      };
-      await storageManager.save(version, meta);
-      await this.refresh();
+      await storageManager.saveResume(version);
+      this.upsertMeta(metaFromResume(version));
       return version.id;
     },
-
     /**
      * 删除简历
      * @param id 简历 ID
@@ -192,7 +190,7 @@ export const useWorkbenchStore = defineStore('workbench', {
     async deleteResume(id: string) {
       try {
         await storageManager.delete(id);
-        await this.refresh();
+        this.removeMeta(id);
 
         // 如果删除的是当前选中的简历，清除选中状态
         if (this.currentResumeId === id) {
@@ -219,7 +217,6 @@ export const useWorkbenchStore = defineStore('workbench', {
 
         // 创建新简历
         const now = new Date().toISOString();
-        const timestamp = Date.now();
         const newId = generateId();
 
         const newResume: ResumeData = {
@@ -230,16 +227,8 @@ export const useWorkbenchStore = defineStore('workbench', {
           updatedAt: now,
         };
 
-        const meta: ResumeMeta = {
-          id: newId,
-          title: newResume.title,
-          templateId: newResume.templateId,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-        };
-
-        await storageManager.save(newResume, meta);
-        await this.refresh();
+        await storageManager.saveResume(newResume);
+        this.upsertMeta(metaFromResume(newResume));
         return newId;
       } catch (error) {
         console.error(`复制简历 ${id} 失败:`, error);
@@ -264,16 +253,8 @@ export const useWorkbenchStore = defineStore('workbench', {
         data.title = newTitle;
         data.updatedAt = new Date().toISOString();
 
-        const meta: ResumeMeta = {
-          id: data.id,
-          title: newTitle,
-          templateId: data.templateId,
-          createdAt: new Date(data.createdAt).getTime(),
-          updatedAt: Date.now(),
-        };
-
-        await storageManager.save(data, meta);
-        await this.refresh();
+        await storageManager.saveResume(data);
+        this.upsertMeta(metaFromResume(data));
       } catch (error) {
         console.error(`重命名简历 ${id} 失败:`, error);
         throw error;

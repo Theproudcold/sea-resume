@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import type { ResumeData, BasicInfo, Experience, Education, Skill, CustomBlock, Project, ResumeMeta, ThemeConfig, CustomItem } from '@/types/resume';
+import type { ResumeData, BasicInfo, Experience, Education, Skill, CustomBlock, Project, ThemeConfig, CustomItem } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { generateId } from '@/utils/helpers';
 import { createDefaultResumeData, normalizeResumeData } from '@/utils/resumeData';
@@ -498,14 +498,7 @@ export const useResumeStore = defineStore('resume', {
         const saved = snapshot ?? cloneResume(source);
         const updatedAt = new Date().toISOString();
         saved.updatedAt = updatedAt;
-        const meta: ResumeMeta = {
-          id: saved.id,
-          title: saved.title,
-          templateId: saved.templateId,
-          createdAt: Date.parse(saved.createdAt),
-          updatedAt: Date.parse(updatedAt),
-        };
-        await storageManager.save(saved, meta);
+        await storageManager.saveResume(saved);
         if (generation === this.saveGeneration && this.data.id === saved.id) {
           this.data.updatedAt = updatedAt;
           this.saveStatus = 'saved';

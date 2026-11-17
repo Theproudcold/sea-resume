@@ -50,7 +50,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import type { ResumeData, ResumeMeta } from '@/types/resume';
+import type { ResumeData } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { validateJsonImportFileSize, validateResumeData } from '@/utils/export-json';
 import { useWorkbenchStore } from '@/stores/workbench';
@@ -172,15 +172,7 @@ async function restoreAll() {
       if (existingIds.has(resume.id)) {
         throw new Error('当前存储已变化，恢复计划中的 ID 发生冲突；已完成项不会重复写入，请重新校验备份。');
       }
-      const now = Date.now();
-      const meta: ResumeMeta = {
-        id: resume.id,
-        title: resume.title,
-        templateId: resume.templateId,
-        createdAt: Number.isFinite(Date.parse(resume.createdAt)) ? Date.parse(resume.createdAt) : now,
-        updatedAt: Number.isFinite(Date.parse(resume.updatedAt)) ? Date.parse(resume.updatedAt) : now,
-      };
-      await storageManager.save(resume, meta);
+      await storageManager.saveResume(resume);
       written += 1;
       existingIds.add(resume.id);
       restoredIndexes.value = new Set([...restoredIndexes.value, index]);
