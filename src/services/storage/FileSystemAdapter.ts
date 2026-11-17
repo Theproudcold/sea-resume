@@ -115,37 +115,6 @@ export class FileSystemAdapter implements IStorageAdapter {
     this._isReady = true;
   }
 
-  /**
-   * 提示用户选择目录
-   */
-  async pickDirectory(): Promise<void> {
-    try {
-      // 检查浏览器支持
-      if (!('showDirectoryPicker' in window)) {
-        throw new Error('您的浏览器不支持 File System Access API');
-      }
-
-      // 打开目录选择器
-      // @ts-ignore - File System Access API
-      this.directoryHandle = await window.showDirectoryPicker({
-        mode: 'readwrite',
-        startIn: 'documents',
-      });
-
-      // 保存到 IndexedDB
-      if (this.db && this.directoryHandle) {
-        await this.db.put(STORE_NAME, this.directoryHandle, HANDLE_KEY);
-      }
-
-      this._isReady = true;
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('用户取消了目录选择');
-      }
-      throw error;
-    }
-  }
-
   isReady(): boolean {
     return this._isReady && this.directoryHandle !== null;
   }
@@ -371,16 +340,5 @@ export class FileSystemAdapter implements IStorageAdapter {
    */
   getDirectoryName(): string {
     return this.directoryHandle?.name || '未选择';
-  }
-
-  /**
-   * 清除已保存的目录句柄（重新选择目录时使用）
-   */
-  async clearHandle(): Promise<void> {
-    if (this.db) {
-      await this.db.delete(STORE_NAME, HANDLE_KEY);
-    }
-    this.directoryHandle = null;
-    this._isReady = false;
   }
 }

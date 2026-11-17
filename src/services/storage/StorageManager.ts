@@ -52,13 +52,6 @@ export class StorageManager {
   }
 
   /**
-   * 获取当前适配器类型
-   */
-  getCurrentType(): StorageType {
-    return this.currentAdapter.type;
-  }
-
-  /**
    * 切换存储适配器
    */
   async switchAdapter(type: StorageType, config?: StorageConfig): Promise<void> {
@@ -127,16 +120,9 @@ export class StorageManager {
       case 'file_system':
         return new FileSystemAdapter(config?.fileSystem?.directoryHandle);
 
-      case 'webdav':
-        // TODO: 实现 WebDavAdapter
-        throw new Error('WebDAV 适配器尚未实现');
-
-      case 'baidu_disk':
-        // TODO: 实现 BaiduDiskAdapter
-        throw new Error('百度网盘适配器尚未实现');
-
       default:
-        throw new Error(`未知的存储类型: ${type}`);
+        // 旧版本可能存下已下线的存储类型，回退到浏览器缓存而不是让初始化失败。
+        return new LocalStorageAdapter();
     }
   }
 
