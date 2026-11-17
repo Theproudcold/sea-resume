@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { requestGreetings } from '../greeting';
-import { requestAiJson } from '../AiClient';
+import { requestAiJson } from '../transport';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
-vi.mock('../AiClient', () => ({ requestAiJson: vi.fn() }));
+vi.mock('../transport', () => ({ requestAiJson: vi.fn() }));
 const config = { baseUrl: 'https://example.test/v1', model: 'test', apiKey: 'secret' };
 beforeEach(() => vi.resetAllMocks());
 describe('greeting generation', () => {

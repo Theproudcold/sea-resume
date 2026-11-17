@@ -85,7 +85,7 @@ import type { ResumeData } from '@/types/resume';
 import type { ResumeAiOperation } from '@/types/ai';
 import { createChangeProposal, type ResumeChangeProposal } from '@/services/ai/changeProposal';
 import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
-import { requestResumeAiDraft } from '@/services/ai/AiProvider';
+import { requestResumeAiDraft } from '@/services/ai/quickEdit';
 import ResumeOptimizationPanel from '@/components/ai/ResumeOptimizationPanel.vue';
 import StarPolishPanel from '@/components/ai/StarPolishPanel.vue';
 import GreetingPanel from '@/components/ai/GreetingPanel.vue';

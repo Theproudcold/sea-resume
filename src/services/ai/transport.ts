@@ -1,3 +1,10 @@
+/**
+ * AI 传输层：把一次请求发到 OpenAI 兼容端点并把响应解析成 JSON。
+ *
+ * 这一层不认识任何简历概念（不构造 prompt、不校验业务字段），只负责鉴权头、
+ * 超时、JSON 兼容模式与用量统计。各功能自己的 prompt 与结果校验放在同目录的
+ * 功能模块里（quickEdit、starPolish、greeting、interview、resumeOptimization）。
+ */
 import type { AiProviderConfig } from '@/types/ai';
 import { normalizeAiProviderOptions, aiAuthorizationHeaders, isAiLoopbackUrl } from './AiSettings';
 

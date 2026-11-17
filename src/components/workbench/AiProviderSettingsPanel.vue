@@ -183,7 +183,7 @@ import {
   type AiProviderPresetId,
   type AiProviderProfile,
 } from '@/services/ai/AiSettings';
-import { listProviderModels } from '@/services/ai/AiProvider';
+import { listProviderModels } from '@/services/ai/quickEdit';
 
 const emit = defineEmits<{ saved: [] }>();
 const profiles = ref<AiProviderProfile[]>(loadAiProviderProfiles());
