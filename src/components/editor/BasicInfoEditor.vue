@@ -271,6 +271,7 @@ import type { BasicInfo, CustomContact } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
 import { compressAvatar } from '@/utils/avatarImage';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
+import { describeError } from '@/utils/globalErrorReporting';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
@@ -293,7 +294,7 @@ const handleAvatarChange = (file: { raw?: File }) => {
     if (generation !== avatarReadGeneration || data.value.id !== resumeId || resumeStore.isLoading) return;
     handleUpdate({ avatar });
   }).catch((error: unknown) => {
-    ElMessage.error(error instanceof Error ? error.message : '头像处理失败');
+    ElMessage.error(describeError(error));
   });
 };
 

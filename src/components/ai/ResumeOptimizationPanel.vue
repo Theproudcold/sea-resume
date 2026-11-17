@@ -102,6 +102,7 @@ import { createJobResumeVersion } from '@/utils/resumeVersions';
 import { generateId } from '@/utils/helpers';
 import AiWorkflowSteps from './AiWorkflowSteps.vue';
 import { confirmAiAction } from '@/utils/aiDialogs';
+import { describeError } from '@/utils/globalErrorReporting';
 
 const props = defineProps<{ resume: ResumeData; initialFacts?: OptimizationFact[] }>();
 const emit = defineEmits<{ configure: []; applied: [resumeId: string] }>();
@@ -214,7 +215,7 @@ async function applySelected() {
       id = await workbench.createResumeFromData(version);
     } else { await resumeStore.importData(result); id = result.id; }
     await workspace.complete(id); emit('applied', id);
-  } catch (cause) { localError.value = cause instanceof Error ? cause.message : '应用失败，原简历未被修改。'; }
+  } catch (cause) { localError.value = describeError(cause); }
   finally { applying.value = false; }
 }
 function beforeUnload(event: BeforeUnloadEvent) { if (workspace.unsaved || answerDirty.value || applying.value) { event.preventDefault(); event.returnValue = ''; } }

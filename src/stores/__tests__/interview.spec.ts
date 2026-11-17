@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useInterviewStore } from '@/stores/interview';
-import { requestAiJson, AiCompatibilityError, type AiRequestOptions } from '@/services/ai/AiClient';
+import { requestAiJson, AiCompatibilityError, type AiRequestOptions } from '@/services/ai/transport';
 import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { confirmedInterviewFacts, interviewerData, parseInterviewReport, exportInterviewMarkdown } from '@/services/ai/interview';
 import { readInterviewDraft, writeInterviewDraft } from '@/utils/interviewDraft';
 import type { InterviewSettings, InterviewSession, InterviewWeaknessTag } from '@/types/interview';
-vi.mock('@/services/ai/AiClient', async importOriginal => ({ ...await importOriginal<typeof import('@/services/ai/AiClient')>(), requestAiJson: vi.fn() }));
+vi.mock('@/services/ai/transport', async importOriginal => ({ ...await importOriginal<typeof import('@/services/ai/transport')>(), requestAiJson: vi.fn() }));
 vi.mock('@/services/ai/AiWorkspaceRepository', () => ({ aiWorkspaceRepository: { save: vi.fn(), get: vi.fn(), list: vi.fn(), delete: vi.fn(), clear: vi.fn() } }));
 const client = vi.mocked(requestAiJson);
 const config = { baseUrl: 'https://api.test/v1', model: 'test-model', apiKey: 'secret-key' };

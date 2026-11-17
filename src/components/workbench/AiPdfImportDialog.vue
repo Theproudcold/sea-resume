@@ -228,6 +228,7 @@ import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPa
 import { extractPdfText, renderPdfPagesToImages, requestAiPdfMarkdown, requestAiPdfMarkdownFromImages, buildVisionTruncationWarning, buildTextTruncationWarning, MAX_VISION_PAGES, type ExtractedPdfText, type PdfImportMode, type RenderedPdfPages } from '@/services/ai/pdfResumeImport';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { markdownToSafeHtml } from '@/utils/markdown/markdownSafety';
+import { describeError } from '@/utils/globalErrorReporting';
 
 const props = withDefaults(defineProps<{ modelValue: boolean; loading?: boolean }>(), { loading: false });
 const emit = defineEmits<{
@@ -313,7 +314,7 @@ async function loadSource() {
   } catch (error) {
     extracted.value = null;
     rendered.value = null;
-    errorMessage.value = error instanceof Error ? error.message : 'PDF 读取失败。';
+    errorMessage.value = describeError(error);
   } finally {
     extracting.value = false;
   }
@@ -366,7 +367,7 @@ async function parseWithAi() {
     title.value = imported.sourceTitle;
     templateId.value = imported.resume.templateId || 'modern';
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : 'AI PDF 解析失败。';
+    errorMessage.value = describeError(error);
   } finally {
     requesting.value = false;
   }

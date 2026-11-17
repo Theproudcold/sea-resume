@@ -1,9 +1,24 @@
 import type { ResumeData, ResumeMeta } from './resume';
 
 /**
- * 存储类型
+ * 存储类型。
+ *
+ * 只列真正实现了适配器的类型。`StorageType` 驱动界面上的可选存储位置，
+ * 把尚未实现的方案（WebDAV、网盘）放进来只会得到一个「类型上合法、运行时抛错」
+ * 的选项，因此它们在有实现之前不入类型。
  */
 export type StorageType = 'local_storage' | 'file_system';
+
+/**
+ * 把来路不明的值收敛成合法的 `StorageType`。
+ *
+ * 存储配置存在 `localStorage` 里，可能是旧版本写下的已下线类型（历史上出现过
+ * WebDAV、百度网盘）。这类值类型上「合法」、运行时却没有适配器，必须在进入
+ * 存储层之前收敛，否则初始化会失败把用户挡在门外。
+ */
+export function coerceStorageType(value: unknown): StorageType {
+  return value === 'file_system' ? 'file_system' : 'local_storage';
+}
 
 /**
  * 存储配置

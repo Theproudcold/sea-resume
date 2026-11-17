@@ -2,12 +2,29 @@ import type { IStorageAdapter, StorageType, StorageConfig, MigrationProgress } f
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { withTimeout } from '@/utils/asyncTimeout';
 import { normalizeResumeData } from '@/utils/resumeData';
+import { describeError } from '@/utils/globalErrorReporting';
 import { LocalStorageAdapter } from './LocalStorageAdapter';
 import { FileSystemAdapter } from './FileSystemAdapter';
 
 /** 存储适配器兜底超时：任何写操作都必须让界面拿到结果，不能无限等待。 */
 const ADAPTER_WRITE_TIMEOUT_MS = 25000;
 const ADAPTER_WRITE_TIMEOUT_MESSAGE = '保存超时：存储位置 25 秒内没有响应。请检查本地目录授权是否失效、目录是否可写，然后重试。';
+
+/**
+ * 由简历正文派生出列表索引。这是 `ResumeMeta` 的唯一构造点：
+ * 列表只读索引、不读正文，因此索引字段一旦漏写，界面上就会出现「读不到岗位版本」这类
+ * 只在特定入口发生的缺陷。把构造收敛到一处，新增索引字段时只需要改这里。
+ */
+export function metaFromResume(data: ResumeData): ResumeMeta {
+  return {
+    id: data.id,
+    title: data.title,
+    templateId: data.templateId,
+    createdAt: Date.parse(data.createdAt),
+    updatedAt: Date.parse(data.updatedAt),
+    ...(data.jobTarget ? { jobTarget: { ...data.jobTarget } } : {}),
+  };
+}
 
 /**
  * 存储管理器（单例模式）
@@ -110,7 +127,11 @@ export class StorageManager {
   }
 
   /**
-   * 创建存储适配器
+   * 创建存储适配器。契约：`type` 必须是已校验的 `StorageType`。
+   *
+   * 已下线的存储类型（旧版本可能存进配置里）在进入这里之前就要被
+   * `coerceStorageType` 收敛掉；因此这里的 default 是「不可能到达」的分支，
+   * 写成穷尽检查，让新增 `StorageType` 却忘了适配器时编译失败。
    */
   private createAdapter(type: StorageType, config?: StorageConfig): IStorageAdapter {
     switch (type) {
@@ -120,9 +141,10 @@ export class StorageManager {
       case 'file_system':
         return new FileSystemAdapter(config?.fileSystem?.directoryHandle);
 
-      default:
-        // 旧版本可能存下已下线的存储类型，回退到浏览器缓存而不是让初始化失败。
-        return new LocalStorageAdapter();
+      default: {
+        const unknown: never = type;
+        throw new Error(`未知的存储类型: ${String(unknown)}`);
+      }
     }
   }
 
@@ -181,7 +203,7 @@ export class StorageManager {
           current: i + 1,
           currentItem: meta.title,
           status: 'error',
-          error: error instanceof Error ? error.message : '未知错误',
+          error: describeError(error),
         });
         throw error;
       }
@@ -212,6 +234,16 @@ export class StorageManager {
   async read(id: string): Promise<ResumeData | null> {
     const resume = await this.currentAdapter.read(id);
     return resume ? normalizeResumeData(resume) : null;
+  }
+
+  /**
+   * 保存一份简历：索引由正文派生，调用方不需要也不应该手工拼 `ResumeMeta`。
+   *
+   * 这是应用代码的统一写入入口。保留下面的 `save(data, meta)` 只是为了迁移：
+   * 迁移必须原样搬运源索引（含历史遗留字段），不能按正文重新推导。
+   */
+  async saveResume(data: ResumeData): Promise<void> {
+    await this.save(data, metaFromResume(data));
   }
 
   /**

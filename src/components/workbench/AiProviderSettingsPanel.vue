@@ -183,7 +183,8 @@ import {
   type AiProviderPresetId,
   type AiProviderProfile,
 } from '@/services/ai/AiSettings';
-import { listProviderModels } from '@/services/ai/AiProvider';
+import { listProviderModels } from '@/services/ai/quickEdit';
+import { describeError } from '@/utils/globalErrorReporting';
 
 const emit = defineEmits<{ saved: [] }>();
 const profiles = ref<AiProviderProfile[]>(loadAiProviderProfiles());
@@ -310,7 +311,7 @@ async function fetchModels() {
     if (profile.model && !profile.models.includes(profile.model)) profile.models.unshift(profile.model);
     ElMessage.success(`已获取 ${profile.models.length} 个模型`);
   } catch (error) {
-    modelError.value = error instanceof Error ? error.message : '获取模型列表失败。';
+    modelError.value = describeError(error);
   } finally {
     fetchingModels.value = false;
   }
@@ -348,7 +349,7 @@ function saveSettings(makeDefault = false) {
     emit('saved');
     backToProviderList();
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '保存服务商配置失败。');
+    ElMessage.error(describeError(error));
   }
 }
 
@@ -360,7 +361,7 @@ function toggleProvider(profile: AiProviderProfile, enabled: boolean) {
     emit('saved');
   } catch (error) {
     profile.enabled = previous;
-    ElMessage.error(error instanceof Error ? error.message : '更新服务商状态失败。');
+    ElMessage.error(describeError(error));
   }
 }
 
@@ -382,7 +383,7 @@ async function removeProvider() {
     emit('saved');
     backToProviderList();
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(error instanceof Error ? error.message : '删除服务商配置失败。');
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(describeError(error));
   }
 }
 
@@ -443,7 +444,7 @@ async function importConfigFile(event: Event) {
     ElMessage.success(`已导入 ${imported.length} 家服务商；Bearer 服务需填写 API Key，可勾选记住到本机。`);
     emit('saved');
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '导入服务商配置失败。');
+    ElMessage.error(describeError(error));
   } finally {
     input.value = '';
   }

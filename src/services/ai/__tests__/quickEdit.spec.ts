@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { listProviderModels, requestResumeAiDraft } from '../AiProvider';
+import { listProviderModels, requestResumeAiDraft } from '../quickEdit';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 
 afterEach(() => vi.unstubAllGlobals());

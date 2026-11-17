@@ -1,14 +1,7 @@
 import type { ResumeData } from '@/types/resume';
+import type { AiResumeContext } from '@/types/ai';
 
-export interface AiResumeContext {
-  resumeId: string;
-  basic: { title: string; summary: string };
-  experiences: Array<{ id: string; company: string; position: string; startDate: string; endDate: string; description: string; highlights: string[] }>;
-  projects: Array<{ id: string; name: string; role: string; startDate: string; endDate: string; description: string; techStack: string[] }>;
-  education: Array<{ id: string; school: string; degree: string; major: string; startDate: string; endDate: string; gpa: string }>;
-  skills: Array<{ id: string; category: string; items: string[] }>;
-  customBlocks: Array<{ id: string; title: string; content: string }>;
-}
+export type { AiResumeContext };
 export interface AiContextOptions { generalizeOrganizations?: boolean }
 /** Plain text is rendered as text, never trusted HTML. Explicit structured contacts are never sent. */
 export function aiPlainText(value: string = ''): string {

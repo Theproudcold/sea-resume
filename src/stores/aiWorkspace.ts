@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type { ResumeData } from '@/types/resume';
 import type { AiProviderConfig, OptimizationFact, OptimizationOptions, OptimizationStep, ResumeOptimizationRun } from '@/types/ai';
-import { AiCompatibilityError, addAiUsage } from '@/services/ai/AiClient';
+import { AiCompatibilityError, addAiUsage } from '@/services/ai/transport';
 import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
 import { analyzeResume, createOptimizationRun, rewriteResume, reviewResume, restoreOptimizationRun, validateOptimizationFacts } from '@/services/ai/resumeOptimization';
 import { isAiProviderReady } from '@/services/ai/AiSettings';

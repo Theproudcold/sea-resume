@@ -64,6 +64,17 @@ export interface ResumeSuggestion {
   confirmed: boolean;
   rejected: boolean;
 }
+/** 发送给模型前整理出的简历上下文；由 services/ai/resumeContext 生产。 */
+export interface AiResumeContext {
+  resumeId: string;
+  basic: { title: string; summary: string };
+  experiences: Array<{ id: string; company: string; position: string; startDate: string; endDate: string; description: string; highlights: string[] }>;
+  projects: Array<{ id: string; name: string; role: string; startDate: string; endDate: string; description: string; techStack: string[] }>;
+  education: Array<{ id: string; school: string; degree: string; major: string; startDate: string; endDate: string; gpa: string }>;
+  skills: Array<{ id: string; category: string; items: string[] }>;
+  customBlocks: Array<{ id: string; title: string; content: string }>;
+}
+
 export interface ResumeOptimizationRun {
   id: string;
   sourceResumeId: string;
@@ -71,7 +82,7 @@ export interface ResumeOptimizationRun {
   updatedAt: string;
   options: OptimizationOptions;
   provider: Omit<AiProviderConfig, 'apiKey'>;
-  context: import('@/services/ai/resumeContext').AiResumeContext;
+  context: AiResumeContext;
   baseline: Record<string, string | string[]>;
   stage: OptimizationStage;
   failedStep?: OptimizationStep;
