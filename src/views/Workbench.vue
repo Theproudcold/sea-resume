@@ -230,6 +230,7 @@ const ResumeVersionManager = lazyFeature(() => import('@/components/workbench/Re
 const FullBackupManager = lazyFeature(() => import('@/components/workbench/FullBackupManager.vue'));
 import { getFullBackupReminderStatus } from '@/utils/fullBackup';
 import type { ResumeMeta } from '@/types/resume';
+import { describeError } from '@/utils/globalErrorReporting';
 
 type SettingsSection = 'ai' | 'storage' | 'backup' | 'about';
 
@@ -305,7 +306,7 @@ onMounted(async () => {
     // 加载简历列表
     await workbenchStore.init();
   } catch (error) {
-    ElMessage.error('加载失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('加载失败: ' + (describeError(error)));
   } finally {
     const reminder = getFullBackupReminderStatus();
     backupReminderDue.value = reminder.available && reminder.due;
@@ -360,7 +361,7 @@ const handleMarkdownImport = async ({ resume, title, templateId }: { resume: imp
     ElMessage.success('Markdown 已导入为新简历');
     router.push(`/editor/${id}`);
   } catch (error) {
-    ElMessage.error('导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('导入失败: ' + (describeError(error)));
   } finally {
     creating.value = false;
   }
@@ -386,7 +387,7 @@ const confirmRename = async () => {
     ElMessage.success('重命名成功');
     showRenameDialog.value = false;
   } catch (error) {
-    ElMessage.error('重命名失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('重命名失败: ' + (describeError(error)));
   } finally {
     renaming.value = false;
   }
@@ -398,7 +399,7 @@ const handleDuplicate = async (id: string) => {
     ElMessage.success('复制成功');
     router.push(`/editor/${newId}`);
   } catch (error) {
-    ElMessage.error('复制失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('复制失败: ' + (describeError(error)));
   }
 };
 
@@ -419,7 +420,7 @@ const handleDelete = async (resume: ResumeMeta) => {
     ElMessage.success('删除成功');
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      ElMessage.error('删除失败: ' + (describeError(error)));
     }
   }
 };
@@ -433,7 +434,7 @@ const handleImportData = async () => {
     router.push(`/editor/${id}`);
   } catch (error) {
     if (!(error instanceof Error) || error.message !== '未选择文件') {
-      ElMessage.error('导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
+      ElMessage.error('导入失败: ' + (describeError(error)));
     }
   }
 };
@@ -446,7 +447,7 @@ const handlePdfImport = async ({ resume, title, templateId }: { resume: import('
     ElMessage.success('PDF 简历已导入为新简历');
     router.push(`/editor/${id}`);
   } catch (error) {
-    ElMessage.error('PDF 导入失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('PDF 导入失败: ' + (describeError(error)));
   } finally {
     creating.value = false;
   }
@@ -483,7 +484,7 @@ const handleExportBackup = async () => {
     exportToJSON(data, `${data.title || 'resume'}-backup`);
     ElMessage.success('简历 JSON 备份已导出');
   } catch (error) {
-    ElMessage.error('备份失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('备份失败: ' + (describeError(error)));
   }
 };
 
@@ -512,7 +513,7 @@ const handleChooseStorageDirectory = async () => {
     }
   } catch (error) {
     if (error instanceof Error && (error.name === 'AbortError' || error.message === 'cancel')) return;
-    ElMessage.error('切换本地目录失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('切换本地目录失败: ' + (describeError(error)));
   }
 };
 
@@ -522,7 +523,7 @@ const handleReauthorizeStorageDirectory = async () => {
     await workbenchStore.init();
     ElMessage.success(`已重新授权本地目录（${directoryName}）并切换为该存储位置`);
   } catch (error) {
-    ElMessage.error('重新授权失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('重新授权失败: ' + (describeError(error)));
   }
 };
 
@@ -535,7 +536,7 @@ const handleSwitchToBrowserStorage = async () => {
     await workbenchStore.init();
     ElMessage.success('简历已复制回浏览器缓存');
   } catch (error) {
-    if (error !== 'cancel') ElMessage.error('切换失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    if (error !== 'cancel') ElMessage.error('切换失败: ' + (describeError(error)));
   }
 };
 </script>

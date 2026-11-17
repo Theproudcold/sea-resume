@@ -5,6 +5,7 @@ import { generateId } from '@/utils/helpers';
 import { isBuiltinLayoutId } from '@/utils/custom-template';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 import { createJobResumeVersion, type JobTarget } from '@/utils/resumeVersions';
+import { describeError } from '@/utils/globalErrorReporting';
 
 /**
  * 工作台 Store
@@ -50,7 +51,7 @@ export const useWorkbenchStore = defineStore('workbench', {
         this.resumeList = await storageManager.list();
       } catch (error) {
         console.error('加载简历列表失败:', error);
-        this.error = error instanceof Error ? error.message : '未知错误';
+        this.error = describeError(error);
         this.resumeList = [];
       } finally {
         this.isLoading = false;

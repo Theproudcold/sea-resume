@@ -138,6 +138,7 @@ import { useResumeStore } from '@/stores/resume';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 import type { ThemeConfig } from '@/types/resume';
 import { estimateA4PageCount, getCompactThemeSettings } from '@/utils/pageFit';
+import { describeError } from '@/utils/globalErrorReporting';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
@@ -220,7 +221,7 @@ async function fitToOnePage() {
     resumeStore.updateTheme(previous);
     try { await resumeStore.autoSave(); } catch { /* keep the original error for the user */ }
     originalTheme.value = null;
-    ElMessage.error('紧凑排版未能保存: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('紧凑排版未能保存: ' + (describeError(error)));
   } finally {
     isFitting.value = false;
   }
@@ -237,7 +238,7 @@ async function restoreOriginalTheme() {
     schedulePageEstimate();
     ElMessage.success('已还原适配前的主题排版');
   } catch (error) {
-    ElMessage.error('还原排版失败: ' + (error instanceof Error ? error.message : '未知错误'));
+    ElMessage.error('还原排版失败: ' + (describeError(error)));
   }
 }
 

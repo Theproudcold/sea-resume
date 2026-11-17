@@ -5,6 +5,7 @@ import { generateId } from '@/utils/helpers';
 import { createDefaultResumeData, normalizeResumeData } from '@/utils/resumeData';
 import { cloneResume, rememberResumeSnapshot } from '@/utils/resumeSnapshot';
 import { assertProposalBaseline, parseChangeProposal, previewProposal } from '@/services/ai/changeProposal';
+import { describeError } from '@/utils/globalErrorReporting';
 
 const applyingProposals = new WeakSet<object>();
 
@@ -510,7 +511,7 @@ export const useResumeStore = defineStore('resume', {
       } catch (error) {
         if (generation === this.saveGeneration && this.data.id === source.id) {
           this.saveStatus = 'error';
-          this.saveError = error instanceof Error ? error.message : '未知错误';
+          this.saveError = describeError(error);
         }
         console.error('保存简历失败:', error);
         throw error;

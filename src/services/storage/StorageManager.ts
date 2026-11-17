@@ -2,6 +2,7 @@ import type { IStorageAdapter, StorageType, StorageConfig, MigrationProgress } f
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { withTimeout } from '@/utils/asyncTimeout';
 import { normalizeResumeData } from '@/utils/resumeData';
+import { describeError } from '@/utils/globalErrorReporting';
 import { LocalStorageAdapter } from './LocalStorageAdapter';
 import { FileSystemAdapter } from './FileSystemAdapter';
 
@@ -202,7 +203,7 @@ export class StorageManager {
           current: i + 1,
           currentItem: meta.title,
           status: 'error',
-          error: error instanceof Error ? error.message : '未知错误',
+          error: describeError(error),
         });
         throw error;
       }

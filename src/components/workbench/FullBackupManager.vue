@@ -54,6 +54,7 @@ import type { ResumeData } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { validateJsonImportFileSize, validateResumeData } from '@/utils/export-json';
 import { useWorkbenchStore } from '@/stores/workbench';
+import { describeError } from '@/utils/globalErrorReporting';
 import {
   parseFullBackup,
   planFullBackupRestore,
@@ -108,7 +109,7 @@ async function exportAll() {
     ElMessage.success('全量备份已生成并下载。');
     emit('backup-success');
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '全量备份失败。';
+    errorMessage.value = describeError(error);
     ElMessage.error(errorMessage.value);
   } finally {
     exporting.value = false;
@@ -145,7 +146,7 @@ async function handleFileChange(event: Event) {
     fileName.value = '';
     restorePlan.value = null;
     restoredIndexes.value = new Set();
-    errorMessage.value = error instanceof Error ? error.message : '备份文件校验失败。';
+    errorMessage.value = describeError(error);
   } finally {
     reading.value = false;
   }
@@ -184,8 +185,8 @@ async function restoreAll() {
     resetImport();
   } catch (error) {
     errorMessage.value = written
-      ? `恢复中断：已安全新增 ${written} 份，未覆盖现有简历。${error instanceof Error ? error.message : ''}`
-      : error instanceof Error ? error.message : '恢复失败。';
+      ? `恢复中断：已安全新增 ${written} 份，未覆盖现有简历。${describeError(error)}`
+      : describeError(error);
   } finally {
     restoring.value = false;
   }

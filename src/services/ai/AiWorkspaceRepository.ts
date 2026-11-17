@@ -1,4 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
+import { describeError } from '@/utils/globalErrorReporting';
 
 export type AiRecordKind = 'optimization' | 'interview';
 interface StoredRecord { key: string; kind: AiRecordKind; id: string; updatedAt: number; version: 1; data: unknown }
@@ -17,7 +18,7 @@ export class AiWorkspaceRepository {
       this.dbPromise = openDB<AiWorkspaceDb>('sea-resume-ai-workspace', 1, {
         upgrade(db) { db.createObjectStore('records', { keyPath: 'key' }).createIndex('kind', 'kind'); },
         blocking: () => { void this.dbPromise?.then(db => db.close()); this.dbPromise = undefined; },
-      }).catch(error => { this.dbPromise = undefined; throw new Error(`AI 记录存储不可用：${error instanceof Error ? error.message : '未知错误'}。可改为仅本次会话。`); });
+      }).catch(error => { this.dbPromise = undefined; throw new Error(`AI 记录存储不可用：${describeError(error)}。可改为仅本次会话。`); });
     }
     return this.dbPromise;
   }
