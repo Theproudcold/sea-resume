@@ -19,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
 import { estimateA4PageCount } from '@/utils/pageFit';
 
 const canvasRef = ref<HTMLElement | null>(null);
@@ -32,7 +32,18 @@ let scheduledFrame = 0;
 let a4Height = 0;
 let disposed = false;
 
+/** 破页线数量 = 页数 - 1。 */
 const pageCount = ref(0);
+/** 首次有效测量完成前为 false；隐藏或标尺读数为 0 时退回 false。 */
+const measured = ref(false);
+
+/** 对外发布的页数：破页线数量加一，显示与分页共用同一次测量。 */
+const totalPages = computed(() => (measured.value ? pageCount.value + 1 : null));
+const pending = computed(() => !measured.value);
+
+// 主预览通过 provide 把这份测量交给主题面板，避免两处各量一次。
+defineExpose({ pageCount: totalPages, pending });
+
 const updatePageBreaks = () => {
   // Clear before measuring so later notifications can schedule the next frame.
   scheduledFrame = 0;
@@ -44,13 +55,20 @@ const updatePageBreaks = () => {
   // display:none (including hidden ancestors) has no layout box. Keep the last
   // page count and wait for ResizeObserver to report the restored layout.
   const box = canvas.getClientRects()[0];
-  if (!box || box.width <= 0 || box.height <= 0) return;
+  if (!box || box.width <= 0 || box.height <= 0) {
+    measured.value = false;
+    return;
+  }
 
   // Read layout together; marker overflow must never contribute to pagination.
   const pageHeight = a4Height || ruler.getBoundingClientRect().height;
   const contentHeight = Math.max(content.scrollHeight, content.offsetHeight);
-  if (pageHeight <= 0) return;
+  if (pageHeight <= 0) {
+    measured.value = false;
+    return;
+  }
   a4Height = pageHeight;
+  measured.value = true;
   const nextPageCount = Math.max(0, estimateA4PageCount(contentHeight, pageHeight) - 1);
   if (pageCount.value !== nextPageCount) pageCount.value = nextPageCount;
 };

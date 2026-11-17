@@ -11,7 +11,7 @@
           {{ estimatedPages === null ? '计算中' : `预估 ${estimatedPages} 页` }}
         </el-tag>
       </div>
-      <p class="fit-panel__note">尝试适配仅调整排版，不删除文字；字号不会低于 12px。超长内容仍会保留为多页。</p>
+      <p class="fit-panel__note">尝试适配会逐档收紧边距、行高与字号，回到一页就停止；不删除任何文字，字号不会低于 {{ MIN_FONT_SIZE }}px。到下限仍超页时保留为多页。</p>
       <div class="fit-panel__actions">
         <el-button type="primary" plain :loading="isFitting" :disabled="estimatedPages === null || estimatedPages <= 1 || isFitting" @click="fitToOnePage">尝试适配一页</el-button>
         <el-button v-if="canRestore" text @click="restoreOriginalTheme">还原原排版</el-button>
@@ -131,14 +131,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { computed, inject, onMounted, ref } from 'vue';
+import { ElMessage } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
-import type { ThemeConfig } from '@/types/resume';
-import { describeError } from '@/utils/globalErrorReporting';
-import { useOnePageFit, usePreviewPageEstimate } from '@/composables/useOnePageFit';
+import { MIN_FONT_SIZE } from '@/utils/pageFit';
+import { useOnePageFit } from '@/composables/useOnePageFit';
+import { previewPageMetricsKey } from '@/components/preview/previewPageMetrics';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
@@ -148,11 +148,18 @@ function beginHistoryGroup() {
   resumeStore.startHistoryGroup();
 }
 
-// 页数测量与「适配一页」都由 composable 负责，组件只渲染主题 token。
-const { estimatedPages } = usePreviewPageEstimate(computed(() => data.value.theme));
+// 页数由预览画布实测后发布；编辑器侧不自己量 DOM，避免两处读数不一致。
+// 编辑器不在预览树内（如独立页面）时退回「未测量」，UI 显示计算中并禁用适配。
+const pageMetrics = inject(previewPageMetricsKey, null) ?? {
+  pending: computed(() => true),
+  pageCount: computed(() => null),
+};
+const estimatedPages = pageMetrics.pageCount;
+
+// 适配一页由 composable 负责，组件只渲染主题 token 与按钮状态。
 const { isFitting, canRestore, fitToOnePage, restoreOriginalTheme } = useOnePageFit(
   computed(() => data.value.theme),
-  estimatedPages,
+  pageMetrics,
   {
     updateTheme: (theme) => resumeStore.updateTheme(theme),
     autoSave: () => resumeStore.autoSave(),
