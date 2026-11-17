@@ -14,7 +14,7 @@
       <p class="fit-panel__note">尝试适配仅调整排版，不删除文字；字号不会低于 12px。超长内容仍会保留为多页。</p>
       <div class="fit-panel__actions">
         <el-button type="primary" plain :loading="isFitting" :disabled="estimatedPages === null || estimatedPages <= 1 || isFitting" @click="fitToOnePage">尝试适配一页</el-button>
-        <el-button v-if="originalTheme" text @click="restoreOriginalTheme">还原原排版</el-button>
+        <el-button v-if="canRestore" text @click="restoreOriginalTheme">还原原排版</el-button>
       </div>
       <el-alert v-if="estimatedPages !== null && estimatedPages > 1" class="fit-panel__alert" type="warning" :closable="false" title="当前内容预计需要多页；可尝试紧凑排版，或精简内容后再查看打印预览。" />
     </section>
@@ -131,116 +131,34 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 import type { ThemeConfig } from '@/types/resume';
-import { estimateA4PageCount, getCompactThemeSettings } from '@/utils/pageFit';
 import { describeError } from '@/utils/globalErrorReporting';
+import { useOnePageFit, usePreviewPageEstimate } from '@/composables/useOnePageFit';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const estimatedPages = ref<number | null>(null);
-const originalTheme = ref<ThemeConfig | null>(null);
-const isFitting = ref(false);
+/** 每次开始拖动/按键编辑前先落一个撤销点，整段连续调整合并成一步。 */
 function beginHistoryGroup() {
   resumeStore.startHistoryGroup();
 }
-let canvasObserver: ResizeObserver | null = null;
-let contentObserver: MutationObserver | null = null;
-let updateFrame = 0;
 
-function updatePageEstimate() {
-  const canvas = document.querySelector<HTMLElement>('.preview-panel .resume-canvas');
-  if (!canvas || canvas.getBoundingClientRect().width <= 0) {
-    estimatedPages.value = null;
-    return;
-  }
-  // ResumeCanvas already keeps a 297mm ruler for pagination. Reuse it instead of
-  // inserting and measuring a new node on every content mutation.
-  const ruler = document.querySelector<HTMLElement>('.preview-panel .a4-ruler');
-  const a4Height = ruler?.getBoundingClientRect().height || ruler?.offsetHeight || 0;
-  if (a4Height <= 0) {
-    estimatedPages.value = null;
-    return;
-  }
-  estimatedPages.value = estimateA4PageCount(canvas.scrollHeight, a4Height);
-}
-
-function schedulePageEstimate() {
-  if (updateFrame) cancelAnimationFrame(updateFrame);
-  updateFrame = requestAnimationFrame(updatePageEstimate);
-}
-
-watch(() => data.value.theme, schedulePageEstimate, { deep: true });
-onMounted(() => {
-  const canvas = document.querySelector<HTMLElement>('.preview-panel .resume-canvas');
-  schedulePageEstimate();
-  if (canvas && typeof ResizeObserver !== 'undefined') {
-    canvasObserver = new ResizeObserver(schedulePageEstimate);
-    canvasObserver.observe(canvas);
-  }
-  if (canvas && typeof MutationObserver !== 'undefined') {
-    contentObserver = new MutationObserver(schedulePageEstimate);
-    contentObserver.observe(canvas, { childList: true, subtree: true, characterData: true });
-  }
-});
-onUnmounted(() => {
-  canvasObserver?.disconnect();
-  contentObserver?.disconnect();
-  if (updateFrame) cancelAnimationFrame(updateFrame);
-});
-
-async function fitToOnePage() {
-  if (estimatedPages.value === null || estimatedPages.value <= 1 || isFitting.value) return;
-  try {
-    await ElMessageBox.confirm(
-      '将尝试调整字号、行高和边距；字号不低于 12px，任何文字都不会被删除。若仍超页，请精简内容。',
-      '尝试适配一页 A4',
-      { confirmButtonText: '应用紧凑排版', cancelButtonText: '取消', type: 'warning' },
-    );
-  } catch {
-    return;
-  }
-
-  const previous = JSON.parse(JSON.stringify(data.value.theme)) as ThemeConfig;
-  if (!originalTheme.value) originalTheme.value = previous;
-  isFitting.value = true;
-  try {
-    resumeStore.updateTheme(getCompactThemeSettings(data.value.theme));
-    await resumeStore.autoSave();
-    await nextTick();
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    updatePageEstimate();
-    if ((estimatedPages.value ?? 1) <= 1) ElMessage.success('紧凑排版已应用，预览估算为一页。');
-    else ElMessage.warning(`已应用安全范围内的紧凑排版；当前仍约 ${estimatedPages.value} 页，建议精简内容。`);
-  } catch (error) {
-    resumeStore.updateTheme(previous);
-    try { await resumeStore.autoSave(); } catch { /* keep the original error for the user */ }
-    originalTheme.value = null;
-    ElMessage.error('紧凑排版未能保存: ' + (describeError(error)));
-  } finally {
-    isFitting.value = false;
-  }
-}
-
-async function restoreOriginalTheme() {
-  const snapshot = originalTheme.value;
-  if (!snapshot) return;
-  try {
-    resumeStore.updateTheme(snapshot);
-    await resumeStore.autoSave();
-    originalTheme.value = null;
-    await nextTick();
-    schedulePageEstimate();
-    ElMessage.success('已还原适配前的主题排版');
-  } catch (error) {
-    ElMessage.error('还原排版失败: ' + (describeError(error)));
-  }
-}
+// 页数测量与「适配一页」都由 composable 负责，组件只渲染主题 token。
+const { estimatedPages } = usePreviewPageEstimate(computed(() => data.value.theme));
+const { isFitting, canRestore, fitToOnePage, restoreOriginalTheme } = useOnePageFit(
+  computed(() => data.value.theme),
+  estimatedPages,
+  {
+    updateTheme: (theme) => resumeStore.updateTheme(theme),
+    autoSave: () => resumeStore.autoSave(),
+    beginHistoryGroup: () => resumeStore.startHistoryGroup(),
+  },
+);
 
 const customColor = ref(data.value.theme?.color || '#2563eb');
 const imgIconState = ref(data.value.theme?.displayIcons !== false);
