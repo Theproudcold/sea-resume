@@ -20,7 +20,7 @@
       <div class="professional-side">
         <div class="side-profile cursor-pointer" @click="setActiveSection('basic')">
         <div v-if="data.basic.avatar" class="mb-4">
-          <img :src="data.basic.avatar" alt="头像" class="w-20 h-20 rounded-full object-cover" style="box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 16%, white)" />
+          <img :src="data.basic.avatar" alt="头像" class="w-20 h-20 object-cover" :style="{ borderRadius: avatarBorderRadius(data.basic.avatarShape), boxShadow: '0 0 0 3px color-mix(in srgb, var(--primary-color) 16%, white)' }" />
         </div>
           <h1 class="side-name">{{ data.basic.name || '您的姓名' }}</h1>
           <div class="side-role">{{ data.basic.title || '求职意向' }}</div>
@@ -187,6 +187,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ResumeData } from '@/types/resume';
+import { avatarBorderRadius } from '@/utils/avatarShape';
 import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import ContactIcon from '@/components/common/ContactIcon.vue';
 import draggable from 'vuedraggable';

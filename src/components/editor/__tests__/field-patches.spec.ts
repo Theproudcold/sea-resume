@@ -25,6 +25,7 @@ const stubs = {
   MonthRangeField: defineComponent({ name: 'MonthRangeField', props: ['start', 'end', 'present'], emits: ['update:start', 'update:end', 'update:present'], template: '<div class="month-range" />' }),
   SkillTagInput: defineComponent({ name: 'SkillTagInput', props: ['items'], emits: ['update:items'], template: '<div class="skill-tags" />' }),
   EntryDeleteButton: { template: '<button class="entry-delete"><slot /></button>' },
+  AvatarCropDialog: { name: 'AvatarCropDialog', props: ['modelValue', 'source', 'shape'], template: '<div class="crop-dialog" />' },
   'el-icon': true, 'el-button': { template: '<button><slot /></button>' }, 'el-option': true, 'el-divider': true,
   RichTextEditor: Field, SmoothCollapse: Container,
 };
@@ -99,8 +100,11 @@ describe('store-owned editor field patches', () => {
   });
 
   it.each(['resume switch', 'unmount', 'newer upload'] as const)('ignores stale avatar reads after %s', async (scenario) => {
-    const pending: Array<{ resolve: (value: string) => void }> = [];
-    vi.spyOn(avatarImage, 'compressAvatar').mockImplementation(() => new Promise((resolve) => { pending.push({ resolve }); }));
+    const loaded = (objectUrl: string): avatarImage.LoadedAvatar => ({
+      image: {} as HTMLImageElement, width: 800, height: 400, objectUrl,
+    });
+    const pending: Array<{ resolve: (value: avatarImage.LoadedAvatar) => void }> = [];
+    vi.spyOn(avatarImage, 'loadAvatarImage').mockImplementation(() => new Promise((resolve) => { pending.push({ resolve }); }));
     const store = useResumeStore();
     const wrapper = render(BasicInfoEditor);
     const upload = wrapper.findComponent({ name: 'TestUpload' });
@@ -112,14 +116,20 @@ describe('store-owned editor field patches', () => {
     else if (scenario === 'unmount') wrapper.unmount();
     else {
       upload.props('onChange')(file);
-      pending[1]!.resolve('new-avatar');
+      pending[1]!.resolve(loaded('blob:newer'));
       await nextTick();
     }
     const patch = vi.spyOn(store, 'updateBasic');
-    pending[0]!.resolve('stale-avatar');
+    pending[0]!.resolve(loaded('blob:stale'));
     await nextTick();
+    // 迟到的源图既不写进简历，也不留在内存里。
     expect(patch).not.toHaveBeenCalled();
-    expect(store.data.basic.avatar).toBe(scenario === 'newer upload' ? 'new-avatar' : undefined);
+    expect(store.data.basic.avatar).toBeUndefined();
+    // 卸载后不再查询组件树，其余场景确认只有最新一次上传进了取景框。
+    if (scenario === 'unmount') return;
+    const dialog = wrapper.findComponent({ name: 'AvatarCropDialog' });
+    if (scenario === 'newer upload') expect(dialog.props('source')).toMatchObject({ objectUrl: 'blob:newer' });
+    else expect(dialog.props('source')).toBeNull();
   });
 
   it('derives present from store and patches without changing the old project', async () => {

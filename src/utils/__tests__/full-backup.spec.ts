@@ -57,6 +57,22 @@ describe('full backup data layer', () => {
     expect(JSON.parse(serialized)).toMatchObject({ format: 'sea-resume-full-backup', version: 1 });
   });
 
+  it('round-trips the avatar shape and drops unknown shapes instead of failing the restore', () => {
+    const resume = makeResume('resume-shape', 'Shape');
+    resume.basic.avatarShape = 'square';
+
+    expect(parseFullBackup(serializeFullBackup([resume])).resumes[0]?.basic.avatarShape).toBe('square');
+
+    // 未知取值属于「未知字段」：渲染层会回落到圆形，不该让整份备份无法恢复。
+    const tampered = JSON.parse(serializeFullBackup([resume])) as { resumes: Array<{ basic: Record<string, unknown> }> };
+    tampered.resumes[0]!.basic.avatarShape = 'triangle';
+    expect(parseFullBackup(JSON.stringify(tampered)).resumes[0]?.basic.avatarShape).toBeUndefined();
+
+    // 类型错误仍是结构损坏，照旧拒绝。
+    tampered.resumes[0]!.basic.avatarShape = 42;
+    expect(() => parseFullBackup(JSON.stringify(tampered))).toThrow(/avatarShape/);
+  });
+
   it('rejects malformed, incomplete, and unsupported backup data', () => {
     expect(() => parseFullBackup('{broken')).toThrow();
     expect(() => parseFullBackup(JSON.stringify({ format: 'sea-resume-full-backup', version: 1, resumes: [null] }))).toThrow();

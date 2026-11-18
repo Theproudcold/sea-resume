@@ -6,6 +6,9 @@ export interface CustomContact {
   icon: string;
 }
 
+/** 头像外观。同一张方形照片按它裁剪显示，照片本身不因为形状而改变。 */
+export type AvatarShape = 'circle' | 'square';
+
 export interface BasicInfo {
   name: string;
   title: string;          // 求职意向
@@ -14,6 +17,7 @@ export interface BasicInfo {
   location?: string;
   website?: string;
   avatar?: string;
+  avatarShape?: AvatarShape; // 缺省按圆形，保证没有该字段的历史简历外观不变
   birthDate?: string;       // 可选的本地生日，仅在用户开启年龄显示时使用
   showAge?: boolean;
   showExperienceYears?: boolean;

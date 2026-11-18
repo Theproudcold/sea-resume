@@ -1,5 +1,6 @@
 import type { BasicInfo, ResumeData, ThemeConfig } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
+import { parseAvatarShape } from '@/utils/avatarShape';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 
 const DEFAULT_BASIC: BasicInfo = {
@@ -88,7 +89,12 @@ export function normalizeResumeData(source: unknown): ResumeData {
     ...input,
     id: asString(input.id, defaults.id),
     title: asString(input.title, defaults.title),
-    basic: { ...defaults.basic, ...(basic as Partial<BasicInfo>) },
+    basic: {
+      ...defaults.basic,
+      ...(basic as Partial<BasicInfo>),
+      // 可选外观字段：只保留白名单值，脏值当作未设置，交给渲染层回落到圆形。
+      avatarShape: parseAvatarShape(basic.avatarShape),
+    },
     experiences: asArray(input.experiences),
     education: asArray(input.education),
     skills: asArray(input.skills),

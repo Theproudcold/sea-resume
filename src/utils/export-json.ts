@@ -1,5 +1,6 @@
 import type { ResumeData } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
+import { parseAvatarShape } from '@/utils/avatarShape';
 import { validateJsonImportFileSize } from '@/utils/importLimits';
 import { sanitizeRichTextHtml, sanitizeMarkdownUrl } from '@/utils/markdown/markdownSafety';
 
@@ -71,6 +72,7 @@ export function validateResumeData(input: unknown): ResumeData {
       location: text(basic.location, 'basic.location', undefined),
       website: sanitizeMarkdownUrl(text(basic.website, 'basic.website', '')) ?? undefined,
       avatar: /^data:image\/(png|jpeg|webp|gif);base64,/i.test(text(basic.avatar, 'basic.avatar', '')) ? basic.avatar as string : undefined,
+      avatarShape: parseAvatarShape(basic.avatarShape),
       birthDate: text(basic.birthDate, 'basic.birthDate', undefined),
       showAge: basic.showAge === true,
       showExperienceYears: basic.showExperienceYears === true,

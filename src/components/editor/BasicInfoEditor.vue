@@ -2,24 +2,38 @@
   <div class="basic-info-editor space-y-4">
     <el-form label-position="top">
       <el-form-item label="照片（选填）">
-        <el-upload
-          class="avatar-uploader"
-          aria-label="上传或更换照片"
-          :show-file-list="false"
-          :auto-upload="false"
-          :on-change="handleAvatarChange"
-          accept="image/*"
-        >
-          <div v-if="localBasic.avatar" class="avatar-frame">
-            <img :src="localBasic.avatar" class="avatar-image" alt="" />
-            <div class="avatar-overlay">
-              <el-icon><Edit /></el-icon>
+        <div class="avatar-field">
+          <el-upload
+            class="avatar-uploader"
+            aria-label="上传或更换照片"
+            :show-file-list="false"
+            :auto-upload="false"
+            :on-change="handleAvatarChange"
+            accept="image/*"
+          >
+            <div v-if="localBasic.avatar" class="avatar-frame" :style="{ borderRadius: avatarBorderRadius(localBasic.avatarShape) }">
+              <img :src="localBasic.avatar" class="avatar-image" alt="" />
+              <div class="avatar-overlay">
+                <el-icon><Edit /></el-icon>
+              </div>
             </div>
+            <div v-else class="avatar-empty" :style="{ borderRadius: avatarBorderRadius(localBasic.avatarShape) }">
+              <el-icon><Plus /></el-icon>
+            </div>
+          </el-upload>
+          <div v-if="localBasic.avatar" class="avatar-shape">
+            <el-radio-group
+              :model-value="normalizeAvatarShape(localBasic.avatarShape)"
+              size="small"
+              aria-label="头像外观"
+              @update:model-value="(shape: unknown) => handleUpdate({ avatarShape: normalizeAvatarShape(shape) })"
+            >
+              <el-radio-button v-for="option in AVATAR_SHAPE_OPTIONS" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </el-radio-button>
+            </el-radio-group>
           </div>
-          <div v-else class="avatar-empty">
-            <el-icon><Plus /></el-icon>
-          </div>
-        </el-upload>
+        </div>
       </el-form-item>
 
       <el-form-item label="姓名" required data-quality-id="basic-name">
@@ -261,20 +275,30 @@
         />
       </el-form-item>
     </el-form>
+
+    <AvatarCropDialog
+      v-model="cropVisible"
+      :source="cropSource"
+      :shape="localBasic.avatarShape"
+      @confirm="applyCrop"
+      @closed="handleCropClosed"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount } from 'vue';
+import { computed, onBeforeUnmount, ref } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { Plus, Edit } from '@element-plus/icons-vue';
 import EntryDeleteButton from './EntryDeleteButton.vue';
+import AvatarCropDialog from './AvatarCropDialog.vue';
 import * as Icons from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import type { BasicInfo, CustomContact } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
-import { compressAvatar } from '@/utils/avatarImage';
+import { loadAvatarImage, releaseAvatar, type LoadedAvatar } from '@/utils/avatarImage';
+import { AVATAR_SHAPE_OPTIONS, avatarBorderRadius, normalizeAvatarShape } from '@/utils/avatarShape';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import { describeError } from '@/utils/globalErrorReporting';
 
@@ -288,19 +312,48 @@ const handleUpdate = (updates: Partial<BasicInfo>) => {
 };
 
 let avatarReadGeneration = 0;
-onBeforeUnmount(() => { avatarReadGeneration++; });
+
+const cropVisible = ref(false);
+const cropSource = ref<LoadedAvatar | null>(null);
+/** 取景框是为哪份简历打开的：期间切走简历时用它丢弃结果。 */
+const cropResumeId = ref('');
+
+onBeforeUnmount(() => {
+  avatarReadGeneration++;
+  releaseAvatar(cropSource.value);
+});
 
 const handleAvatarChange = (file: { raw?: File }) => {
   const raw = file.raw;
   if (!raw) return;
   const generation = ++avatarReadGeneration;
   const resumeId = data.value.id;
-  void compressAvatar(raw).then((avatar) => {
-    if (generation !== avatarReadGeneration || data.value.id !== resumeId || resumeStore.isLoading) return;
-    handleUpdate({ avatar });
+  // 先解码并取出源图，取景框里拖动的始终是原图，确认后才写进简历。
+  void loadAvatarImage(raw).then((source) => {
+    if (generation !== avatarReadGeneration || data.value.id !== resumeId || resumeStore.isLoading) {
+      releaseAvatar(source);
+      return;
+    }
+    releaseAvatar(cropSource.value);
+    cropSource.value = source;
+    cropResumeId.value = resumeId;
+    cropVisible.value = true;
   }).catch((error: unknown) => {
     ElMessage.error(describeError(error));
   });
+};
+
+const applyCrop = (avatar: string) => {
+  // 取景期间用户可能切走了简历：宁可丢弃这次取景，也不要把照片写进别的简历。
+  if (data.value.id === cropResumeId.value && !resumeStore.isLoading) handleUpdate({ avatar });
+  cropVisible.value = false;
+};
+
+/** 等关闭动画结束再释放对象 URL，否则淡出过程中图片会裂开。 */
+const handleCropClosed = () => {
+  releaseAvatar(cropSource.value);
+  cropSource.value = null;
+  cropResumeId.value = '';
 };
 
 const iconOptions = {
@@ -334,6 +387,19 @@ const updateCustomContact = (id: string, updates: Partial<CustomContact>) => {
   width: 100%;
 }
 
+.avatar-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.avatar-shape {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
 .avatar-frame,
 .avatar-empty {
   position: relative;
@@ -343,7 +409,6 @@ const updateCustomContact = (id: string, updates: Partial<CustomContact>) => {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: var(--radius-card);
   cursor: pointer;
 }
 

@@ -11,7 +11,7 @@
     }"
   >
     <header class="profile-header" @click="setActiveSection('basic')">
-      <img v-if="data.basic.avatar" :src="data.basic.avatar" :alt="`${data.basic.name || '简历'}头像`" class="profile-avatar" />
+      <img v-if="data.basic.avatar" :src="data.basic.avatar" :alt="`${data.basic.name || '简历'}头像`" class="profile-avatar" :style="{ borderRadius: avatarBorderRadius(data.basic.avatarShape) }" />
       <div class="profile-main">
         <div class="profile-topline">
           <div class="identity">
@@ -144,6 +144,7 @@ import ContactIcon from '@/components/common/ContactIcon.vue';
 import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import { useResumeStore } from '@/stores/resume';
 import type { ResumeData } from '@/types/resume';
+import { avatarBorderRadius } from '@/utils/avatarShape';
 
 const props = defineProps<{ data: ResumeData }>();
 const resumeStore = useResumeStore();
@@ -239,10 +240,9 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 
 .profile-avatar {
   width: 84px;
-  height: 112px;
+  height: 84px;
   flex: 0 0 84px;
   object-fit: cover;
-  border-radius: 2px;
   background: var(--resume-chip);
 }
 
@@ -460,7 +460,7 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 
   .profile-avatar {
     width: 68px;
-    height: 90px;
+    height: 68px;
     flex-basis: 68px;
   }
 
