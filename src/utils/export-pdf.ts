@@ -4,7 +4,7 @@ import notoSansScBoldUrl from '@/assets/fonts/noto-sans-sc/NotoSansSC-Bold.otf?u
 import { createResumePdfDefinition } from './pdf/createResumePdfDefinition';
 import { collectResumeCharacters, subsetOpenTypeFont } from './pdf/subsetFont';
 import { resolveResumeAvatar, resolveResumeAvatarForShape } from './pdf/resolveAvatar';
-import { getA4ImagePageSlices } from './export-image';
+import { getCapturedPageSlices } from './export-image';
 import { prepareResumeCapture } from './capture-colors';
 import type { TDocumentDefinitions, TFontDictionary, TVirtualFileSystem } from 'pdfmake/interfaces';
 
@@ -202,7 +202,7 @@ export async function exportPreviewToPDF(selector = '.resume-canvas', filename =
     },
   });
 
-  const pages = getA4ImagePageSlices(canvas.width, canvas.height);
+  const pages = getCapturedPageSlices(element, canvas, renderWidth);
   if (pages.length === 0) throw new Error('预览内容为空，无法生成 PDF。');
 
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });

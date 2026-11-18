@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   html2canvas: vi.fn(),
   addPage: vi.fn(),
   addImage: vi.fn(),
+  drawImage: vi.fn(),
   output: vi.fn(),
   click: vi.fn(),
   revokeObjectURL: vi.fn(),
@@ -22,6 +23,7 @@ describe('preview-faithful PDF export', () => {
     mocks.html2canvas.mockReset();
     mocks.addPage.mockReset();
     mocks.addImage.mockReset();
+    mocks.drawImage.mockReset();
     mocks.click.mockReset();
     mocks.createObjectURL.mockClear();
     mocks.revokeObjectURL.mockClear();
@@ -30,7 +32,7 @@ describe('preview-faithful PDF export', () => {
     const renderingContext = {
       fillStyle: '#fff',
       fillRect: vi.fn(),
-      drawImage: vi.fn(),
+      drawImage: mocks.drawImage,
     } as unknown as CanvasRenderingContext2D;
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(renderingContext);
     vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,preview');
@@ -85,6 +87,57 @@ describe('preview-faithful PDF export', () => {
     expect(mocks.click).toHaveBeenCalledOnce();
     expect(mocks.createObjectURL).toHaveBeenCalledOnce();
     expect(mocks.revokeObjectURL).toHaveBeenCalledWith('blob:preview-pdf');
+  });
+
+  it('keeps a text line whole by moving the page break to the gap above it', async () => {
+    const preview = document.createElement('div');
+    preview.className = 'resume-canvas';
+    const paragraph = document.createElement('p');
+    paragraph.textContent = '这一行正好压在页缝上';
+    preview.appendChild(paragraph);
+    document.body.appendChild(preview);
+    Object.defineProperties(preview, {
+      scrollWidth: { configurable: true, value: 794 },
+      scrollHeight: { configurable: true, value: 2500 },
+    });
+    const rect = (top: number, height: number): DOMRect => ({
+      x: 0, y: top, top, bottom: top + height, left: 0, right: 794, width: 794, height,
+      toJSON: () => ({}),
+    }) as DOMRect;
+    const a4Height = (297 * 96) / 25.4;
+    const lineTop = Math.round(a4Height) - 24;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this === preview) return rect(0, 2500);
+      if (this === paragraph) return rect(lineTop, 40);
+      return rect(0, 0);
+    });
+    mocks.html2canvas.mockResolvedValue({ width: 794, height: 2500 } as HTMLCanvasElement);
+
+    const pageCount = await exportPreviewToPDF('.resume-canvas', 'content-aware');
+
+    expect(pageCount).toBe(3);
+    const cuts = mocks.drawImage.mock.calls.map((call) => Number(call[2]) + Number(call[4]));
+    expect(cuts.length).toBe(3);
+    // 切点可以落在行盒的上边缘，但绝不能落在行盒内部，否则这一行会被印成两半。
+    for (const cut of cuts) {
+      expect(cut > lineTop && cut < lineTop + 40).toBe(false);
+    }
+    expect(cuts[0]).toBe(lineTop);
+  });
+
+  it('refuses to export when the capture is shorter than the preview content', async () => {
+    const preview = document.createElement('div');
+    preview.className = 'resume-canvas';
+    document.body.appendChild(preview);
+    Object.defineProperties(preview, {
+      scrollWidth: { configurable: true, value: 794 },
+      scrollHeight: { configurable: true, value: 2500 },
+    });
+    // 渲染期间布局变高（例如字体替换）后仍按旧高度切页，会静默少一段内容。
+    mocks.html2canvas.mockResolvedValue({ width: 794, height: 1800 } as HTMLCanvasElement);
+
+    await expect(exportPreviewToPDF('.resume-canvas', 'truncated')).rejects.toThrow('导出过程中发生了变化');
+    expect(mocks.addImage).not.toHaveBeenCalled();
   });
 
   it('fails clearly if the preview canvas is missing', async () => {
