@@ -1,49 +1,52 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="全量备份与恢复"
+    title="备份与恢复全部简历"
     width="var(--ui-dialog-width-lg)"
     align-center
     destroy-on-close
+    :close-on-click-modal="!busy"
+    :close-on-press-escape="!busy"
+    :show-close="!busy"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <el-tabs>
       <el-tab-pane label="导出全部简历">
         <el-alert type="info" :closable="false" title="备份包含当前存储位置的全部简历及岗位版本。文件只在本地生成，不会上传。" />
         <div class="backup-export">
-          <p>导出为带格式版本号的 JSON 文件。定期保存在安全位置；恢复时不会覆盖现有简历。</p>
-          <el-button type="primary" :loading="exporting" :disabled="exporting" @click="exportAll">导出全量备份</el-button>
+          <p>请将备份文件保存在安全位置。文件包含简历中的个人信息，不包含 AI 密钥。</p>
+          <el-button type="primary" :loading="exporting" :disabled="busy" @click="exportAll">下载全部简历备份</el-button>
         </div>
       </el-tab-pane>
-      <el-tab-pane label="校验并恢复">
+      <el-tab-pane label="恢复备份">
         <div class="backup-import">
-          <input ref="fileInput" class="visually-hidden" type="file" accept="application/json,.json" @change="handleFileChange" />
-          <el-button :loading="reading" @click="fileInput?.click()">选择备份 JSON</el-button>
+          <input ref="fileInput" class="visually-hidden" type="file" aria-label="选择备份文件" accept="application/json,.json" @change="handleFileChange" />
+          <el-button :type="preview ? 'default' : 'primary'" :loading="reading" :disabled="busy" @click="fileInput?.click()">{{ preview ? '重选备份文件' : '选择备份文件' }}</el-button>
           <span v-if="fileName" class="file-name">{{ fileName }}</span>
         </div>
-        <el-alert v-if="preview" class="restore-summary" type="warning" :closable="false">
-          <template #title>校验通过：{{ preview.counts.total }} 份待恢复；ID 冲突 {{ preview.counts.idConflicts }} 份，名称冲突 {{ preview.counts.nameConflicts }} 份。</template>
-          <p>恢复不会覆盖现有简历。冲突项将使用新 ID 和独立名称创建副本；其他简历保留原 ID。</p>
+        <p v-if="!preview" class="restore-help">选择之前导出的全部简历备份（JSON），确认内容后再恢复。不会覆盖现有简历。</p>
+        <el-alert v-if="preview" class="restore-summary" :type="preview.counts.idConflicts || preview.counts.nameConflicts ? 'warning' : 'success'" :closable="false">
+          <template #title>找到 {{ preview.counts.total }} 份简历；{{ preview.counts.idConflicts }} 份已存在，{{ preview.counts.nameConflicts }} 份同名。</template>
+          <p>现有简历不会被覆盖。已存在或同名的简历会另存为副本。</p>
         </el-alert>
         <el-table v-if="preview?.items.length" :data="preview.items" size="small" max-height="300" class="conflict-table">
           <el-table-column prop="title" label="备份中的简历" min-width="180" show-overflow-tooltip />
-          <el-table-column prop="id" label="原 ID" min-width="150" show-overflow-tooltip />
-          <el-table-column label="冲突">
+          <el-table-column label="恢复方式" min-width="150">
             <template #default="{ row }">
               <span v-if="row.idConflict || row.nameConflict" class="conflict-label">
-                <el-tag v-if="row.idConflict" size="small" type="danger">ID 冲突</el-tag>
-                <el-tag v-if="row.nameConflict" size="small" type="warning">名称冲突</el-tag>
+                <el-tag v-if="row.idConflict" size="small" type="info">已存在，创建副本</el-tag>
+                <el-tag v-if="row.nameConflict" size="small" type="warning">同名，自动重命名</el-tag>
               </span>
-              <span v-else class="no-conflict">无</span>
+              <span v-else class="no-conflict">直接恢复</span>
             </template>
           </el-table-column>
         </el-table>
         <el-empty v-else-if="preview" description="备份中没有简历可恢复。" />
-        <el-alert v-if="errorMessage" class="backup-error" type="error" :closable="false" show-icon :title="errorMessage" />
-        <el-button v-if="preview?.items.length" class="restore-button" type="primary" :loading="restoring" @click="restoreAll">按预览结果安全恢复</el-button>
+        <el-button v-if="preview?.items.length" class="restore-button" type="primary" :loading="restoring" :disabled="busy" @click="restoreAll">{{ restoredIndexes.size === preview.items.length ? '完成恢复' : restoredIndexes.size ? `继续恢复剩余 ${preview.items.length - restoredIndexes.size} 份` : `恢复 ${preview.items.length} 份简历` }}</el-button>
       </el-tab-pane>
     </el-tabs>
-    <template #footer><el-button @click="emit('update:modelValue', false)">关闭</el-button></template>
+    <el-alert v-if="errorMessage" class="backup-error" type="error" :closable="false" show-icon :title="errorMessage" />
+    <template #footer><el-button :disabled="busy" @click="emit('update:modelValue', false)">关闭</el-button></template>
   </el-dialog>
 </template>
 
@@ -79,6 +82,7 @@ const backup = ref<FullBackupEnvelope | null>(null);
 const restorePlan = ref<FullBackupRestorePlan | null>(null);
 const restoredIndexes = ref<Set<number>>(new Set());
 const errorMessage = ref('');
+const busy = computed(() => exporting.value || reading.value || restoring.value);
 const hasPreviewItems = computed(() => (preview.value?.items.length ?? 0) > 0);
 
 watch(() => props.modelValue, (visible) => { if (!visible) resetImport(); });
@@ -94,6 +98,7 @@ async function readAllResumes(): Promise<ResumeData[]> {
 }
 
 async function exportAll() {
+  if (busy.value) return;
   exporting.value = true;
   errorMessage.value = '';
   try {
@@ -126,7 +131,10 @@ function readTextFile(file: File): Promise<string> {
 }
 
 async function handleFileChange(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (busy.value) return;
   if (!file) return;
   reading.value = true;
   errorMessage.value = '';
@@ -153,7 +161,7 @@ async function handleFileChange(event: Event) {
 }
 
 async function restoreAll() {
-  if (!backup.value || !hasPreviewItems.value) return;
+  if (!backup.value || !hasPreviewItems.value || busy.value) return;
   restoring.value = true;
   errorMessage.value = '';
   let written = 0;
@@ -204,6 +212,7 @@ function resetImport() {
 </script>
 
 <style scoped>
+.restore-help { color: var(--ui-text-secondary); line-height: 1.6; }
 .backup-export { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 20px 0 8px; }
 .backup-export p { max-width: 500px; margin: 0; color: var(--ui-text-secondary); }
 .backup-import { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }

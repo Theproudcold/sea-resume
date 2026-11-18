@@ -4,12 +4,14 @@
     :title="template?.name || '模板预览'"
     width="var(--ui-dialog-width-xl)"
     align-center
+    :close-on-click-modal="!loading"
+    :close-on-press-escape="!loading"
+    :show-close="!loading"
     @close="$emit('update:visible', false)"
   >
     <div v-if="template" class="preview-dialog">
       <div class="preview-dialog__intro">
         <div>
-          <p class="preview-dialog__title">{{ template.name }}</p>
           <p class="preview-dialog__desc">{{ template.description }}</p>
         </div>
         <div class="preview-dialog__tags">
@@ -19,26 +21,26 @@
           </el-tag>
         </div>
       </div>
-      <div class="preview-dialog__canvas">
-        <div class="preview-dialog__paper resume-document">
+      <div ref="canvas" class="preview-dialog__canvas">
+        <div class="preview-dialog__paper resume-document" :style="{ '--preview-scale': previewScale }">
           <component :is="templateComponent" v-if="templateComponent" :data="previewData" />
           <el-empty v-else description="模板预览暂不可用" />
         </div>
       </div>
     </div>
     <template #footer>
-      <p v-if="!canApplyToCurrent" class="preview-dialog__hint">应用到当前简历需从编辑器进入模板库。</p>
+      <p v-if="canApplyToCurrent" class="preview-dialog__hint">{{ template?.source === 'custom' ? '此模板包含已保存的简历内容，使用时会替换当前内容。' : '只更换模板，已填写的内容保持不变。' }}</p>
       <div class="app-dialog-actions preview-dialog__actions">
-        <el-button :type="canApplyToCurrent ? 'default' : 'primary'" @click="$emit('create')">创建新简历</el-button>
-        <el-button :type="canApplyToCurrent ? 'primary' : 'default'" :disabled="!canApplyToCurrent" @click="$emit('apply')">应用到当前简历</el-button>
-        <el-button @click="$emit('update:visible', false)">关闭</el-button>
+        <el-button :disabled="loading" @click="$emit('update:visible', false)">返回模板库</el-button>
+        <el-button :type="canApplyToCurrent ? 'default' : 'primary'" :loading="loading && !canApplyToCurrent" :disabled="loading" @click="$emit('create')">用此模板新建</el-button>
+        <el-button v-if="canApplyToCurrent" type="primary" :loading="loading" @click="$emit('apply')">使用此模板</el-button>
       </div>
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { ResumeData, TemplateMetadata } from '@/types/resume';
 import { getTemplateComponent } from '@/components/preview/template-registry';
 
@@ -47,6 +49,7 @@ const props = defineProps<{
   template: TemplateMetadata | null;
   previewData: ResumeData;
   canApplyToCurrent: boolean;
+  loading?: boolean;
 }>();
 
 defineEmits<{
@@ -54,6 +57,19 @@ defineEmits<{
   create: [];
   apply: [];
 }>();
+
+const canvas = ref<HTMLElement | null>(null);
+const previewScale = ref(1);
+let resizeObserver: ResizeObserver | undefined;
+watch(canvas, (element) => {
+  resizeObserver?.disconnect();
+  if (!element || typeof ResizeObserver === 'undefined') return;
+  resizeObserver = new ResizeObserver(([entry]) => {
+    if (entry && entry.contentRect.width > 0) previewScale.value = Math.min(1, entry.contentRect.width / 796);
+  });
+  resizeObserver.observe(element);
+}, { flush: 'post' });
+onBeforeUnmount(() => resizeObserver?.disconnect());
 
 const templateComponent = computed(() => {
   if (!props.template) return null;
@@ -73,16 +89,6 @@ const templateComponent = computed(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-md);
-}
-
-.preview-dialog__title {
-  margin: 0;
-  color: var(--color-ink);
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 600;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.2;
 }
 
 .preview-dialog__desc {
@@ -110,6 +116,7 @@ const templateComponent = computed(() => {
 }
 
 .preview-dialog__paper {
+  zoom: var(--preview-scale, 1);
   box-sizing: content-box;
   width: 210mm;
   min-height: 297mm;
@@ -144,7 +151,9 @@ const templateComponent = computed(() => {
   }
 
   .preview-dialog__actions :deep(.el-button) {
+    flex: 0 0 auto;
     width: 100%;
+    min-height: 40px;
     margin-left: 0;
   }
 }

@@ -23,12 +23,14 @@
     <div class="toolbar__row toolbar__row--controls">
       <el-input
         :model-value="search"
-        placeholder="搜索模板名称、描述或关键词"
+        placeholder="搜索模板"
+        aria-label="搜索模板"
         clearable
         @update:model-value="(value: string) => $emit('update:search', value)"
       />
       <el-select
         class="toolbar__sort"
+        aria-label="模板排序"
         :model-value="sortBy"
         @update:model-value="(value: TemplateSortKey) => $emit('update:sort', value)"
       >

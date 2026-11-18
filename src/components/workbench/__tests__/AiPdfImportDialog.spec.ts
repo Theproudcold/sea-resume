@@ -139,6 +139,7 @@ const stubs = {
   ElRadioGroup: RadioGroupStub,
   ElRadioButton: RadioButtonStub,
   ElIcon: true,
+  AiProviderSettingsPanel: true,
 };
 
 function createWrapper() {
@@ -208,7 +209,7 @@ describe('AiPdfImportDialog', () => {
     await getField(wrapper, '项目名称').setValue('Corrected Portfolio');
     await getField(wrapper, '学校').setValue('Corrected University');
     await getField(wrapper, '技能项（逗号分隔）').setValue('Figma, UX research');
-    const confirmButton = wrapper.findAll('button').find((button) => button.text().includes('确认并创建新简历'));
+    const confirmButton = wrapper.findAll('button').find((button) => button.text().includes('创建简历'));
     await confirmButton?.trigger('click');
 
     const payload = wrapper.emitted('confirm')?.[0]?.[0] as { resume: ResumeData; title: string; templateId: string };
@@ -224,7 +225,7 @@ describe('AiPdfImportDialog', () => {
     const wrapper = createWrapper();
     await parseWithConsent(wrapper);
     await getField(wrapper, '新简历名称').setValue('My New Resume');
-    const confirmButton = wrapper.findAll('button').find((button) => button.text().includes('确认并创建新简历'));
+    const confirmButton = wrapper.findAll('button').find((button) => button.text().includes('创建简历'));
     await confirmButton?.trigger('click');
 
     expect(wrapper.emitted('confirm')?.[0]?.[0]).toMatchObject({
@@ -250,7 +251,7 @@ describe('AiPdfImportDialog', () => {
     await parseWithConsent(wrapper);
 
     expect(wrapper.text()).toContain('简历 Markdown 解析失败');
-    expect(wrapper.text()).not.toContain('确认并创建新简历');
+    expect(wrapper.text()).not.toContain('创建简历');
   });
   it('parses with a local keyless provider and preserves its options', async () => {
     clearAiSessionApiKey();
@@ -333,4 +334,57 @@ describe('AiPdfImportDialog', () => {
     expect(wrapper.text()).toContain('改用视觉识别');
     expect(wrapper.find('input[type="file"]').exists()).toBe(true);
   });
+  it('discards extraction results after closing and reopening the dialog', async () => {
+    let resolve!: (value: { text: string; pageCount: number }) => void;
+    mocks.extractPdfText.mockReturnValue(new Promise((done) => { resolve = done; }));
+    const wrapper = createWrapper();
+    await extractPdf(wrapper);
+    await wrapper.setProps({ modelValue: false });
+    await wrapper.setProps({ modelValue: true });
+    resolve({ text: 'stale private text', pageCount: 1 });
+    await flushPromises();
+    expect(wrapper.find('.pdf-dropzone').exists()).toBe(true);
+    expect(wrapper.find('.pdf-file-summary').exists()).toBe(false);
+    expect(mocks.requestAiPdfMarkdown).not.toHaveBeenCalled();
+  });
+
+  it('discards AI responses after closing instead of showing them in the next import', async () => {
+    let resolve!: (value: { markdown: string; explanation: string }) => void;
+    mocks.requestAiPdfMarkdown.mockReturnValue(new Promise((done) => { resolve = done; }));
+    const wrapper = createWrapper();
+    await parseWithConsent(wrapper);
+    await wrapper.setProps({ modelValue: false });
+    await wrapper.setProps({ modelValue: true });
+    resolve({ markdown: '# Old response', explanation: 'old response' });
+    await flushPromises();
+    expect(wrapper.find('.pdf-dropzone').exists()).toBe(true);
+    expect(wrapper.find('.resume-review').exists()).toBe(false);
+    expect(mocks.parseResumeMarkdown).not.toHaveBeenCalled();
+  });
+
+  it('offers retry after an AI failure without recommending a different PDF extraction mode', async () => {
+    mocks.requestAiPdfMarkdown.mockRejectedValueOnce(new Error('请求超时，请重试'));
+    const wrapper = createWrapper();
+    await parseWithConsent(wrapper);
+    expect(wrapper.text()).toContain('请求超时，请重试');
+    expect(wrapper.find('.error-alert button').exists()).toBe(false);
+    const retry = wrapper.findAll('button').find(button => button.text().includes('发送文本并解析简历'))!;
+    expect(retry.attributes('disabled')).toBeUndefined();
+    await retry.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.resume-review').exists()).toBe(true);
+    expect(wrapper.find('.resume-review').attributes('open')).toBeDefined();
+  });
+
+  it('requires a fresh consent after the model configuration is saved', async () => {
+    const wrapper = createWrapper();
+    await extractPdf(wrapper);
+    await wrapper.find('input[type="checkbox"]').setValue(true);
+    await wrapper.findAll('button').find(button => button.text() === '配置模型')!.trigger('click');
+    wrapper.findComponent({ name: 'AiProviderSettingsPanel' }).vm.$emit('saved');
+    await flushPromises();
+    expect((wrapper.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false);
+    expect(wrapper.findAll('button').find(button => button.text().includes('发送文本并解析简历'))!.attributes('disabled')).toBeDefined();
+  });
+
 });

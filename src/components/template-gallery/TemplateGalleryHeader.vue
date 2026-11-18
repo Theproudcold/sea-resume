@@ -5,11 +5,6 @@
     show-back
     @back="$emit('back')"
   >
-    <template #context>
-      <el-tag :type="canApplyToCurrent ? 'success' : 'info'" effect="plain">
-        {{ canApplyToCurrent ? '当前简历可应用模板' : '选择模板创建新简历' }}
-      </el-tag>
-    </template>
   </AppHeader>
 </template>
 
@@ -26,6 +21,6 @@ defineEmits<{
 }>();
 
 const subtitle = computed(() => props.canApplyToCurrent
-  ? '预览后应用到当前简历，或创建一份新简历。在编辑器里可以把当前简历存为「我的」模板。'
-  : '浏览内置模板，或使用你保存的「我的」模板创建简历。');
+  ? '选择适合的排版，也可以先预览效果。'
+  : '选一个喜欢的样式，开始填写简历。');
 </script>

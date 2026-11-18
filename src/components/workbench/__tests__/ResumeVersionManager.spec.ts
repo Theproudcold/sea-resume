@@ -251,7 +251,12 @@ describe('ResumeVersionManager comparison', () => {
     await flushPromises();
 
     expect(wrapper.text()).not.toContain('另存为新简历');
-    expect(wrapper.text()).toContain('选择两份简历后查看正文变化');
+    expect(wrapper.text()).toContain('选择两份简历，查看内容有什么不同');
     expect(wrapper.findAll('button').find((button) => button.text() === '查看差异')!.attributes('disabled')).toBeUndefined();
   });
+  it('starts on creation when only one resume exists instead of an unusable comparison', () => {
+    const wrapper = mount(ResumeVersionManager, { props: { modelValue: true, resumes: [resumes[0]!] }, global: { stubs } });
+    expect(wrapper.findComponent(stubs.ElTabs).props('modelValue')).toBe('create');
+  });
+
 });
