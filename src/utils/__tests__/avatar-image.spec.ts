@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AVATAR_EDGE,
   AVATAR_MAX_BYTES,
-  compressAvatar,
   defaultAvatarCrop,
   loadAvatarImage,
   releaseAvatar,
@@ -31,8 +30,7 @@ function stubUrls() {
   return { revokeObjectURL };
 }
 
-function stubCanvas() {
-  const drawImage = vi.fn();
+function stubCanvas() {  const drawImage = vi.fn();
   const toDataURL = vi.fn(() => 'data:image/jpeg;base64,c21hbGw=');
   vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
     if (tag !== 'canvas') return document.createElementNS('http://www.w3.org/1999/xhtml', tag) as HTMLElement;
@@ -116,12 +114,14 @@ describe('avatar framing', () => {
 });
 
 describe('avatar compression', () => {
-  it('stores a square jpeg data URL instead of the original file', async () => {
+  it('turns the legacy center framing into a square jpeg data URL instead of the original file', async () => {
     stubImage(800, 400);
     const { revokeObjectURL } = stubUrls();
     const { drawImage } = stubCanvas();
 
-    const result = await compressAvatar(new Blob(['png'], { type: 'image/png' }));
+    const source = await loadAvatarImage(new Blob(['png'], { type: 'image/png' }));
+    const result = renderAvatarCrop(source.image, defaultAvatarCrop(source.width, source.height));
+    releaseAvatar(source);
 
     expect(result).toBe('data:image/jpeg;base64,c21hbGw=');
     // 历史行为：短边 400，横向居中偏移 200。

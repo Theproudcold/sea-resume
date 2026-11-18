@@ -44,9 +44,9 @@ export async function loadAvatarImage(file: Blob): Promise<LoadedAvatar> {
   }
 }
 
-/** 释放预览用的对象 URL；重复调用安全。 */
+/** 释放预览用的对象 URL；重复调用安全，缺少 Blob URL 支持的环境（jsdom、SSR）直接跳过。 */
 export function releaseAvatar(source: LoadedAvatar | null | undefined): void {
-  if (source) URL.revokeObjectURL(source.objectUrl);
+  if (source && typeof URL.revokeObjectURL === 'function') URL.revokeObjectURL(source.objectUrl);
 }
 
 /** 居中最大正方形。这是历史行为，取景框未改动时用它，保证默认结果不变。 */
@@ -70,17 +70,4 @@ export function renderAvatarCrop(image: CanvasImageSource, crop: AvatarCrop): st
   if (!context) throw new Error('当前浏览器无法处理头像');
   context.drawImage(image, crop.x, crop.y, size, size, 0, 0, edge, edge);
   return canvas.toDataURL('image/jpeg', AVATAR_QUALITY);
-}
-
-/**
- * Shrink a portrait to a square JPEG before it enters resume state.
- * The original file is never stored: history, autosave and localStorage all copy this string.
- */
-export async function compressAvatar(file: Blob): Promise<string> {
-  const source = await loadAvatarImage(file);
-  try {
-    return renderAvatarCrop(source.image, defaultAvatarCrop(source.width, source.height));
-  } finally {
-    releaseAvatar(source);
-  }
 }
