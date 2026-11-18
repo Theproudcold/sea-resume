@@ -87,6 +87,30 @@ describe('resume quality checks', () => {
     expect(checkResumeQuality(resume)).toEqual([]);
   });
 
+  it.each(['experience', 'projects', 'education', 'skills'] as const)(
+    'skips nonempty hidden %s sections without suppressing other issues',
+    (section) => {
+      const resume = completeResume();
+      resume.basic.name = '';
+      resume.experiences = [{ id: 'e', company: '', position: '', startDate: '2024-08', endDate: '2020-01', description: '', visible: true }];
+      resume.projects = [{ id: 'p', name: '', role: '', startDate: '2024-08', endDate: '2020-01', description: '' }];
+      resume.education = [{ id: 'd', school: '', degree: '', major: '', startDate: '2024-08', endDate: '2020-01' }];
+      resume.skills = [{ id: 's', category: '', items: ['   '], visible: true }];
+      const visibleIssues = checkResumeQuality(resume);
+      // Guard against a vacuous pass: the visible section must have real issues.
+      expect(visibleIssues.some((issue) => issue.section === section)).toBe(true);
+
+      resume.hiddenSections = [section];
+      const snapshot = JSON.stringify(resume);
+      expect(checkResumeQuality(resume)).toEqual(visibleIssues.filter((issue) => issue.section !== section));
+      expect(JSON.stringify(resume)).toBe(snapshot);
+
+      // Hiding only changes which issues are reported; showing the section restores them.
+      resume.hiddenSections = [];
+      expect(checkResumeQuality(resume)).toEqual(visibleIssues);
+    },
+  );
+
   it('skips entries the user hid from the resume', () => {
     const resume = completeResume();
     resume.experiences = [

@@ -70,6 +70,70 @@ describe('parseResumeMarkdown', () => {
     expect(result.warnings.some((warning) => warning.code === 'unknown-section')).toBe(true);
   });
 
+  it.each([
+    {
+      name: 'mixed prose and bullets',
+      body: '负责项目架构。\n- 完成简历解析与预览\n- 支持离线编辑',
+      description: '<p>负责项目架构。</p><ul><li>完成简历解析与预览</li><li>支持离线编辑</li></ul>',
+    },
+    {
+      name: 'bullets only',
+      body: '- 完成简历解析与预览\n- 支持离线编辑',
+      description: '<ul><li>完成简历解析与预览</li><li>支持离线编辑</li></ul>',
+    },
+  ])('preserves project descriptions with $name through Markdown import and export', ({ body, description }) => {
+    const imported = parseResumeMarkdown(`# 李明\n\n## 项目经历\n### Resume Copilot | 负责人 | 2024-05 — 2025-02\n链接：[项目主页](https://example.com/resume)\n技术栈：Vue、TypeScript\n${body}`).resume;
+
+    expect(imported.projects[0]).toMatchObject({
+      name: 'Resume Copilot',
+      role: '负责人',
+      startDate: '2024-05',
+      endDate: '2025-02',
+      link: 'https://example.com/resume',
+      techStack: ['Vue', 'TypeScript'],
+      description,
+    });
+    const roundtrip = parseResumeMarkdown(resumeToMarkdown(imported)).resume;
+    expect(roundtrip.projects[0]?.description).toBe(description);
+  });
+
+  it.each(['：', ':'])('preserves unknown %s labels in experience and project content', (separator) => {
+    const experienceProse = `Context${separator}负责平台建设`;
+    const highlight = `独立成果标记${separator}交付自动化工具`;
+    const projectProse = `范围${separator}支持离线编辑`;
+    const projectBullet = `Outcome${separator}完成简历解析与预览`;
+    const imported = parseResumeMarkdown(`# 李明
+
+## 工作经历
+### 标题公司 | 标题职位
+Company${separator}Sea Labs
+职位${separator}工程师
+${experienceProse}
+- ${highlight}
+
+## 项目经历
+### Resume Copilot | 负责人
+链接${separator}[项目主页](https://example.com/resume)
+技术栈${separator}Vue、TypeScript
+${projectProse}
+- ${projectBullet}`).resume;
+
+    expect(imported.experiences[0]).toMatchObject({
+      company: 'Sea Labs', position: '工程师',
+      description: `<p>${experienceProse}</p>`, highlights: [highlight],
+    });
+    const projectDescription = `<p>${projectProse}</p><ul><li>${projectBullet}</li></ul>`;
+    expect(imported.projects[0]).toMatchObject({
+      name: 'Resume Copilot', role: '负责人',
+      link: 'https://example.com/resume', techStack: ['Vue', 'TypeScript'],
+      description: projectDescription,
+    });
+    const roundtrip = parseResumeMarkdown(resumeToMarkdown(imported)).resume;
+    expect(roundtrip.experiences[0]?.description).toBe(`<p>${experienceProse}</p>`);
+    expect(roundtrip.experiences[0]?.highlights).toEqual([highlight]);
+    expect(roundtrip.projects[0]?.description).toBe(projectDescription);
+  });
+
   it('uses filename fallback and rejects empty or oversized input', () => {
     expect(parseResumeMarkdown('# 简历', '海波.md').sourceTitle).toBe('简历');
     expect(parseResumeMarkdown('## 工作经历\n\n### 公司').resume.title).toBe('resume');

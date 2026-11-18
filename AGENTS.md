@@ -12,7 +12,7 @@
 1. 同步基线：`git switch dev && git pull --ff-only`
 2. 新建分支：`git switch -c feat/xxx`，不要在 `master` 或 `dev` 上直接改代码
 3. 小步提交，提交信息遵守下面的「Git 提交信息」一节
-4. 自测：`pnpm test`、`pnpm build`（Node ≥ 22.13.0、pnpm 10.30.2）
+4. 自测：`pnpm verify`（依次运行完整测试、类型检查和生产构建；Node ≥ 22.13.0、pnpm 10.30.2）
 5. 合并前先对齐基线：`git fetch origin && git rebase origin/dev`，冲突在功能分支内解决
 6. 合入 `dev` 并推送：`git switch dev && git merge --no-ff feat/xxx`
 7. 发布：`dev` 验证通过后 `git switch master && git merge --no-ff dev && git push`，推送即部署
@@ -28,6 +28,16 @@
 - 根据实际改动选择语义类型：`feat`（新功能）、`fix`（修复）、`refactor`（重构）、`test`（测试）、`docs`（文档）、`chore`（维护）、`perf`（性能）、`build`（构建）、`ci`（持续集成）、`style`（格式/样式）、`revert`（回滚）；不要把非功能改动统称为 `feat`。合并提交使用 `merge(中文范围): 中文说明`。
 - 范围与说明使用简体中文；技术名词、产品名和代码标识符可保留原文。标题简洁、说明明确，末尾不加标点。
 - 改写历史前先确认提交是否已经推送；默认只整理未发布的提交，不重写远端共享历史。改写时保留提交内容、父子关系和工作区未提交改动。
+
+## 防返工与验证契约
+
+- 改动前确认工作区与真实基线；有未提交工作时另开 worktree，不将其计为已发布修复。索引属于另一个 checkout 时，不能把它返回的版本当作当前 worktree 的源码。
+- 修 Bug 先加能在旧实现上失败的行为用例，再做最小修复；提交前记录 RED / GREEN。历史修复补测试也要验证样本确实触发旧错误，不能只验证新代码会通过。
+- 涉及共享字段、状态或异步通信时，先列生产者、所有消费者及状态组合，遵守 [架构契约](<docs/architecture.md>)，按 [风险验证矩阵](<docs/change-safety.md>) 选测试。
+- `provide/inject`、事件和 ref 的接线必须在真实父组件上验证。不能只靠 `global.provide`、stub 或源码字符串断言证明页面可用；DOM 尺寸、字体、输入法还需浏览器验证。
+- 数据转换用同一个样本贯穿解析 → 消费/渲染，覆盖隐藏且非空、未知/可选字段、截断警告；Markdown 是可见内容交换格式，不是全字段备份。
+- 重构只搬实现、不夹带行为修改；能力扩展、纠错、测试提速分别保留可验证边界。不得为提速删除唯一的真实正确性验证，也不以测试数量代替覆盖证明。
+- 合并前对最终内容运行 `pnpm verify`；部署 workflow 同样运行它。CI 文件不等于远端分支保护：管理员需另行启用 required checks 与受保护分支，未启用时不要声称已禁止绕过。
 
 ## CodeGraph（代码知识图谱）
 - 本仓库已建立 CodeGraph 索引（根目录存在 `.codegraph/`），保存文件后约 1 秒自动同步，不需要手动 `codegraph sync`。
