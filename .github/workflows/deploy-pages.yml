@@ -34,8 +34,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm build
+      # Validate the exact deployment checkout, including workflow_dispatch.
+      - name: Test and build
+        run: pnpm verify
 
       - name: Add SPA route fallback
         run: cp dist/index.html dist/404.html

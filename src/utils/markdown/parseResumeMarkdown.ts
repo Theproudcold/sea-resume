@@ -238,6 +238,13 @@ function splitPlainEntries(lines: string[]): MarkdownBlock[] {
   return blocks;
 }
 
+// Only labels consumed by mapEntry are metadata; unknown colon text is resume content.
+const ENTRY_FIELD_KEYS = new Set([
+  '公司', 'company', '组织', '职位', '岗位', 'position', 'role',
+  '学校', '院校', 'school', 'university', '学历', '学位', 'degree', '专业', 'major', 'field', 'gpa', '绩点',
+  '项目', '项目名称', 'name', '角色', '职责', '链接', 'link', 'url', '技术栈', '技术', 'techstack', 'technologies',
+]);
+
 function entryParts(block: MarkdownBlock, warnings: MarkdownImportWarning[]) {
   const lines = [...block.lines];
   let blockTitle = block.title;
@@ -259,10 +266,12 @@ function entryParts(block: MarkdownBlock, warnings: MarkdownImportWarning[]) {
     const match = line.match(/^\s*(?:[-*+]\s*)?(?:\*\*)?([^:*：|]+?)(?:\*\*)?\s*[:：]\s*(.+)$/);
     if (match) {
       const key = (match[1] ?? '').toLowerCase().replace(/[\s_-]/g, '');
-      const rawValue = match[2] ?? '';
-      const link = rawValue.match(/\[[^\]]+\]\((https?:\/\/[^)]+)\)/i)?.[1];
-      labeled[key] = (key === 'link' || key === 'url' || key === '链接') && link ? link : cleanInline(rawValue);
-      continue;
+      if (ENTRY_FIELD_KEYS.has(key)) {
+        const rawValue = match[2] ?? '';
+        const link = rawValue.match(/\[[^\]]+\]\((https?:\/\/[^)]+)\)/i)?.[1];
+        labeled[key] = (key === 'link' || key === 'url' || key === '链接') && link ? link : cleanInline(rawValue);
+        continue;
+      }
     }
     if (/^[-*+]\s+/.test(line)) bullets.push(cleanInline(line.replace(/^[-*+]\s+/, '')));
     else prose.push(line);
@@ -304,7 +313,9 @@ function mapEntry(kind: string, block: MarkdownBlock, resume: ResumeData, warnin
     resume.projects.push({
       id: generateId(), name,
       role: field(parsed.labeled, '角色', 'role', '职责') || parsed.parts[1] || '',
-      startDate: parsed.startDate, endDate: parsed.endDate, description,
+      startDate: parsed.startDate, endDate: parsed.endDate,
+      // Projects have no separate highlights field, so their bullets belong in the description.
+      description: markdownToSafeHtml([...parsed.prose, ...parsed.bullets.map((bullet) => `- ${bullet}`)].join('\n')),
       link: sanitizeMarkdownUrl(link) ?? undefined,
       techStack: (field(parsed.labeled, '技术栈', '技术', 'techstack', 'technologies') || '').split(/[,，、]/).map((item) => item.trim()).filter(Boolean),
     });

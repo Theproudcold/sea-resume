@@ -65,9 +65,12 @@ describe('layoutPageText', () => {
     expect(right).toContain('正文内容 1');
   });
 
-  it('joins adjacent CJK glyphs instead of inserting a space between them', () => {
-    const glyphs = [...'于海波'].map((glyph, index) => item(glyph, 40 + index * 12, 40, { width: 11, charWidth: 11 }));
+  it('joins adjacent CJK glyphs while preserving Latin word spacing', () => {
+    // A 5px gap exceeds the 11px glyph's 0.25 spacing threshold; 1px would not exercise the CJK exception.
+    const glyphs = [...'于海波'].map((glyph, index) => item(glyph, 40 + index * 16, 40, { width: 11, charWidth: 11 }));
     expect(layoutPageText(glyphs).text).toBe('于海波');
+    const words = [item('Hello', 40, 40, { width: 55 }), item('world', 100, 40, { width: 55 })];
+    expect(layoutPageText(words).text).toBe('Hello world');
   });
 
   it('keeps a single-column resume single-column when text crosses the middle', () => {

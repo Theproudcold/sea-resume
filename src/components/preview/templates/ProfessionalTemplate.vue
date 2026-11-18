@@ -226,6 +226,7 @@ const sortedMainSections = computed({
   get: () => {
     return (props.data.sectionOrder || [])
       .filter(id => id !== 'education' && id !== 'skills') // 排除侧边栏固定模块
+      .filter(id => !props.data.hiddenSections?.includes(id))
       .filter(id => {
         // 确保如果是标准模块，必须有数据才显示
         if (id === 'experience') return true;
@@ -242,7 +243,11 @@ const sortedMainSections = computed({
     
     // 我们假设 Side Sections 总是位于最后 (或者我们强制它们在最后)
     // 但为了让 Editor 列表也能反映这个顺序，我们最好把 Side Sections 放在后面
-    const newTotalOrder = [...newMainOrder, ...sideSections];
+    // Hidden main sections are absent from draggable's value but must stay in navigation/data.
+    const hiddenMainSections = (props.data.sectionOrder || []).filter(id =>
+      id !== 'education' && id !== 'skills' && props.data.hiddenSections?.includes(id),
+    );
+    const newTotalOrder = [...newMainOrder, ...hiddenMainSections, ...sideSections];
     
     // 注意: 这里有一个潜在问题，如果原先 Education 在 Experience 前面，现在会被强制移到后面
     // 对于 Professional 模板，Layout 是固定的 (Left/Right)，所以 Storage Order 并不严格决定 Layout Position

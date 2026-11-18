@@ -94,7 +94,7 @@ export function checkResumeQuality(resume: ResumeData): ResumeQualityIssue[] {
 
   if (!resume.experiences.length) {
     if (!isHiddenSection('experience')) add('experience-empty', 'experience', null, '尚未添加工作经历。');
-  } else {
+  } else if (!isHiddenSection('experience')) {
     resume.experiences.forEach((item, index) => {
       if (!isVisible(item)) return;
       const label = `工作经历 ${index + 1} 的`;
@@ -109,7 +109,7 @@ export function checkResumeQuality(resume: ResumeData): ResumeQualityIssue[] {
 
   if (!resume.projects.length) {
     if (!isHiddenSection('projects')) add('projects-empty', 'projects', null, '尚未添加项目经验。');
-  } else {
+  } else if (!isHiddenSection('projects')) {
     resume.projects.forEach((item, index) => {
       if (!isVisible(item)) return;
       const label = `项目经验 ${index + 1} 的`;
@@ -124,7 +124,7 @@ export function checkResumeQuality(resume: ResumeData): ResumeQualityIssue[] {
 
   if (!resume.education.length) {
     if (!isHiddenSection('education')) add('education-empty', 'education', null, '尚未添加教育背景。');
-  } else {
+  } else if (!isHiddenSection('education')) {
     resume.education.forEach((item, index) => {
       if (!isVisible(item)) return;
       const label = `教育背景 ${index + 1} 的`;
@@ -139,7 +139,7 @@ export function checkResumeQuality(resume: ResumeData): ResumeQualityIssue[] {
 
   if (!resume.skills.length) {
     if (!isHiddenSection('skills')) add('skills-empty', 'skills', null, '尚未添加技能分类。');
-  } else {
+  } else if (!isHiddenSection('skills')) {
     resume.skills.forEach((item, index) => {
       if (!isVisible(item)) return;
       const label = `技能分类 ${index + 1} 的`;
