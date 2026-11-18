@@ -138,7 +138,7 @@ onMounted(load);
             <el-select id="history-resume" v-model="resumeId" aria-label="选择一份简历" :disabled="locked" placeholder="请选择简历" class="resume-select">
               <el-option v-for="item in workbench.resumeList" :key="item.id" :label="item.title" :value="item.id" />
             </el-select>
-            <el-button class="start-button" type="primary" :disabled="!resumeId || locked" @click="router.push(`/interview/new?resumeId=${encodeURIComponent(resumeId)}`)">设置并开始文字面试 <el-icon><ArrowRight /></el-icon></el-button>
+            <el-button class="start-button" type="primary" :disabled="!resumeId || locked" @click="router.push(`/interview/new?resumeId=${encodeURIComponent(resumeId)}`)">准备面试 <el-icon><ArrowRight /></el-icon></el-button>
             <p class="form-hint">先设置岗位与模式，再决定是否开始。</p>
           </template>
           <template v-else>
@@ -153,9 +153,9 @@ onMounted(load);
       <article v-if="memorySession" class="memory-card" aria-labelledby="memory-title">
         <div class="memory-copy">
           <div class="record-title"><h2 id="memory-title">{{ memorySession.settings.targetRole || '通用面试' }}</h2><span class="status status--memory">仅本次会话</span></div>
-          <p><span>当前内存会话（尚未保存）</span><span>刷新或关闭页面后可能丢失，请及时导出。</span></p>
+          <p><span>本次面试尚未保存</span><span>刷新或关闭页面后可能丢失，请及时导出。</span></p>
         </div>
-        <el-button :disabled="locked" @click="router.push(`/interview/${memorySession.id}`)">回到会话 / 导出</el-button>
+        <el-button :disabled="locked" @click="router.push(`/interview/${memorySession.id}`)">回到面试</el-button>
       </article>
       <div v-if="memoryOptimization" class="notice notice--warning" role="status">当前还有一条未保存到列表的简历优化会话。清空全部 AI 记录也会关闭它。</div>
 
@@ -172,7 +172,7 @@ onMounted(load);
           <div><dt>专项练习</dt><dd>{{ progress.focusSessions }}</dd></div>
         </dl>
         <div class="overview-block">
-          <h3>复发弱项</h3>
+          <h3>反复出现的问题</h3>
           <ul v-if="progress.recurring.length" class="recurring-list">
             <li v-for="item in progress.recurring" :key="item.tag"><strong>{{ item.label }}</strong><span>{{ item.sessions }} 场 · {{ item.observations }} 条观察</span></li>
           </ul>

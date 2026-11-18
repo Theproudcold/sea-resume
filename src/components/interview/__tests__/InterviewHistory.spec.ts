@@ -70,7 +70,7 @@ describe('InterviewHistory', () => {
     expect(wrapper.get('[role="combobox"]').attributes('aria-label')).toBe('选择一份简历');
     expect(button('清空全部 AI 记录').attributes('disabled')).toBeDefined();
     expect(wrapper.find('header').text()).not.toContain('清空');
-    await button('设置并开始文字面试').trigger('click');
+    await button('准备面试').trigger('click');
     expect(push).toHaveBeenCalledWith('/interview/new?resumeId=resume-1');
     await wrapper.get('.category-bar button:nth-child(2)').trigger('click');
     expect(wrapper.text()).toContain('还没有已保存的简历优化');
@@ -113,7 +113,7 @@ describe('InterviewHistory', () => {
     ];
     await render();
     expect(wrapper.text()).toContain('训练概览');
-    expect(wrapper.text()).toContain('复发弱项');
+    expect(wrapper.text()).toContain('反复出现的问题');
     expect(wrapper.text()).toContain('结果与验证');
     expect(wrapper.text()).toContain('2 场 · 2 条观察');
     expect(wrapper.get('.overview-stats').text()).toContain('已答问题');
@@ -132,9 +132,9 @@ describe('InterviewHistory', () => {
   it('shows an unsaved in-memory interview with recovery/export and permits clearing it', async () => {
     const store = useInterviewStore(); store.session = { ...fixture().session, persistence: false };
     await render();
-    expect(wrapper.text()).toContain('当前内存会话（尚未保存）'); expect(wrapper.text()).toContain('仅本次会话');
+    expect(wrapper.text()).toContain('本次面试尚未保存'); expect(wrapper.text()).toContain('仅本次会话');
     expect(button('清空全部 AI 记录').attributes('disabled')).toBeUndefined();
-    await button('回到会话 / 导出').trigger('click'); expect(push).toHaveBeenCalledWith('/interview/interview-1');
+    await button('回到面试').trigger('click'); expect(push).toHaveBeenCalledWith('/interview/interview-1');
   });
 
   it.each(['cancel', 'close'])('treats delete %s as normal cancellation without storage writes or errors', async reason => {

@@ -11,7 +11,7 @@
     <div class="assistant-panel">
       <el-radio-group :model-value="mode" aria-label="AI 工作模式" @update:model-value="changeMode">
         <el-radio-button value="optimize">简历优化</el-radio-button>
-        <el-radio-button value="polish">STAR 润色</el-radio-button>
+        <el-radio-button value="polish">经历润色</el-radio-button>
         <el-radio-button value="quick">快捷修改</el-radio-button>
         <el-radio-button value="greeting">打招呼语</el-radio-button>
       </el-radio-group>
@@ -21,7 +21,7 @@
       <template v-if="mode === 'quick'">
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>隐私说明</template>
-        <p>只有点击生成并确认后，当前可见的简历正文和你的指令才会发送。姓名、电话、邮箱、生日和隐藏章节不会发送；这些字段只有在指令里写出新值时才会被修改。API Key 只保存在本次页面会话。</p>
+        <p>勾选同意并点击生成后，将发送简历可见正文和本次指令；不发送结构化姓名、联系方式、生日或隐藏章节。正文与指令中的敏感信息请自行检查。密钥默认仅保留在本次页面会话；若选择记住，会以明文保存在本机浏览器。</p>
       </el-alert>
 
       <template v-if="!pendingDraft">
@@ -35,21 +35,23 @@
           <el-button text type="primary" @click="emit('configure')">配置模型</el-button>
         </div>
         <el-form label-position="top" class="provider-form">
-          <el-form-item label="希望 AI 如何修改？">
-            <el-input v-model="instruction" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="例如：把个人简介调整得更精炼，保留原有事实；不要编造数据。" />
+          <el-form-item label="希望 AI 如何修改？" for="quick-edit-instruction">
+            <el-input id="quick-edit-instruction" v-model="instruction" :disabled="loading" type="textarea" :rows="4" maxlength="1000" show-word-limit placeholder="例如：把个人简介调整得更精炼，保留原有事实；不要编造数据。" />
           </el-form-item>
         </el-form>
 
-        <el-checkbox v-model="consent" class="consent-check">
+        <el-checkbox v-model="consent" :disabled="loading" class="consent-check">
           我确认将当前可见的简历正文和这条指令发送给所配置的 AI 服务。
         </el-checkbox>
-        <el-checkbox v-model="directApply" class="direct-check">
+        <el-checkbox v-model="directApply" :disabled="loading" class="direct-check">
           跳过逐项审核，直接应用本次修改（仍可撤销）
         </el-checkbox>
         <div class="current-resume">当前目标：<strong>{{ resume.basic.name || resume.title }}</strong></div>
         <el-button type="primary" :loading="loading" :disabled="!canRequest" class="request-button" @click="requestChanges">
-          生成修改建议
+          {{ loading ? '正在生成…' : '生成修改建议' }}
         </el-button>
+        <el-button v-if="loading" @click="cancelQuickRequest">取消生成</el-button>
+        <p v-else-if="!sessionKeyAvailable" role="status">请先配置 AI 服务和所需密钥。</p>
       </template>
 
       <template v-else>

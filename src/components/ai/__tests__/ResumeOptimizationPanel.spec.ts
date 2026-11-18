@@ -63,6 +63,8 @@ describe('ResumeOptimizationPanel', () => {
     vi.mocked(requestAiJson).mockResolvedValueOnce(analysis).mockResolvedValueOnce({ suggestions: [] }).mockResolvedValueOnce({ reviews: [] });
     await panel.get('[data-testid=consent]').setValue(true); await panel.get('[data-testid=start]').trigger('click'); await flushPromises();
     expect(panel.find('img').exists()).toBe(false); expect(panel.text()).toContain('<img src=x onerror=alert(1)>简要结论');
+    expect(panel.get('.question label').text()).toContain('关联：个人简介与求职意向');
+    expect(panel.get('.question label').text()).not.toContain('basic');
     await panel.get('.question textarea').setValue('还没有确认的回答');
     expect(panel.get('[data-testid=continue]').attributes('disabled')).toBeDefined();
     await panel.get('[data-testid=skip]').trigger('click'); await flushPromises();
@@ -75,6 +77,9 @@ describe('ResumeOptimizationPanel', () => {
     vi.mocked(requestAiJson).mockResolvedValueOnce(analysis).mockResolvedValueOnce({ suggestions }).mockResolvedValueOnce({ reviews: [{ id: 's1', status: 'confirm', reason: '需核对' }, { id: 's2', status: 'reject', reason: '无依据' }] });
     await startAndSkip(panel);
     expect(panel.get('[data-review=reject] input').attributes('disabled')).toBeDefined();
+    expect(panel.get('[data-review=confirm] strong').text()).toContain('个人简介');
+    expect(panel.get('[data-review=reject] strong').text()).toContain('求职意向');
+    expect(panel.get('[data-review=confirm] strong').text()).not.toContain('basic.summary');
     await panel.get('[data-review=confirm] input').setValue(true);
     expect(panel.get('[data-testid=apply]').attributes('disabled')).toBeDefined();
     await panel.findAll('[data-review=confirm] input')[1]!.setValue(true);
@@ -111,6 +116,7 @@ describe('ResumeOptimizationPanel', () => {
     vi.mocked(requestAiJson).mockRejectedValueOnce(new AiCompatibilityError('兼容错误'));
     await panel.get('[data-testid=consent]').setValue(true); await panel.get('[data-testid=start]').trigger('click'); await flushPromises();
     expect(panel.text()).toContain('兼容模式：'); expect(panel.find('[data-testid=retry]').exists()).toBe(true); expect(requestAiJson).toHaveBeenCalledTimes(1);
+    expect(panel.get('[data-testid=retry]').text()).toBe('重试分析简历（可能产生费用）');
     vi.mocked(ElMessageBox.confirm).mockRejectedValueOnce('cancel');
     await expect((panel.vm as unknown as { beforeClose(): Promise<boolean> }).beforeClose()).resolves.toBe(false);
     const unload = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(unload); expect(unload.defaultPrevented).toBe(true);
