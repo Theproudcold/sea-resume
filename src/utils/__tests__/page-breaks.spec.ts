@@ -138,6 +138,24 @@ describe('content band collection', () => {
     expect(bands).toEqual([{ top: 98, bottom: 118 }]);
   });
 
+  it('reserves the renderer ink slack below each line', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<p>正文</p>';
+    document.body.appendChild(root);
+    const paragraph = root.querySelector('p')!;
+    paragraph.style.lineHeight = '20px';
+    paragraph.style.fontSize = '13px';
+    stubRects([[root, rect(100, 400)]]);
+    const restore = stubLineRects([[rect(200, 16)]]);
+
+    const bands = collectContentBands(root, 1122.5);
+    restore();
+
+    // 浏览器把字形画在内容区里，html2canvas 会低约 0.3em：下边缘多留 3.9px。
+    expect(bands[0]!.top).toBeCloseTo(98, 5);
+    expect(bands[0]!.bottom).toBeCloseTo(118 + 3.9, 5);
+  });
+
   it('falls back to whole blocks and keeps replaced elements when line rects are unavailable', () => {
     const root = document.createElement('div');
     root.innerHTML = '<p>正文</p><img src="avatar.png"><div class="no-print"><span>Page 2</span></div>';

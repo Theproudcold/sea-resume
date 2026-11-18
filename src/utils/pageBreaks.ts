@@ -31,6 +31,16 @@ const EPSILON = 1e-6;
 const PAGE_FIT_SLACK = 0.5;
 /** 一页至少要装下这么多内容；更小的「安全切点」会让页面几乎空白，此时宁可切开超页内容。 */
 const MIN_PAGE_FILL = 8;
+/**
+ * 渲染器把字形画低的余量，按字号取比例。
+ *
+ * 预览是浏览器排版，导出是 html2canvas 重画：它用一张静态字体度量表算基线
+ * （见其 FontMetrics：拿拉丁样本量出来的 baseline），中文行实际由回退字体绘制，
+ * 基线因此比浏览器低几个像素。实测 13px 中文简历约 3.5px，随字号线性放大。
+ * 切点必须同时避开两种渲染，否则按浏览器几何算出的「安全切点」在导出图里
+ * 仍会削掉上一行字尾。
+ */
+const RENDERER_INK_SLACK_RATIO = 0.3;
 /** 装饰盒（边框、底色）超过半页就当成整页背景：必须允许被切，否则整份简历无法分页。 */
 const MAX_DECORATION_HEIGHT_RATIO = 0.5;
 const CSS_PX_PER_INCH = 96;
@@ -122,15 +132,28 @@ function isExcluded(element: Element | null): boolean {
  * 比行盒矮：行盒在上下各补半个行距。字形墨迹会画到行盒边缘，所以内容带必须按行盒算，
  * 否则切点会落在「看起来是空隙、其实还有字形」的行距里。
  */
-function resolvedLineHeight(element: Element | null, cache: Map<Element, number>): number | null {
-  if (!element) return null;
+interface TextMetricsPx {
+  lineHeight: number | null;
+  fontSlack: number;
+}
+
+function parsePx(value: string | undefined): number {
+  const px = value?.endsWith('px') ? Number.parseFloat(value) : Number.NaN;
+  return Number.isFinite(px) && px > 0 ? px : 0;
+}
+
+function resolvedTextMetrics(element: Element | null, cache: Map<Element, TextMetricsPx>): TextMetricsPx {
+  if (!element) return { lineHeight: null, fontSlack: 0 };
   const cached = cache.get(element);
-  if (cached !== undefined) return cached > 0 ? cached : null;
-  const raw = element.ownerDocument.defaultView?.getComputedStyle(element).lineHeight ?? '';
-  const px = raw.endsWith('px') ? Number.parseFloat(raw) : Number.NaN;
-  const lineHeight = Number.isFinite(px) && px > 0 ? px : 0;
-  cache.set(element, lineHeight);
-  return lineHeight > 0 ? lineHeight : null;
+  if (cached) return cached;
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  const lineHeight = parsePx(style?.lineHeight);
+  const metrics: TextMetricsPx = {
+    lineHeight: lineHeight > 0 ? lineHeight : null,
+    fontSlack: parsePx(style?.fontSize) * RENDERER_INK_SLACK_RATIO,
+  };
+  cache.set(element, metrics);
+  return metrics;
 }
 
 function toBand(rect: { top: number; bottom: number; width: number; height: number }, origin: number): ContentBand | null {
@@ -141,15 +164,16 @@ function toBand(rect: { top: number; bottom: number; width: number; height: numb
 /** 把文本行盒补成整行：上下各加半个行距，得到浏览器真正用来换行的行盒。 */
 function toLineBand(
   rect: { top: number; bottom: number; width: number; height: number },
-  lineHeight: number | null,
+  metrics: TextMetricsPx,
   origin: number,
 ): ContentBand | null {
-  if (!lineHeight || lineHeight <= rect.height) return toBand(rect, origin);
-  const halfLeading = (lineHeight - rect.height) / 2;
+  const { lineHeight, fontSlack } = metrics;
+  const halfLeading = lineHeight && lineHeight > rect.height ? (lineHeight - rect.height) / 2 : 0;
   // DOMRect 的字段在原型上，展开会得到空对象，必须逐个取值。
+  // 下边缘额外留出渲染器余量：只有它会把字形画低。
   return toBand({
     top: rect.top - halfLeading,
-    bottom: rect.bottom + halfLeading,
+    bottom: rect.bottom + halfLeading + fontSlack,
     width: rect.width,
     height: rect.height,
   }, origin);
@@ -176,7 +200,7 @@ export function collectContentBands(root: HTMLElement, pageHeight: number = FALL
   const document = root.ownerDocument;
   const supportsLineRects = typeof Range !== 'undefined' && typeof Range.prototype.getClientRects === 'function';
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const lineHeights = new Map<Element, number>();
+  const textMetrics = new Map<Element, TextMetricsPx>();
 
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (!node.textContent?.trim()) continue;
@@ -184,10 +208,10 @@ export function collectContentBands(root: HTMLElement, pageHeight: number = FALL
     if (isExcluded(parent)) continue;
     if (supportsLineRects) {
       const range = document.createRange();
-      const lineHeight = resolvedLineHeight(parent, lineHeights);
+      const metrics = resolvedTextMetrics(parent, textMetrics);
       range.selectNodeContents(node);
       for (const rect of Array.from(range.getClientRects())) {
-        const band = toLineBand(rect, lineHeight, origin);
+        const band = toLineBand(rect, metrics, origin);
         if (band) bands.push(band);
       }
     } else if (parent && !parent.querySelector('*')) {
