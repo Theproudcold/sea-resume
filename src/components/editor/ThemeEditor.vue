@@ -4,19 +4,19 @@
     <section class="fit-panel">
       <div class="fit-panel__heading">
         <div>
-          <strong>A4 页面适配</strong>
-          <p>根据当前预览估算，不替代浏览器打印预览。</p>
+          <strong>页面排版</strong>
+          <p>{{ fitUnavailable ? '请在电脑端显示预览，以计算页数并自动适配' : 'A4 纸张，实际页数以导出结果为准' }}</p>
         </div>
         <el-tag :type="fitUnavailable ? 'warning' : 'success'" effect="plain">
-          {{ fitUnavailable ? '计算中' : `预估 ${estimatedPages} 页` }}
+          {{ fitUnavailable ? '等待预览' : `预估 ${estimatedPages} 页` }}
         </el-tag>
       </div>
-      <p class="fit-panel__note">尝试适配会逐档收紧边距、行高与字号，回到一页就停止；不删除任何文字，字号不会低于 {{ MIN_FONT_SIZE }}px。到下限仍超页时保留为多页。</p>
+      <p class="fit-panel__note">调整间距和字号，尽量排成一页；不删内容，字号不小于 {{ MIN_FONT_SIZE }}px。</p>
       <div class="fit-panel__actions">
         <el-button type="primary" plain :loading="isFitting" :disabled="fitUnavailable || (estimatedPages ?? 0) <= 1 || isFitting" @click="fitToOnePage">尝试适配一页</el-button>
         <el-button v-if="canRestore" text @click="restoreOriginalTheme">还原原排版</el-button>
       </div>
-      <el-alert v-if="!fitUnavailable && (estimatedPages ?? 0) > 1" class="fit-panel__alert" type="warning" :closable="false" title="当前内容预计需要多页；可尝试紧凑排版，或精简内容后再查看打印预览。" />
+      <el-alert v-if="!fitUnavailable && (estimatedPages ?? 0) > 1" class="fit-panel__alert" type="warning" :closable="false" title="当前为多页简历，可压缩排版或精简内容。" />
     </section>
     <!-- 主题色 -->
     <div class="form-item">
@@ -33,7 +33,7 @@
           :aria-pressed="data.theme.color === color"
           @click="updateColor(color)"
         />
-        <el-color-picker v-model="customColor" @change="updateColor" />
+        <el-color-picker aria-label="自定义主题颜色" v-model="customColor" @change="updateColor" />
       </div>
     </div>
 
@@ -41,7 +41,7 @@
     <div class="form-item">
       <label class="block text-sm font-medium text-gray-700 mb-2">字体大小 ({{ data.theme.fontSize }}px)</label>
       <el-slider
-        v-model="data.theme.fontSize"
+        aria-label="字体大小" v-model="data.theme.fontSize"
         :min="12"
         :max="18"
         :step="0.5"
@@ -51,9 +51,9 @@
 
     <!-- 行高 -->
     <div class="form-item">
-      <label class="block text-sm font-medium text-gray-700 mb-2">行高 ({{ data.theme.lineHeight }})</label>
+      <label class="block text-sm font-medium text-gray-700 mb-2">行间距 ({{ data.theme.lineHeight }})</label>
       <el-slider
-        v-model="data.theme.lineHeight"
+        aria-label="行间距" v-model="data.theme.lineHeight"
         :min="1.0"
         :max="2.0"
         :step="0.1"
@@ -67,19 +67,19 @@
       <div class="grid grid-cols-2 gap-4">
         <div>
           <span class="text-xs text-gray-500 mb-1 block">上: {{ data.theme.moduleMargins?.top || 0 }}px</span>
-          <el-slider v-model="data.theme.moduleMargins.top" :min="0" :max="64" :step="4" @change="handleUpdate" />
+          <el-slider aria-label="模块上边距" v-model="data.theme.moduleMargins.top" :min="0" :max="64" :step="4" @change="handleUpdate" />
         </div>
         <div>
           <span class="text-xs text-gray-500 mb-1 block">下: {{ data.theme.moduleMargins?.bottom || 0 }}px</span>
-          <el-slider v-model="data.theme.moduleMargins.bottom" :min="0" :max="64" :step="4" @change="handleUpdate" />
+          <el-slider aria-label="模块下边距" v-model="data.theme.moduleMargins.bottom" :min="0" :max="64" :step="4" @change="handleUpdate" />
         </div>
         <div>
           <span class="text-xs text-gray-500 mb-1 block">左: {{ data.theme.moduleMargins?.left || 0 }}px</span>
-          <el-slider v-model="data.theme.moduleMargins.left" :min="0" :max="64" :step="4" @change="handleUpdate" />
+          <el-slider aria-label="模块左边距" v-model="data.theme.moduleMargins.left" :min="0" :max="64" :step="4" @change="handleUpdate" />
         </div>
         <div>
           <span class="text-xs text-gray-500 mb-1 block">右: {{ data.theme.moduleMargins?.right || 0 }}px</span>
-          <el-slider v-model="data.theme.moduleMargins.right" :min="0" :max="64" :step="4" @change="handleUpdate" />
+          <el-slider aria-label="模块右边距" v-model="data.theme.moduleMargins.right" :min="0" :max="64" :step="4" @change="handleUpdate" />
         </div>
       </div>
     </div>
@@ -88,7 +88,7 @@
     <div class="form-item">
       <label class="block text-sm font-medium text-gray-700 mb-2">页面边距 ({{ data.theme.pageMargins }}px)</label>
       <el-slider
-        v-model="data.theme.pageMargins"
+        aria-label="页面留白" v-model="data.theme.pageMargins"
         :min="0"
         :max="60"
         :step="4"
@@ -99,7 +99,7 @@
     <!-- 日期格式 -->
     <div class="form-item">
       <label class="block text-sm font-medium text-gray-700 mb-2">日期格式</label>
-      <el-select v-model="data.theme.dateFormat" @change="handleUpdate" class="w-full">
+      <el-select aria-label="日期格式" v-model="data.theme.dateFormat" @change="handleUpdate" class="w-full">
         <el-option label="2023.01" value="YYYY.MM" />
         <el-option label="2023-01" value="YYYY-MM" />
         <el-option label="2023/01" value="YYYY/MM" />
@@ -110,12 +110,12 @@
 
     <!-- 字体选择 -->
     <div class="form-item">
-      <label class="block text-sm font-medium text-gray-700 mb-2">字体系列</label>
-      <el-select v-model="data.theme.fontFamily" @change="handleUpdate" class="w-full">
+      <label class="block text-sm font-medium text-gray-700 mb-2">字体</label>
+      <el-select aria-label="字体" v-model="data.theme.fontFamily" @change="handleUpdate" class="w-full">
         <el-option label="推荐：Noto Sans SC + Inter" :value="RECOMMENDED_FONT_FAMILY" />
-        <el-option label="系统无衬线" value="sans-serif" />
-        <el-option label="衬线体 (Serif)" value="serif" />
-        <el-option label="等宽体 (Monospace)" value="monospace" />
+        <el-option label="系统默认字体" value="sans-serif" />
+        <el-option label="衬线字体" value="serif" />
+        <el-option label="等宽字体" value="monospace" />
       </el-select>
     </div>
 
@@ -123,6 +123,7 @@
     <div class="form-item flex justify-between items-center">
       <label class="text-sm font-medium text-gray-700">显示联系方式图标</label>
       <el-switch
+        aria-label="显示联系方式图标"
         v-model="imgIconState"
         @change="updateIconState"
       />

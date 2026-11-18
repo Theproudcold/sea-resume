@@ -1,5 +1,5 @@
 <template>
-  <header class="app-header no-print">
+  <header class="app-header no-print" :class="{ 'has-inline-toolbar': inlineToolbar }">
     <div class="header-content">
       <div class="header-identity">
         <img class="brand-mark" :src="logoUrl" alt="Sea Resume" width="40" height="40" />
@@ -68,6 +68,8 @@
             class="scheme-option"
             role="radio"
             :aria-checked="schemePreference === option.value"
+            :tabindex="schemePreference === option.value ? 0 : -1"
+            @keydown="onSchemeKeydown($event)"
             :aria-label="option.label"
             :title="option.label"
             :class="{ 'is-active': schemePreference === option.value }"
@@ -106,7 +108,6 @@ import {
   applyColorScheme,
   persistColorScheme,
   readStoredScheme,
-  resolveColorScheme,
   type ColorSchemePreference,
 } from '@/composables/useColorScheme';
 import { ArrowLeft, EditPen } from '@element-plus/icons-vue';
@@ -188,14 +189,25 @@ const paintScheme = () => {
   applyColorScheme(schemePreference.value);
 };
 
-const selectScheme = (preference: ColorSchemePreference, event: MouseEvent) => {
-  // 点已选中的按钮仍在浅色和深色之间切换，不会卡在当前外观。
-  if (preference === schemePreference.value) {
-    preference = resolveColorScheme(preference) === 'dark' ? 'light' : 'dark';
-  }
+const selectScheme = (preference: ColorSchemePreference, event?: MouseEvent) => {
+  if (preference === schemePreference.value) return;
   schemePreference.value = preference;
-  persistColorScheme(preference, { x: event.clientX, y: event.clientY });
+  persistColorScheme(preference, event ? { x: event.clientX, y: event.clientY } : undefined);
 };
+
+function onSchemeKeydown(event: KeyboardEvent) {
+  const delta = ['ArrowRight', 'ArrowDown'].includes(event.key) ? 1
+    : ['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 0;
+  if (!delta && event.key !== 'Home' && event.key !== 'End') return;
+  event.preventDefault();
+  const index = event.key === 'Home' ? 0 : event.key === 'End' ? schemeOptions.length - 1
+    : (schemeIndex.value + delta + schemeOptions.length) % schemeOptions.length;
+  const option = schemeOptions[index];
+  if (!option) return;
+  selectScheme(option.value);
+  const group = (event.currentTarget as HTMLElement).parentElement;
+  (group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[index])?.focus();
+}
 
 const onSystemScheme = () => {
   if (schemePreference.value !== 'system') return;
@@ -510,6 +522,8 @@ onUnmounted(() => {
   outline-offset: 2px;
 }
 
+.header-context { flex: 0 0 auto; }
+
 .header-inline-toolbar {
   display: flex;
   min-width: 0;
@@ -541,6 +555,13 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+  .has-inline-toolbar .header-content { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .has-inline-toolbar .header-identity { width: auto; }
+  .has-inline-toolbar .header-trailing { display: contents; }
+  .has-inline-toolbar .header-inline-toolbar { order: 1; width: 100%; }
+  .has-inline-toolbar .scheme-switch,
+  .has-inline-toolbar .repository-link { display: none; }
+
   .header-content {
     min-height: 0;
     align-items: flex-start;

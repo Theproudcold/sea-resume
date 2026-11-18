@@ -108,6 +108,13 @@ describe('EditorPanel cached navigation', () => {
   };
   const activeStage = () => wrapper!.find('.editor-section-stage:not([aria-hidden="true"])');
 
+  it('starts with personal information instead of an empty work-history section', async () => {
+    useResumeStore().activeSection = null;
+    render();
+    await settle();
+    expect(activeStage().attributes('data-section-id')).toBe('basic');
+  });
+
   it('restores a removed standard section and smoothly resets scroll', async () => {
     const resume = useResumeStore();
     resume.data.sectionOrder = ['experience', 'education', 'skills'];

@@ -64,6 +64,13 @@ describe('ResumeCard cover preview', () => {
     expect(wrapper.findComponent(ResumeCoverStub).props('data')).toMatchObject({ basic: { name: '真实简历姓名' } });
   });
 
+  it('shows the AI template name instead of an unknown-template warning', async () => {
+    readResume.mockResolvedValue(resumeContent('测试姓名'));
+    const wrapper = mountCard({ ...resumeMeta, templateId: 'ai-agent' });
+    expect(wrapper.get('.template').text()).toBe('AI Agent 技术');
+    wrapper.unmount();
+  });
+
   it('reloads the cover after the resume metadata is updated', async () => {
     readResume
       .mockResolvedValueOnce(resumeContent('修改前姓名'))

@@ -1,29 +1,31 @@
 <template>
   <div class="workbench-view">
-    <AppHeader title="简历工作台" subtitle="Sea Resume 简历管理">
+    <AppHeader title="我的简历">
       <template #actions>
-        <el-button class="ai-settings-trigger" @click="openSettings('ai')">AI 模型配置</el-button>
-        <el-button @click="router.push('/interviews')">模拟面试与记录</el-button>
-        <el-dropdown @command="handleManageCommand">
-          <el-button>管理<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+        <el-button text @click="goToTemplates">模板库</el-button>
+        <el-button text @click="router.push('/interviews')">模拟面试</el-button>
+        <el-dropdown trigger="click" @command="handleManageCommand">
+          <el-button text>设置<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="versions">岗位版本与比较</el-dropdown-item>
-              <el-dropdown-item command="backup">全量备份</el-dropdown-item>
-              <el-dropdown-item command="settings">数据与存储设置</el-dropdown-item>
+              <el-dropdown-item command="ai">AI 服务设置</el-dropdown-item>
+              <el-dropdown-item command="versions" :disabled="!hasResumes">简历版本对比</el-dropdown-item>
+              <el-dropdown-item command="backup">备份与恢复</el-dropdown-item>
+              <el-dropdown-item command="settings">存储设置</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <el-dropdown @command="handleImportCommand">
-          <el-button>导入<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+        <el-dropdown trigger="click" :disabled="loading || creating || !!loadError" @command="handleImportCommand">
+          <el-button :disabled="loading || creating || !!loadError">导入简历<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="markdown">导入 Markdown</el-dropdown-item>
-              <el-dropdown-item command="pdf">AI 导入 PDF</el-dropdown-item>
+              <el-dropdown-item command="pdf">PDF 文件（AI 识别）</el-dropdown-item>
+              <el-dropdown-item command="markdown">Markdown 文本</el-dropdown-item>
+              <el-dropdown-item command="json" divided>简历备份（JSON）</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
-        <el-button type="primary" :icon="Plus" @click="goToTemplates">新建简历</el-button>
+        <el-button v-if="hasResumes" type="primary" :icon="Plus" :loading="creating" :disabled="loading || !!loadError" @click="createBlankResume">新建简历</el-button>
       </template>
     </AppHeader>
 
@@ -34,8 +36,8 @@
         <el-button v-if="storageStore.hasFileSystemConfig" type="primary" size="small" @click="handleReauthorizeStorageDirectory">重新授权本地目录</el-button>
       </div>
       <div v-if="!loading && hasResumes && backupReminderDue && !backupReminderDismissed" class="backup-reminder" role="status">
-        <span v-if="storageStore.currentType === 'file_system'">保存到本地目录并不等于备份：目录误删或磁盘故障仍可能导致数据丢失，授权失效时也可能暂时无法访问。建议定期导出全量 JSON，并保存到其他安全位置。</span>
-        <span v-else>简历保存在当前浏览器，清理浏览器数据可能导致丢失。建议定期导出全量 JSON，并保存到安全位置。</span>
+        <span v-if="storageStore.currentType === 'file_system'">简历保存在本地文件夹。为防止误删或磁盘故障，请另存一份备份。</span>
+        <span v-else>简历保存在当前浏览器，清理浏览器数据会导致丢失。建议下载备份。</span>
         <el-button type="primary" size="small" @click="showFullBackupManager = true">立即备份</el-button>
         <el-button text size="small" aria-label="关闭备份提醒" @click="backupReminderDismissed = true">稍后</el-button>
       </div>
@@ -46,14 +48,20 @@
           </div>
         </div>
 
+        <section v-else-if="loadError" class="load-error" role="alert">
+          <h2>暂时无法加载简历</h2>
+          <p>{{ loadError }}</p>
+          <el-button type="primary" @click="loadWorkbench">重新加载</el-button>
+          <el-button @click="openSettings('storage')">检查存储设置</el-button>
+        </section>
         <section v-else-if="!hasResumes" class="empty-board" aria-labelledby="empty-board-title">
           <div class="empty-sheet" aria-hidden="true"></div>
           <div class="empty-copy">
-            <h2 id="empty-board-title">还没有简历，浏览模板或导入现有内容开始。</h2>
+            <h2 id="empty-board-title">创建你的第一份简历</h2>
+            <p>直接开始填写，也可以先选一个喜欢的模板。</p>
             <div class="empty-actions">
-              <el-button type="primary" :icon="Plus" @click="goToTemplates">浏览模板</el-button>
-              <el-button :icon="Upload" @click="showMarkdownImport = true">导入 Markdown</el-button>
-              <el-button :icon="Document" @click="showPdfImport = true">AI 导入 PDF</el-button>
+              <el-button type="primary" :icon="Plus" :loading="creating" @click="createBlankResume">新建简历</el-button>
+              <el-button @click="goToTemplates">选择模板</el-button>
             </div>
           </div>
         </section>
@@ -63,19 +71,22 @@
             <h2 id="resume-board-title">我的简历</h2>
             <span class="board-count"><strong>{{ resumeList.length }}</strong> 份</span>
           </header>
-          <div v-if="resumeList.length > 8" class="board-tools">
+          <div v-if="resumeList.length > 1 || resumeQuery" class="board-tools">
             <el-input v-model="resumeQuery" clearable placeholder="按名称筛选" aria-label="按名称筛选简历" />
             <el-select v-model="resumeSort" aria-label="简历排序">
               <el-option label="最近编辑" value="recent" />
-              <el-option label="标题" value="title" />
+              <el-option label="名称排序" value="title" />
             </el-select>
           </div>
-          <div class="board-columns" role="row">
-            <span role="columnheader">简历</span>
-            <span role="columnheader">模板</span>
-            <span role="columnheader">最近编辑</span>
+          <div class="board-columns" aria-hidden="true">
+            <span>简历</span>
+            <span>模板</span>
+            <span>最近编辑</span>
           </div>
-          <p v-if="!visibleResumes.length" class="board-empty-filter">没有名称包含「{{ resumeQuery.trim() }}」的简历。</p>
+          <div v-if="!visibleResumes.length" class="board-empty-filter" role="status">
+            <p>没有找到「{{ resumeQuery.trim() }}」</p>
+            <el-button text type="primary" @click="resumeQuery = ''">清除搜索</el-button>
+          </div>
           <div
             v-else
             class="resume-grid"
@@ -106,14 +117,15 @@
       <el-input
         v-model="renameForm.title"
         placeholder="输入新名称"
+        aria-label="简历名称"
         maxlength="50"
         show-word-limit
         @keydown.enter="onRenameEnter"
       />
       <template #footer>
         <el-button @click="showRenameDialog = false">取消</el-button>
-        <el-button type="primary" @click="confirmRename" :loading="renaming">
-          确定
+        <el-button type="primary" @click="confirmRename" :loading="renaming" :disabled="!renameForm.title.trim()">
+          保存名称
         </el-button>
       </template>
     </el-dialog>
@@ -140,7 +152,7 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { ArrowDown, Plus, Upload, Document } from '@element-plus/icons-vue';
+import { ArrowDown, Plus } from '@element-plus/icons-vue';
 import AppHeader from '@/components/common/AppHeader.vue';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { useStorageStore } from '@/stores/storage';
@@ -163,7 +175,8 @@ const route = useRoute();
 const workbenchStore = useWorkbenchStore();
 const storageStore = useStorageStore();
 
-const loading = ref(false);
+const loading = ref(true);
+const loadError = ref('');
 const showRenameDialog = ref(false);
 const showSettings = ref(false);
 const settingsSection = ref<SettingsSection>('ai');
@@ -216,22 +229,44 @@ function onBoardKeydown(event: KeyboardEvent) {
   next.focus();
 }
 
-onMounted(async () => {
-  if (route.query.aiSettings === '1') openSettings('ai');
+async function refreshResumeList() {
+  await workbenchStore.init();
+  loadError.value = workbenchStore.error || '';
+  if (loadError.value) throw new Error(loadError.value);
+}
+
+async function loadWorkbench() {
   loading.value = true;
+  loadError.value = '';
   try {
-    // 初始化存储
     await storageStore.init();
-    // 加载简历列表
-    await workbenchStore.init();
+    await refreshResumeList();
   } catch (error) {
-    ElMessage.error('加载失败: ' + (describeError(error)));
+    loadError.value = describeError(error);
   } finally {
     const reminder = getFullBackupReminderStatus();
     backupReminderDue.value = reminder.available && reminder.due;
     loading.value = false;
   }
+}
+
+onMounted(() => {
+  if (route.query.aiSettings === '1') openSettings('ai');
+  void loadWorkbench();
 });
+
+async function createBlankResume() {
+  if (creating.value || loading.value || loadError.value) return;
+  creating.value = true;
+  try {
+    const id = await workbenchStore.createResume('未命名简历');
+    await router.push(`/editor/${id}`);
+  } catch (error) {
+    ElMessage.error(`新建失败：${describeError(error)}`);
+  } finally {
+    creating.value = false;
+  }
+}
 
 const handleCardClick = (id: string) => {
   router.push(`/editor/${id}`);
@@ -251,7 +286,8 @@ function openSettings(section: SettingsSection = 'ai') {
 }
 
 function handleManageCommand(command: string) {
-  if (command === 'versions') showVersionManager.value = true;
+  if (command === 'ai') openSettings('ai');
+  else if (command === 'versions') showVersionManager.value = true;
   else if (command === 'backup') showFullBackupManager.value = true;
   else if (command === 'settings') openSettings('storage');
 }
@@ -259,6 +295,7 @@ function handleManageCommand(command: string) {
 function handleImportCommand(command: string) {
   if (command === 'markdown') showMarkdownImport.value = true;
   else if (command === 'pdf') showPdfImport.value = true;
+  else if (command === 'json') void handleImportData();
 }
 
 const handleVersionCreated = (id: string) => {
@@ -341,7 +378,7 @@ const handleDelete = async (resume: ResumeMeta) => {
     await workbenchStore.deleteResume(resume.id);
     ElMessage.success('删除成功');
   } catch (error) {
-    if (error !== 'cancel') {
+    if (error !== 'cancel' && error !== 'close') {
       ElMessage.error('删除失败: ' + (describeError(error)));
     }
   }
@@ -389,7 +426,7 @@ const handleResetData = async () => {
     );
     
     await storageStore.clearAll();
-    await workbenchStore.init();
+    await refreshResumeList();
     ElMessage.success('已清空当前存储位置中的全部简历');
     showSettings.value = false;
   } catch (error) {
@@ -420,7 +457,7 @@ const handleChooseStorageDirectory = async () => {
     const directoryHandle = await picker.call(window, { mode: 'readwrite', startIn: 'documents' });
     try {
       const result = await storageStore.switchToFileSystem(directoryHandle);
-      await workbenchStore.init();
+      await refreshResumeList();
       ElMessage.success(`已复制 ${result.addedCount} 份简历到本地目录并切换存储`);
     } catch (error) {
       if (!(error instanceof Error) || error.name !== 'DirectoryContainsResumeDataError') throw error;
@@ -430,7 +467,7 @@ const handleChooseStorageDirectory = async () => {
         { confirmButtonText: '合并并切换', cancelButtonText: '取消', type: 'warning' },
       );
       const result = await storageStore.switchToFileSystem(directoryHandle, true);
-      await workbenchStore.init();
+      await refreshResumeList();
       ElMessage.success(`增量合并完成：新增 ${result.addedCount} 份，ID 冲突保留目录版本 ${result.conflictCount} 份`);
     }
   } catch (error) {
@@ -442,7 +479,7 @@ const handleChooseStorageDirectory = async () => {
 const handleReauthorizeStorageDirectory = async () => {
   try {
     const directoryName = await storageStore.reauthorizeFileSystem();
-    await workbenchStore.init();
+    await refreshResumeList();
     ElMessage.success(`已重新授权本地目录（${directoryName}）并切换为该存储位置`);
   } catch (error) {
     ElMessage.error('重新授权失败: ' + (describeError(error)));
@@ -455,7 +492,7 @@ const handleSwitchToBrowserStorage = async () => {
       confirmButtonText: '复制并切换', cancelButtonText: '取消', type: 'warning',
     });
     await storageStore.switchToBrowserStorage();
-    await workbenchStore.init();
+    await refreshResumeList();
     ElMessage.success('简历已复制回浏览器缓存');
   } catch (error) {
     if (error !== 'cancel') ElMessage.error('切换失败: ' + (describeError(error)));
@@ -523,7 +560,18 @@ const handleSwitchToBrowserStorage = async () => {
   max-width: 280px;
 }
 
+.load-error {
+  padding: var(--space-xl) 0;
+}
+.load-error h2 { font-size: var(--text-xl); }
+.load-error p { margin: var(--space-md) 0; color: var(--color-ink-2); }
+.empty-copy > p { color: var(--color-ink-2); }
+
 .board-empty-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
   margin: var(--space-lg) 0;
   color: var(--color-muted);
 }
