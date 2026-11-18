@@ -131,6 +131,8 @@ function validateResumeData(value: unknown, index: number): asserts value is Res
   for (const field of ['location', 'website', 'avatar', 'birthDate', 'summary']) {
     requireOptionalString(basic, field, `${path}.basic.${field}`, field === 'avatar' ? MAX_BACKUP_AVATAR_LENGTH : MAX_BACKUP_STRING_LENGTH);
   }
+  // 展示用枚举，长度按白名单值给足余量；未知取值由 sanitizeResumeDataContent 丢弃，不让整份备份失败。
+  requireOptionalString(basic, 'avatarShape', `${path}.basic.avatarShape`, 16);
   for (const field of ['showAge', 'showExperienceYears']) {
     if (basic[field] !== undefined && typeof basic[field] !== 'boolean') {
       throw new Error(`Full backup field "${path}.basic.${field}" must be a boolean.`);

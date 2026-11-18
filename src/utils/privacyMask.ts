@@ -13,7 +13,8 @@ export function maskSensitiveText(value: string): string {
 /** Return a detached, presentation-only copy for preview and printing. */
 export function createPrivacyMaskedResume(source: ResumeData): ResumeData {
   // Drop the portrait before cloning: privacy mode hides it, and a data URL can be megabytes.
-  const resume = JSON.parse(JSON.stringify(source, (key, value) => (key === 'avatar' ? undefined : value))) as ResumeData;
+  // 头像外观跟着照片一起隐藏：没有照片时这个选择没有意义。
+  const resume = JSON.parse(JSON.stringify(source, (key, value) => (key === 'avatar' || key === 'avatarShape' ? undefined : value))) as ResumeData;
   resume.title = '匿名简历';
   resume.basic.name = '匿名用户';
   resume.basic.email = '***@***.***';
@@ -26,6 +27,7 @@ export function createPrivacyMaskedResume(source: ResumeData): ResumeData {
     value: maskSensitiveText(contact.value),
   }));
   resume.basic.avatar = undefined;
+  resume.basic.avatarShape = undefined;
   resume.basic.birthDate = undefined;
   resume.basic.showAge = false;
   resume.basic.showExperienceYears = false;

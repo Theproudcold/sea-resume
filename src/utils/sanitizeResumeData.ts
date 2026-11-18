@@ -1,5 +1,6 @@
 import type { ResumeData } from '@/types/resume';
 import { sanitizeMarkdownUrl, sanitizeRichTextHtml } from '@/utils/markdown/markdownSafety';
+import { parseAvatarShape } from '@/utils/avatarShape';
 
 const SAFE_AVATAR_DATA_URL = /^data:image\/(png|jpeg|webp|gif);base64,/i;
 
@@ -10,6 +11,7 @@ export function sanitizeResumeDataContent(source: ResumeData): ResumeData {
   resume.basic.avatar = resume.basic.avatar && SAFE_AVATAR_DATA_URL.test(resume.basic.avatar)
     ? resume.basic.avatar
     : undefined;
+  resume.basic.avatarShape = parseAvatarShape(resume.basic.avatarShape);
   if (resume.basic.summary !== undefined) resume.basic.summary = sanitizeRichTextHtml(resume.basic.summary);
   resume.experiences = resume.experiences.map((item) => ({
     ...item,

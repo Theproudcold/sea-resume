@@ -15,7 +15,7 @@
       class="tech-header cursor-pointer"
       @click="setActiveSection('basic')"
     >
-      <img v-if="data.basic.avatar" :src="data.basic.avatar" alt="头像" class="tech-avatar" />
+      <img v-if="data.basic.avatar" :src="data.basic.avatar" alt="头像" class="tech-avatar" :style="{ borderRadius: avatarBorderRadius(data.basic.avatarShape) }" />
       <div class="min-w-0">
       <h1 class="tech-name">
         {{ data.basic.name || '您的姓名' }}
@@ -170,6 +170,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ResumeData } from '@/types/resume';
+import { avatarBorderRadius } from '@/utils/avatarShape';
 import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import ContactIcon from '@/components/common/ContactIcon.vue';
 import draggable from 'vuedraggable';
@@ -270,7 +271,6 @@ const setActiveSection = (id: string) => {
   flex: 0 0 auto;
   object-fit: cover;
   border: 2px solid var(--primary-color);
-  border-radius: 999px;
 }
 
 .tech-name {

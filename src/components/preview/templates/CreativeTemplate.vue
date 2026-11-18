@@ -16,7 +16,7 @@
       @click="setActiveSection('basic')"
     >
       <div class="text-center">
-        <div class="creative-avatar">
+        <div class="creative-avatar" :style="{ borderRadius: avatarBorderRadius(data.basic.avatarShape) }">
           <img v-if="data.basic.avatar" :src="data.basic.avatar" alt="头像" class="w-full h-full object-cover" />
           <span v-else>{{ (data.basic.name || 'U').charAt(0).toUpperCase() }}</span>
         </div>
@@ -165,6 +165,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ResumeData } from '@/types/resume';
+import { avatarBorderRadius } from '@/utils/avatarShape';
 import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import ContactIcon from '@/components/common/ContactIcon.vue';
 import draggable from 'vuedraggable';
@@ -268,7 +269,6 @@ const setActiveSection = (id: string) => {
   margin: 0 auto 0.7rem;
   overflow: hidden;
   border: 2px solid rgb(255 255 255 / 72%);
-  border-radius: 999px;
   background: rgb(255 255 255 / 16%);
   font-size: 1.5rem;
   font-weight: 700;
