@@ -5,7 +5,6 @@ import {
   MIN_LINE_HEIGHT,
   MIN_MODULE_MARGIN_BOTTOM,
   MIN_PAGE_MARGINS,
-  estimateA4PageCount,
   getCompactThemeSettings,
   nextFitStep,
 } from '@/utils/pageFit';
@@ -19,20 +18,6 @@ function themeWith(theme: Partial<ThemeConfig>): ThemeConfig {
 }
 
 describe('A4 fit helpers', () => {
-  it('estimates one or multiple pages at the A4 height boundary', () => {
-    expect(estimateA4PageCount(1122, 1122.5)).toBe(1);
-    expect(estimateA4PageCount(1124, 1122.5)).toBe(2);
-    expect(estimateA4PageCount(0, 1123)).toBe(1);
-    expect(estimateA4PageCount(2000, 0)).toBe(1);
-  });
-  it('recomputes the page estimate when measured resume content grows', () => {
-    let measuredHeight = 900;
-    const pageHeight = 1122.5;
-    expect(estimateA4PageCount(measuredHeight, pageHeight)).toBe(1);
-    measuredHeight = 1124;
-    expect(estimateA4PageCount(measuredHeight, pageHeight)).toBe(2);
-  });
-
   it('suggests compact theme values without modifying resume content or shrinking below 12px', () => {
     const theme = parseResumeMarkdown('# Alex').resume.theme;
     const compact = getCompactThemeSettings({

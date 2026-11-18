@@ -38,6 +38,7 @@ describe('ResumeCanvas pagination', () => {
   let physicalHeight: number;
   let readHeight: ReturnType<typeof vi.fn>;
   let readRuler: ReturnType<typeof vi.fn>;
+  let elementRects: Map<HTMLElement, DOMRect>;
   let fonts: EventTarget & { ready: Promise<void> };
   let resolveFonts: () => void;
   let originalFonts: PropertyDescriptor | undefined;
@@ -68,6 +69,7 @@ describe('ResumeCanvas pagination', () => {
     physicalHeight = 1000;
     readHeight = vi.fn(() => contentHeight);
     readRuler = vi.fn(() => ({ width: 1, height: physicalHeight }) as DOMRect);
+    elementRects = new Map();
     vi.stubGlobal('ResizeObserver', ResizeObserverMock);
     vi.stubGlobal('IntersectionObserver', IntersectionObserverMock);
     vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
@@ -79,7 +81,8 @@ describe('ResumeCanvas pagination', () => {
       return (visible ? [{ width: 794, height: 1000 }] : []) as unknown as DOMRectList;
     });
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      return this.classList.contains('a4-ruler') ? readRuler() : new DOMRect();
+      if (this.classList.contains('a4-ruler')) return readRuler();
+      return elementRects.get(this) ?? new DOMRect();
     });
     vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
       // Marker overflow on the canvas must not be used as the content height.
@@ -228,8 +231,28 @@ describe('ResumeCanvas pagination', () => {
     const markers = view.findAll('.page-break-line');
     expect(markers[0]!.element.parentElement).toBe(canvas);
     expect(markers[0]!.classes()).toContain('no-print');
-    expect(markers[0]!.attributes('style')).toContain('top: calc(1 * var(--a4-height))');
+    // 破页线画在实测切点上（内容 2400 / 每页 1000 → 1000、2000），不再写死 297mm 的倍数。
+    expect(markers[0]!.attributes('style')).toContain('top: 1000px');
+    expect(markers[1]!.attributes('style')).toContain('top: 2000px');
     expect(markers[0]!.text()).toBe('Page 2');
+    expect(markers[1]!.text()).toBe('Page 3');
+  });
+
+  it('moves the page break above a line that would otherwise be cut in half', async () => {
+    const view = render();
+    await flushFrame();
+    expect(view.find('.page-break-line').attributes('style')).toContain('top: 1000px');
+
+    const paragraph = view.get('p').element as HTMLElement;
+    elementRects.set(paragraph, {
+      x: 0, y: 960, top: 960, bottom: 1020, left: 0, right: 700, width: 700, height: 60,
+      toJSON: () => ({}),
+    } as DOMRect);
+    resize();
+    await flushFrame();
+
+    // 行盒压在 1000 上：切点上移到行盒顶部，整行留给下一页，导出与预览用同一组切点。
+    expect(view.find('.page-break-line').attributes('style')).toContain('top: 960px');
   });
 
   it('publishes the measured page count so panels reuse the same pagination', async () => {

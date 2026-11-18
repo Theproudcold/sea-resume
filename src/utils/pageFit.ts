@@ -14,11 +14,6 @@ const MODULE_MARGIN_STEP = 4;
 
 export type LayoutTokens = Pick<ThemeConfig, 'fontSize' | 'lineHeight' | 'pageMargins' | 'moduleMargins'>;
 
-export function estimateA4PageCount(contentHeight: number, pageHeight: number): number {
-  if (!Number.isFinite(contentHeight) || !Number.isFinite(pageHeight) || pageHeight <= 0) return 1;
-  return Math.max(1, Math.ceil(Math.max(0, contentHeight - 1) / pageHeight));
-}
-
 /** 夹到 [min, max]；非有限值取 min，避免 NaN 穿透到主题里。 */
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
