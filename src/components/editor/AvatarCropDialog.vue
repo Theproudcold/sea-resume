@@ -3,6 +3,7 @@
     :model-value="modelValue"
     title="调整照片取景"
     width="min(320px, calc(100vw - 32px))"
+    align-center
     append-to-body
     :close-on-click-modal="false"
     @update:model-value="(value: boolean) => emit('update:modelValue', value)"
@@ -204,7 +205,10 @@ onBeforeUnmount(() => {
 <style scoped>
 .crop-stage {
   position: relative;
-  width: min(260px, 60vw);
+  /* 宽度必须跟着对话框内容盒走：写死宽度会溢出 24px 内边距的可视区，
+     而对话框主体只有一个轴向显式设了 overflow，另一轴会一并变成 auto，
+     于是冒出一条横向滚动条。260px 只作为上限。 */
+  width: min(100%, 260px);
   aspect-ratio: 1 / 1;
   margin: 0 auto;
   overflow: hidden;
