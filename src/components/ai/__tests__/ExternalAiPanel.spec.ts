@@ -40,11 +40,18 @@ async function authorize() {
 
 beforeEach(() => { vi.unstubAllGlobals(); resume.id = 'resume-1'; });
 
+/**
+ * 站点可能部署在子路径下（GitHub Pages 为 /<repo>/），此时 import.meta.env.BASE_URL
+ * 不再是 "/"。relay 包地址必须跟随 BASE_URL，不能硬编码根路径，否则 CI 会与
+ * 本地跑出不同结果。
+ */
+const baseUrl = import.meta.env.BASE_URL;
+
 describe('外部 AI 面板接入', () => {
   it('授权后给出可直接粘贴的一行命令和一句话，且不带 npm ci', async () => {
     const wrapper = await authorize();
     const command = wrapper.find('pre').text();
-    expect(command).toContain('http://localhost:3000/ai-relay/relay.mjs');
+    expect(command).toContain(`${location.origin}${baseUrl}ai-relay/relay.mjs`);
     expect(command).toContain('codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs"');
     expect(command).toContain('--host 127.0.0.1 --widget-origin http://localhost:3000 --max-payload 500000');
     expect(command).not.toContain('npm ci');
