@@ -743,15 +743,6 @@ html.scheme-rippling::view-transition-new(root) {
 }
 
 /* Dialogs and drawers. */
-.el-overlay-dialog.is-align-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  padding: var(--space-lg) var(--space-md);
-  overflow-y: auto;
-}
-
 .el-dialog:not(.is-fullscreen) {
   display: flex;
   max-height: var(--ui-dialog-max-height);
@@ -760,6 +751,17 @@ html.scheme-rippling::view-transition-new(root) {
   overflow: hidden;
   border: var(--rule-hair) solid var(--color-rule);
   border-radius: var(--radius-card);
+}
+
+/*
+ * 中心对齐的弹窗：Element Plus 自己把容器 .el-overlay-dialog 设为 flex，
+ * 居中则完全依赖 .el-dialog.is-align-center 上的 auto 外边距。
+ * 这条规则必须待在上一条之后：两者同为 !important、同权重，按源码顺序决胜；
+ * 一旦被上一条的 margin: 0 auto 覆盖，垂直方向就没有 auto 外边距可吸收剩余空间，
+ * flex 默认的 align-items: stretch 会把弹窗拉到 max-height 并顶到最上方。
+ */
+.el-dialog.is-align-center {
+  margin: auto !important;
 }
 
 .el-dialog:not(.is-fullscreen) .el-dialog__header {
