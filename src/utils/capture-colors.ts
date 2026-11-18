@@ -222,14 +222,20 @@ function getCanvasContext(): CanvasRenderingContext2D | null {
     const canvas = document.createElement('canvas');
     canvas.width = 1;
     canvas.height = 1;
-    canvasContext = canvas.getContext('2d');
+    canvasContext = canvas.getContext('2d', { willReadFrequently: true });
   } catch {
     canvasContext = null;
   }
   return canvasContext;
 }
 
-/** 借助浏览器把其余颜色函数（color-mix、lab 等）解析成 sRGB。 */
+/**
+ * 借助浏览器把其余颜色函数（color-mix、lab、lch、hwb 等）解析成 sRGB。
+ *
+ * 不能用 `context.fillStyle` 回读：Chrome 会把 lab()/oklab()/color() 等现代颜色函数
+ * 原样存回，不做 sRGB 转换，回读结果仍然含不支持函数，于是这里会误判为「无法解析」。
+ * 只有 getImageData 会真正把颜色落到 sRGB 像素。
+ */
 function resolveWithCanvas(value: string): string | null {
   if (canvasResolutionCache.has(value)) return canvasResolutionCache.get(value) ?? null;
   let resolved: string | null = null;
@@ -240,13 +246,15 @@ function resolveWithCanvas(value: string): string | null {
     const context = getCanvasContext();
     if (context) {
       try {
-        // A sentinel detects values the canvas setter silently rejects.
-        context.fillStyle = '#123456';
+        // 透明底上绘制，避免与上一轮残留像素混合。
+        context.clearRect(0, 0, 1, 1);
         context.fillStyle = value;
-        const candidate = String(context.fillStyle);
-        if (candidate && candidate !== '#123456' && !hasUnsupportedColorFunction(candidate)) {
-          resolved = candidate;
-        }
+        context.fillRect(0, 0, 1, 1);
+        const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
+        resolved = formatRgb(
+          { r: r! / 255, g: g! / 255, b: b! / 255 },
+          String(a! / 255),
+        );
       } catch {
         resolved = null;
       }
