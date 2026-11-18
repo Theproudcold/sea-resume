@@ -125,6 +125,21 @@ describe('preview-faithful PDF export', () => {
     expect(cuts[0]).toBe(lineTop);
   });
 
+  it('refuses to export when the capture is shorter than the preview content', async () => {
+    const preview = document.createElement('div');
+    preview.className = 'resume-canvas';
+    document.body.appendChild(preview);
+    Object.defineProperties(preview, {
+      scrollWidth: { configurable: true, value: 794 },
+      scrollHeight: { configurable: true, value: 2500 },
+    });
+    // 渲染期间布局变高（例如字体替换）后仍按旧高度切页，会静默少一段内容。
+    mocks.html2canvas.mockResolvedValue({ width: 794, height: 1800 } as HTMLCanvasElement);
+
+    await expect(exportPreviewToPDF('.resume-canvas', 'truncated')).rejects.toThrow('导出过程中发生了变化');
+    expect(mocks.addImage).not.toHaveBeenCalled();
+  });
+
   it('fails clearly if the preview canvas is missing', async () => {
     await expect(exportPreviewToPDF('.missing-preview')).rejects.toThrow('未找到简历预览');
   });

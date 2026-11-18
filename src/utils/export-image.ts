@@ -76,9 +76,24 @@ export function getCapturedPageSlices(
   // 没有布局盒（隐藏节点、测试环境）时退化为 1:1，切点仍然按内容测量。
   const layoutWidth = captureWidth > 0 ? captureWidth : canvas.width;
   const scale = canvas.width / layoutWidth;
+  assertCaptureCoversContent(element, canvas.height / scale);
   const cuts = measurePageBreaks(element, canvas.height / scale, measureA4PageHeight())
     .map((offset) => offset * scale);
   return getA4ImagePageSlices(canvas.width, canvas.height, cuts);
+}
+
+/**
+ * 截图结果比当前内容矮，说明渲染期间布局变了（字体替换、图片迟到、容器还没展开），
+ * 再切页就会静默少一段内容。宁可报错让用户重试，也不导出缺内容的 PDF / 图片。
+ */
+function assertCaptureCoversContent(element: HTMLElement, capturedHeight: number): void {
+  const expectedHeight = Math.max(element.scrollHeight, Math.ceil(element.getBoundingClientRect().height));
+  if (expectedHeight > 0 && capturedHeight < expectedHeight - 1) {
+    throw new Error(
+      `预览内容在导出过程中发生了变化（渲染高度 ${Math.round(capturedHeight)}px < 页面高度 ${Math.round(expectedHeight)}px），`
+      + '为避免导出缺少内容已中止，请重试。',
+    );
+  }
 }
 
 /** Normalize user-supplied titles to safe file/archive basenames. */
