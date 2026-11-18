@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   hasUnsupportedColorFunction,
   normalizeCaptureColors,
@@ -65,6 +65,79 @@ describe('modern CSS color normalization for html2canvas', () => {
       expect(converted, token).toMatch(/^rgba?\(\d+, \d+, \d+(, [\d.]+)?\)$/);
       expect(hasUnsupportedColorFunction(converted), token).toBe(false);
     }
+  });
+
+  /**
+   * jsdom 没有真实 canvas 颜色引擎（HTMLCanvasElement.getContext 返回 null），
+   * 所以这里按 Chrome 的真实语义打桩，覆盖那些必须走浏览器回退分支的颜色函数。
+   *
+   * 关键点：Chrome 的 fillStyle setter 会原样回读 lab()/oklab()/color() 等现代颜色函数，
+   * 不做 sRGB 转换；只有 getImageData 才会真正落到 sRGB 像素。
+   */
+  describe('canvas fallback for functions without a local formula', () => {
+    const CHROME_COMPUTED: Record<string, string> = {
+      'lab(50 40 30)': 'rgb(187, 88, 70)',
+      'lab(50% 40 30)': 'rgb(187, 88, 70)',
+      'lch(52% 60 40)': 'rgb(202, 86, 61)',
+      'hwb(194 0% 0%)': 'rgb(0, 195, 255)',
+      'color-mix(in oklab, red 50%, blue)': 'rgb(140, 83, 162)',
+      'lab(50 40 30 / 0.24)': 'rgba(187, 88, 70, 0.24)',
+    };
+
+    beforeEach(() => {
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (
+        this: HTMLCanvasElement,
+      ) {
+        let painted = '#123456';
+        return {
+          // Chrome 原样回读现代颜色函数，不做转换。
+          set fillStyle(value: string) {
+            painted = String(value);
+          },
+          get fillStyle() {
+            return painted;
+          },
+          fillRect: () => {},
+          clearRect: () => {},
+          getImageData: () => {
+            const resolved = CHROME_COMPUTED[painted];
+            if (!resolved) throw new Error(`unresolvable color: ${painted}`);
+            const [r, g, b] = resolved.match(/\d+/g)!.map(Number);
+            const alpha = /rgba\([^)]*,\s*([\d.]+)\)/.exec(resolved);
+            const a = alpha ? Math.round(Number(alpha[1]) * 255) : 255;
+            return { data: new Uint8ClampedArray([r!, g!, b!, a]) };
+          },
+        } as unknown as CanvasRenderingContext2D;
+      });
+      vi.stubGlobal('CSS', { supports: () => true });
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+
+    it('resolves lab(), lch() and hwb() instead of leaking them to html2canvas', () => {
+      for (const [input, expected] of Object.entries(CHROME_COMPUTED)) {
+        if (input.startsWith('color-mix')) continue;
+        const converted = replaceUnsupportedColors(input);
+        const [er, eg, eb] = expected.match(/\d+/g)!.map(Number);
+        expect(converted, input).toMatch(new RegExp(`^rgba?\\(${er}, ${eg}, ${eb}(, [\\d.]+)?\\)$`));
+        expect(hasUnsupportedColorFunction(converted), input).toBe(false);
+      }
+    });
+
+    it('resolves a color-mix() value to sRGB', () => {
+      const converted = replaceUnsupportedColors('color-mix(in oklab, red 50%, blue)');
+      expect(converted).toBe('rgb(140, 83, 162)');
+      expect(hasUnsupportedColorFunction(converted)).toBe(false);
+    });
+
+    it('keeps lab() colors embedded in box-shadow parseable', () => {
+      const converted = replaceUnsupportedColors('0px 12px 32px -12px lab(50 40 30 / 0.24)');
+      expect(converted).not.toContain('lab(');
+      expect(converted).toContain('rgba(');
+    });
   });
 });
 
