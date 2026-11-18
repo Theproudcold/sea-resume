@@ -2,24 +2,38 @@
   <div class="basic-info-editor space-y-4">
     <el-form label-position="top">
       <el-form-item label="照片（选填）">
-        <el-upload
-          class="avatar-uploader"
-          aria-label="上传或更换照片"
-          :show-file-list="false"
-          :auto-upload="false"
-          :on-change="handleAvatarChange"
-          accept="image/*"
-        >
-          <div v-if="localBasic.avatar" class="avatar-frame">
-            <img :src="localBasic.avatar" class="avatar-image" alt="" />
-            <div class="avatar-overlay">
-              <el-icon><Edit /></el-icon>
+        <div class="avatar-field">
+          <el-upload
+            class="avatar-uploader"
+            aria-label="上传或更换照片"
+            :show-file-list="false"
+            :auto-upload="false"
+            :on-change="handleAvatarChange"
+            accept="image/*"
+          >
+            <div v-if="localBasic.avatar" class="avatar-frame" :style="{ borderRadius: avatarBorderRadius(localBasic.avatarShape) }">
+              <img :src="localBasic.avatar" class="avatar-image" alt="" />
+              <div class="avatar-overlay">
+                <el-icon><Edit /></el-icon>
+              </div>
             </div>
+            <div v-else class="avatar-empty" :style="{ borderRadius: avatarBorderRadius(localBasic.avatarShape) }">
+              <el-icon><Plus /></el-icon>
+            </div>
+          </el-upload>
+          <div v-if="localBasic.avatar" class="avatar-shape">
+            <el-radio-group
+              :model-value="normalizeAvatarShape(localBasic.avatarShape)"
+              size="small"
+              aria-label="头像外观"
+              @update:model-value="(shape: unknown) => handleUpdate({ avatarShape: normalizeAvatarShape(shape) })"
+            >
+              <el-radio-button v-for="option in AVATAR_SHAPE_OPTIONS" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </el-radio-button>
+            </el-radio-group>
           </div>
-          <div v-else class="avatar-empty">
-            <el-icon><Plus /></el-icon>
-          </div>
-        </el-upload>
+        </div>
       </el-form-item>
 
       <el-form-item label="姓名" required data-quality-id="basic-name">
@@ -275,6 +289,7 @@ import { ElMessage } from 'element-plus';
 import type { BasicInfo, CustomContact } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
 import { compressAvatar } from '@/utils/avatarImage';
+import { AVATAR_SHAPE_OPTIONS, avatarBorderRadius, normalizeAvatarShape } from '@/utils/avatarShape';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import { describeError } from '@/utils/globalErrorReporting';
 
@@ -334,6 +349,19 @@ const updateCustomContact = (id: string, updates: Partial<CustomContact>) => {
   width: 100%;
 }
 
+.avatar-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.avatar-shape {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xs);
+}
+
 .avatar-frame,
 .avatar-empty {
   position: relative;
@@ -343,7 +371,6 @@ const updateCustomContact = (id: string, updates: Partial<CustomContact>) => {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: var(--radius-card);
   cursor: pointer;
 }
 

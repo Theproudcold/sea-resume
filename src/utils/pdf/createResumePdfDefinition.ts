@@ -57,7 +57,8 @@ function createHeader(data: ResumeData, layout: PdfTemplateLayout, avatar?: stri
       ? [{ text: contacts, style: 'contactLine', margin: [0, 5, 0, 0] } as Content]
       : []),
   ];
-  const image: Column[] = avatar ? [{ image: avatar, fit: [58, 76], alignment: 'center', margin: [4, 0, 4, 0] }] : [];
+  // 头像资源始终是 1:1：方形直接嵌入，圆形由调用方预先裁成透明角 PNG。
+  const image: Column[] = avatar ? [{ image: avatar, fit: [58, 58], alignment: 'center', margin: [4, 0, 4, 0] }] : [];
   const columns: Column[] = layout.variant === 'ai-agent'
     ? [...image, { width: '*', stack: profile }]
     : [{ width: '*', stack: profile }, ...image];

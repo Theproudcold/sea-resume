@@ -3,7 +3,7 @@ import notoSansScRegularUrl from '@/assets/fonts/noto-sans-sc/NotoSansSC-Regular
 import notoSansScBoldUrl from '@/assets/fonts/noto-sans-sc/NotoSansSC-Bold.otf?url';
 import { createResumePdfDefinition } from './pdf/createResumePdfDefinition';
 import { collectResumeCharacters, subsetOpenTypeFont } from './pdf/subsetFont';
-import { resolveResumeAvatar } from './pdf/resolveAvatar';
+import { resolveResumeAvatar, resolveResumeAvatarForShape } from './pdf/resolveAvatar';
 import { getA4ImagePageSlices } from './export-image';
 import { prepareResumeCapture } from './capture-colors';
 import type { TDocumentDefinitions, TFontDictionary, TVirtualFileSystem } from 'pdfmake/interfaces';
@@ -237,7 +237,8 @@ export async function exportPreviewToPDF(selector = '.resume-canvas', filename =
 
 /** Generate a searchable PDF from resume data. Its typography/layout is independent of the Vue DOM preview. */
 export async function createResumePdfBlob(data: ResumeData): Promise<Blob> {
-  const [pdfMake, avatar] = await Promise.all([loadPdfMake(), resolveResumeAvatar(data.basic.avatar)]);
+  const [pdfMake, avatarSource] = await Promise.all([loadPdfMake(), resolveResumeAvatar(data.basic.avatar)]);
+  const avatar = await resolveResumeAvatarForShape(avatarSource, data.basic.avatarShape);
   const definition = createResumePdfDefinition(data, avatar);
   return withSubsetFonts(pdfMake, data, () => pdfMake.createPdf(definition).getBlob());
 }

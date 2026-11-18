@@ -16,7 +16,7 @@
       class="minimal-header text-center cursor-pointer"
       @click="setActiveSection('basic')"
     >
-      <img v-if="data.basic.avatar" :src="data.basic.avatar" alt="头像" class="w-16 h-16 rounded-full object-cover mx-auto mb-4" />
+      <img v-if="data.basic.avatar" :src="data.basic.avatar" alt="头像" class="w-16 h-16 object-cover mx-auto mb-4" :style="{ borderRadius: avatarBorderRadius(data.basic.avatarShape) }" />
       <h1 class="minimal-name">{{ data.basic.name || '您的姓名' }}</h1>
       <div class="minimal-role">{{ data.basic.title || '求职意向' }}</div>
     </header>
@@ -144,6 +144,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ResumeData } from '@/types/resume';
+import { avatarBorderRadius } from '@/utils/avatarShape';
 import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import ContactIcon from '@/components/common/ContactIcon.vue';
 import draggable from 'vuedraggable';

@@ -41,4 +41,13 @@ describe('normalizeResumeData', () => {
     expect(normalizeResumeData('broken').basic.name).toBe('');
     expect(normalizeResumeData({ theme: 'nope', basic: 42 }).theme.moduleMargins.bottom).toBe(24);
   });
+
+  it('keeps a whitelisted avatar shape and leaves unknown or missing ones unset', () => {
+    const stored = createDefaultResumeData();
+    stored.basic.avatarShape = 'square';
+    expect(normalizeResumeData(stored).basic.avatarShape).toBe('square');
+
+    expect(normalizeResumeData({ ...stored, basic: { ...stored.basic, avatarShape: 'triangle' } }).basic.avatarShape).toBeUndefined();
+    expect(normalizeResumeData({ id: 'legacy', basic: { name: '张三' } }).basic.avatarShape).toBeUndefined();
+  });
 });

@@ -19,7 +19,7 @@
     <!-- 基础信息 -->
     <header class="header flex flex-col md:flex-row gap-5 items-center" style="margin-bottom: calc(var(--margin-bottom) * 0.85)">
       <div v-if="data.basic.avatar" class="avatar-container shrink-0">
-        <img :src="data.basic.avatar" class="w-20 h-20 rounded-full object-cover" style="box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 18%, white)" />
+        <img :src="data.basic.avatar" class="w-20 h-20 object-cover" :style="{ borderRadius: avatarBorderRadius(data.basic.avatarShape), boxShadow: '0 0 0 3px color-mix(in srgb, var(--primary-color) 18%, white)' }" />
       </div>
       <div class="flex-1 min-w-0">
         <h1 class="name font-bold text-gray-900" style="font-size: 1.85em; line-height: 1.15; letter-spacing: 0.01em">
@@ -217,6 +217,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ResumeData } from '@/types/resume';
+import { avatarBorderRadius } from '@/utils/avatarShape';
 import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import ContactIcon from '@/components/common/ContactIcon.vue';
 import draggable from 'vuedraggable';
