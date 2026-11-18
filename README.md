@@ -3,8 +3,15 @@
   <h1>Sea Resume</h1>
   <p>中文简历制作工具 · 6 套模板 · 实时预览 · 岗位版本管理 · AI 辅助</p>
   <p>从整理经历到导出投递文件，在一个工作台里完成。</p>
-  <p><a href="https://blog.hypoy.cn/sea-resume/"><strong>在线体验 Sea Resume →</strong></a></p>
+  <p>
+    <a href="https://blog.hypoy.cn/sea-resume/"><strong>在线体验 Sea Resume →</strong></a>
+  </p>
+  <p>
+    <a href="https://linux.do/"><img src="https://img.shields.io/badge/LINUX%20DO-F0B429?style=flat-square" alt="LINUX DO" /></a>
+  </p>
 </div>
+
+[![Sea Resume 宣传图：让每一段经历，都被看见。6 套精选模板、实时编辑预览、AI 简历优化与模拟面试训练](<docs/images/sea-resume-promo.png>)](https://blog.hypoy.cn/sea-resume/)
 
 Sea Resume 基于 Vue 3 与 TypeScript 构建，支持管理多份简历、按岗位创建独立版本、编辑内容与主题，并导入导出多种文件格式。界面可切换浅色、深色或跟随系统。基础编辑功能无需配置 AI 服务即可使用。
 
