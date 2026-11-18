@@ -6,11 +6,11 @@
       </div>
 
       <!-- Visual Page Breaks (for Editor View only) -->
-      <div v-for="i in pageCount" :key="i" 
+      <div v-for="(offset, index) in pageBreakOffsets" :key="`${index}-${offset}`"
            class="page-break-line no-print"
-           :style="{ top: `calc(${i} * var(--a4-height))` }"
+           :style="{ top: `${offset}px` }"
       >
-        <span class="page-number">Page {{ i + 1 }}</span>
+        <span class="page-number">Page {{ index + 2 }}</span>
       </div>
     </div>
     <!-- Keep the physical ruler outside the exported/printed canvas. -->
@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
-import { estimateA4PageCount } from '@/utils/pageFit';
+import { measurePageBreaks } from '@/utils/pageBreaks';
 
 const canvasRef = ref<HTMLElement | null>(null);
 const contentRef = ref<HTMLElement | null>(null);
@@ -32,8 +32,10 @@ let scheduledFrame = 0;
 let a4Height = 0;
 let disposed = false;
 
+/** 破页线位置：每页的结束偏移（相对画布顶边），最后不画在内容末尾。 */
+const pageBreakOffsets = ref<number[]>([]);
 /** 破页线数量 = 页数 - 1。 */
-const pageCount = ref(0);
+const pageCount = computed(() => pageBreakOffsets.value.length);
 /** 首次有效测量完成前为 false；隐藏或标尺读数为 0 时退回 false。 */
 const measured = ref(false);
 
@@ -43,6 +45,12 @@ const pending = computed(() => !measured.value);
 
 // 主预览通过 provide 把这份测量交给主题面板，避免两处各量一次。
 defineExpose({ pageCount: totalPages, pending });
+
+/** 切点几乎没变时不写 DOM，避免每次输入都重建破页线。 */
+function sameOffsets(previous: readonly number[], next: readonly number[]): boolean {
+  return previous.length === next.length
+    && previous.every((offset, index) => Math.abs(offset - next[index]!) < 0.5);
+}
 
 const updatePageBreaks = () => {
   // Clear before measuring so later notifications can schedule the next frame.
@@ -69,8 +77,9 @@ const updatePageBreaks = () => {
   }
   a4Height = pageHeight;
   measured.value = true;
-  const nextPageCount = Math.max(0, estimateA4PageCount(contentHeight, pageHeight) - 1);
-  if (pageCount.value !== nextPageCount) pageCount.value = nextPageCount;
+  // 破页线就是导出时真正的切点：只落在内容空隙里，预览与 PDF 才不会各切各的。
+  const nextOffsets = measurePageBreaks(canvas, contentHeight, pageHeight).slice(0, -1);
+  if (!sameOffsets(pageBreakOffsets.value, nextOffsets)) pageBreakOffsets.value = nextOffsets;
 };
 
 const scheduleUpdate = () => {
