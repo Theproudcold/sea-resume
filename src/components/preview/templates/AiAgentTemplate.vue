@@ -300,9 +300,9 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 .contact-item > a,
 .contact-copy {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 先折行、实在无处可断（例如一整段长 URL）再允许断词：简历里的联系方式必须完整可读，
+     省略号会让邮箱、主页地址在预览和导出里都变成看不全的残片。 */
+  overflow-wrap: anywhere;
 }
 .contact-item a,
 .project-link {
@@ -318,7 +318,7 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 
 .summary-block {
   margin: 16px 0 4px;
-  padding: 0 0 14px;
+  padding: 0 0 5px;
   border-bottom: 1px solid var(--resume-rule);
   color: var(--resume-ink-body);
   cursor: pointer;
@@ -339,8 +339,14 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 }
 
 .section-title {
+  /*
+   * 下边距必须落在“行盒底 + 内边距”之内，否则被行高吃掉、根本不产生可见间距：
+   * 行高 1.3 × 15px 比字形高约 3.3px，上下各分一半；原先只有 5px 内边距，
+   * 扣掉下半行距后边框离字形只剩约 1.7px，看起来像“下划线贴住标题”。
+   * 14px 内边距 = 扣掉行距后的约 10px 可见留白，与上方 9px 保持接近。
+   */
   margin: 0 0 10px;
-  padding: 0 0 5px;
+  padding: 0 0 14px;
   border-bottom: 1.5px solid var(--primary-color);
   color: var(--resume-ink-heading);
   font-size: 15px;
