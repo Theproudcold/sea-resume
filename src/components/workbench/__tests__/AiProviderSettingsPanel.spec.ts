@@ -148,4 +148,39 @@ describe('AiProviderSettingsPanel', () => {
     expect(getAiStoredApiKey()).toBe('');
     second.unmount();
   });
+  it('keeps advanced options collapsed and places the API key before the model picker', async () => {
+    const wrapper = mount(AiProviderSettingsPanel, { global: { stubs } });
+    await wrapper.find('.add-first-provider-card').trigger('click');
+    await wrapper.find('.catalog-card').trigger('click');
+    expect(wrapper.find('.advanced-settings').attributes('open')).toBeUndefined();
+    const key = wrapper.find('[type="password"]').element;
+    const models = wrapper.find('.model-picker-row').element;
+    expect(key.compareDocumentPosition(models) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(wrapper.findAll('button').find(button => button.text() === '获取模型列表')!.attributes('disabled')).toBeDefined();
+  });
+
+  it('explains missing fields and disables both save actions', async () => {
+    const wrapper = mount(AiProviderSettingsPanel, { global: { stubs } });
+    await wrapper.find('.add-first-provider-card').trigger('click');
+    await wrapper.findAll('.catalog-card')[5]!.trigger('click');
+    const state = (wrapper.vm as any).$.setupState;
+    state.selectedProfile.profileName = '';
+    await wrapper.vm.$nextTick();
+    expect(wrapper.get('.validation-message').text()).toBe('请填写服务商名称。');
+    for (const button of wrapper.findAll('button').filter(button => button.text().startsWith('保存'))) {
+      expect(button.attributes('disabled')).toBeDefined();
+    }
+  });
+
+  it('edits the waiting time in seconds while saving milliseconds', async () => {
+    saveAiModelSettings({ presetId: 'ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3', authMode: 'none', timeoutMs: 90000 });
+    const wrapper = mount(AiProviderSettingsPanel, { global: { stubs } });
+    await wrapper.find('.provider-row-main').trigger('click');
+    const state = (wrapper.vm as any).$.setupState;
+    expect(state.timeoutSeconds).toBe(90);
+    state.timeoutSeconds = 120;
+    await wrapper.findAll('button').find(button => button.text() === '保存配置')!.trigger('click');
+    expect(loadAiProviderProfiles()[0]!.timeoutMs).toBe(120000);
+  });
+
 });

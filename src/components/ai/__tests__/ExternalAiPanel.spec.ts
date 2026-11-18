@@ -48,7 +48,7 @@ describe('外部 AI 面板接入', () => {
     expect(command).toContain('codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs"');
     expect(command).toContain('--host 127.0.0.1 --widget-origin http://localhost:3000 --max-payload 500000');
     expect(command).not.toContain('npm ci');
-    expect(wrapper.text()).toContain('复制给 AI 的一句话');
+    expect(wrapper.text()).toContain('复制 AI 接入指令');
     expect(wrapper.text()).toContain('启用 MCP 桥接');
     wrapper.unmount();
   });
@@ -61,7 +61,7 @@ describe('外部 AI 面板接入', () => {
     await button('复制终端命令').trigger('click');
     await flushPromises();
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('codex mcp add'));
-    await button('复制给 AI 的一句话').trigger('click');
+    await button('复制 AI 接入指令').trigger('click');
     await flushPromises();
     expect(writeText.mock.calls[1]![0]).toContain('sea_resume_get_context');
     wrapper.unmount();

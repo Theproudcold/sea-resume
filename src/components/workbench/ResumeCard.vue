@@ -30,7 +30,7 @@
 
     <!-- 操作菜单 -->
     <div class="actions" @click.stop>
-      <el-dropdown @command="handleCommand">
+      <el-dropdown trigger="click" @command="handleCommand">
         <el-button text :icon="MoreFilled" :aria-label="`${resume.title}的操作菜单`" />
         <template #dropdown>
           <el-dropdown-menu>
@@ -65,6 +65,7 @@ import { storageManager } from '@/services/storage/StorageManager';
 import ResumeCoverPreview from './ResumeCoverPreview.vue';
 import { formatDate } from '@/utils/helpers';
 import { useWhenVisible } from '@/composables/useWhenVisible';
+import { builtinTemplates } from '@/stores/template';
 
 const props = defineProps<{
   resume: ResumeMeta;
@@ -106,16 +107,9 @@ onBeforeUnmount(() => {
   previewReadGeneration++;
 });
 
-const templateName = computed(() => {
-  const names: Record<string, string> = {
-    modern: '现代简约',
-    professional: '商务专业',
-    creative: '创意设计',
-    minimal: '极简主义',
-    tech: '科技感',
-  };
-  return names[props.resume.templateId] || '未知模板';
-});
+const templateName = computed(() =>
+  builtinTemplates.find((template) => template.id === props.resume.templateId)?.name || '自定义模板',
+);
 
 const formattedDate = computed(() => {
   const date = new Date(props.resume.updatedAt);

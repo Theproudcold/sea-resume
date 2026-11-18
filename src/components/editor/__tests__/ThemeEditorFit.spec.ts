@@ -155,7 +155,7 @@ describe('ThemeEditor one-page fit', () => {
     await nextTick();
     const button = fitButton(host);
     expect(button.attributes('disabled')).toBeDefined();
-    expect(host.text()).toContain('计算中');
+    expect(host.text()).toContain('请在电脑端显示预览，以计算页数并自动适配');
   });
 
   it('rolls back to the theme from before the loop when saving fails', async () => {

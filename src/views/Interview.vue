@@ -43,7 +43,7 @@ watch(focusSelected, value => {
     : undefined;
 }, { deep: true });
 const preview = computed(() => store.session ? interviewerData(store.session) : { context: resume.value ? buildResumeContext(resume.value, { generalizeOrganizations: generalize.value }) : null, settings: interviewSettingsPayload(settings) });
-const statusLabels = { ready: '准备', running: '出题中', answering: '等待你的回答', reviewing: '等待你的回答', paused: '已暂停', interrupted: '已暂停', failed: '这一步没有完成', completed: '已完成' };
+const statusLabels = { ready: '准备', running: '出题中', answering: '等待你的回答', reviewing: '回答已提交', paused: '已暂停', interrupted: '已暂停', failed: '这一步没有完成', completed: '已完成' };
 const processedMain = computed(() => store.session?.turns.filter(turn => !turn.followup && turn.submittedAt).length || 0);
 const progressPercent = computed(() => store.session ? Math.round(processedMain.value / store.session.settings.mainQuestionLimit * 100) : 0);
 // Local rhythm readout: elapsed time is shown here only and is never part of a model request.
@@ -136,16 +136,17 @@ function startPractice(focus: InterviewFocus) {
       <el-alert v-if="storage.initializationWarning" type="warning" :closable="false" :title="storage.initializationWarning" />
       <p v-if="focusNotice" class="focus-notice" role="status">{{ focusNotice }}</p>
       <template v-if="!loading && !store.session">
-        <header class="page-intro"><span class="eyebrow">面试练习室</span><h1>从你的真实经历，开始一场对话</h1><p>先选简历与面试方向，再确认模型和发送范围。一次一题，按自己的节奏练习。</p></header>
-        <div class="setup-layout">
+        <header class="page-intro"><h1>准备模拟面试</h1><p>选择简历和练习方式，确认发送范围后开始。</p></header>
+        <section v-if="!workbench.resumeList.length" class="card" aria-label="尚无简历"><h2>先准备一份简历</h2><p>创建简历后，即可围绕你的经历练习面试。</p><el-button type="primary" @click="router.push('/templates')">创建简历</el-button></section>
+        <div v-else class="setup-layout">
           <div class="setup-main">
             <section class="card setup-card">
               <div class="section-heading"><span class="section-number">01</span><div><h2>选简历和岗位</h2><p>岗位信息帮助面试官更有针对性地提问。</p></div></div>
               <div class="fields">
                 <label>来源简历<select v-model="resumeId" aria-label="来源简历" @change="loadResume"><option value="">选择简历</option><option v-for="item in workbench.resumeList" :key="item.id" :value="item.id">{{ item.title }}</option></select></label>
                 <label>目标岗位<input v-model="settings.targetRole" maxlength="200" placeholder="例如：前端开发工程师" /></label>
-                <label>目标级别<input v-model="settings.level" maxlength="200" /></label>
-                <label>方向<select v-model="settings.direction" aria-label="面试方向"><option>综合</option><option>项目深挖</option><option>岗位专业</option><option>行为面试</option></select></label>
+                <label>目标级别（选填）<input v-model="settings.level" maxlength="200" placeholder="例如：初级、中级" /></label>
+                <label>面试方向<select v-model="settings.direction" aria-label="面试方向"><option>综合</option><option>项目深挖</option><option>岗位专业</option><option>行为面试</option></select></label>
               </div>
             </section>
             <section class="card setup-card">
@@ -160,21 +161,21 @@ function startPractice(focus: InterviewFocus) {
             </section>
             <section class="card setup-card">
               <div class="section-heading"><span class="section-number">03</span><div><h2>确认发送范围</h2><p>开始前看清会发出去的内容。</p></div></div>
-              <InterviewConsent ref="consentForm" :preview="preview" :revision="providerRevision" @confirmed="confirmed" @changed="invalidate" @configure="providerDialog = true" />
               <details class="quiet-details">
-                <summary>更多设置</summary>
+                <summary>题数、岗位要求与保存方式</summary>
                 <label>主问题数<select v-model="settings.mainQuestionLimit" aria-label="主问题数"><option :value="5">5</option><option :value="8">8</option><option :value="12">12</option></select></label>
-                <label>JD（可选，不提供时不会推断目标公司标准）<textarea v-model="settings.jd" rows="4" maxlength="15000" placeholder="粘贴岗位要求；留空也可围绕简历进行面试。" /></label>
-                <div class="setup-options"><label class="check"><input v-model="generalize" type="checkbox" />泛化公司与学校名称（正文请自行检查）</label><label class="check"><input v-model="persistence" type="checkbox" />保存到本机（默认仅内存）</label></div>
+                <label>岗位要求（选填）<textarea v-model="settings.jd" rows="4" maxlength="15000" placeholder="粘贴岗位要求；留空也可围绕简历进行面试。" /></label>
+                <div class="setup-options"><label class="check"><input v-model="generalize" type="checkbox" />发送时替换公司和学校名称（正文需自行检查）</label><label class="check"><input v-model="persistence" type="checkbox" />保存到本机（未勾选时，刷新可能丢失）</label></div>
               </details>
+              <InterviewConsent ref="consentForm" :preview="preview" :revision="providerRevision" @confirmed="confirmed" @changed="invalidate" @configure="providerDialog = true" />
             </section>
-            <div class="start-row"><p>{{ config ? '发送范围已确认，可以开始。' : '完成模型与发送确认后，即可开始面试。' }}</p><el-button type="primary" size="large" :disabled="!resume || !config || store.busy" @click="start">开始面试</el-button></div>
+            <div class="start-row"><p>{{ !resume ? '请先选择一份简历。' : config ? '发送范围已确认，可以开始。' : '请先确认 AI 服务与发送范围。' }}</p><el-button type="primary" size="large" :disabled="!resume || !config || store.busy" @click="start">开始面试</el-button></div>
           </div>
           <aside class="setup-guide card">
             <span class="eyebrow">本次练习</span><h2>{{ settings.mode === 'training' ? '边练边调整' : '接近真实面试的节奏' }}</h2><p>{{ settings.mode === 'training' ? '每次回答后查看教练反馈，整理思路后再继续。' : '过程中不展示教练点评，结束后统一回看与复盘。' }}</p>
             <AiWorkflowSteps :steps="['准备', '问答', '复盘']" :current="0" label="面试流程" />
             <dl class="practice-facts"><div><dt>主问题</dt><dd>{{ settings.mainQuestionLimit }} 道</dd></div><div><dt>追问</dt><dd>每题最多 1 次</dd></div><div><dt>面试方向</dt><dd>{{ settings.direction }}</dd></div></dl>
-            <details class="quiet-details"><summary>请求次数与使用边界</summary><p>初始化 1 次，继续时最多 1 次面试官请求；训练模式每次作答另加 1 次教练请求，最终报告 1 次。手动重试也可能收费。</p><p>Loop Agent 是有界追问循环；项目深挖围绕职责、取舍与验证，不联网、不无限自主执行。</p></details>
+            <details class="quiet-details"><summary>请求次数与使用边界</summary><p>初始化 1 次，继续时最多 1 次面试官请求；训练模式每次作答另加 1 次教练请求，最终报告 1 次。手动重试也可能收费。</p><p>每道主问题最多追问一次，不会自动持续提问。项目深挖侧重你的职责、取舍与验证，不搜索网络。</p></details>
             <p class="guide-footnote">不生成虚构经历，不给录用概率。真实回答，比完美答案更重要。</p>
           </aside>
         </div>
@@ -186,9 +187,9 @@ function startPractice(focus: InterviewFocus) {
           <div class="progress-track" role="progressbar" aria-label="主问题处理进度" :aria-valuenow="processedMain" :aria-valuemax="store.session.settings.mainQuestionLimit" :aria-valuemin="0"><span :style="{ width: `${progressPercent}%` }" /></div>
           <div class="session-controls">
             <AiWorkflowSteps :steps="['准备', '问答', '复盘']" :current="store.session.report ? 2 : 1" :complete="!!store.session.report" label="面试流程" />
-            <div class="actions"><el-button v-if="store.session.status !== 'completed' && !['paused', 'interrupted'].includes(store.session.status)" @click="store.pause">暂停</el-button><el-button v-if="['paused', 'interrupted'].includes(store.session.status)" type="primary" plain @click="store.resume">继续（不自动提问）</el-button><el-button v-if="store.session.status === 'failed'" :disabled="store.busy || !store.consented" type="primary" plain @click="store.retry">重试这一步</el-button><el-button v-if="store.session.status !== 'completed'" :disabled="!store.consented || (store.busy && store.session.pendingStage === 'report')" @click="confirmFinish">结束并生成报告</el-button></div>
+            <div class="actions"><el-button v-if="store.session.status !== 'completed' && !['paused', 'interrupted'].includes(store.session.status)" @click="store.pause">暂停</el-button><el-button v-if="['paused', 'interrupted'].includes(store.session.status)" type="primary" plain @click="store.resume">恢复面试</el-button><el-button v-if="store.session.status === 'failed'" :disabled="store.busy || !store.consented" type="primary" plain @click="store.retry">重试这一步</el-button><el-button v-if="store.session.status !== 'completed'" :disabled="!store.consented || (store.busy && store.session.pendingStage === 'report')" @click="confirmFinish">结束并生成报告</el-button></div>
           </div>
-          <el-button v-if="store.compatibilityError" text type="primary" @click="store.enableCompatibilityMode">选择兼容模式（省略 response_format），然后手动重试</el-button>
+          <el-button v-if="store.compatibilityError" text type="primary" @click="store.enableCompatibilityMode">启用兼容模式（启用后需手动重试）</el-button>
         </section>
         <div class="session-layout" :class="{ 'needs-consent': !store.consented }">
           <div class="session-main">
@@ -197,15 +198,15 @@ function startPractice(focus: InterviewFocus) {
             <InterviewConversation v-else :session="store.session" :busy="store.busy" :consented="store.consented" @answer="store.submitAnswer" @continue="store.continueInterview" @draft="value => draftDirty = value" />
           </div>
           <aside class="session-sidebar">
-            <details v-if="store.session.status !== 'completed'" class="access-panel card" :open="!store.consented"><summary>模型与发送范围 <span>{{ store.consented ? '已确认' : '需要确认' }}</span></summary><InterviewConsent :preview="preview" :frozen-provider="store.session.provider" :revision="providerRevision" :disabled="store.busy" @confirmed="confirmed" @changed="invalidate" @configure="providerDialog = true" /></details>
-            <section class="card session-tools"><div class="section-heading"><div><h2>本次练习</h2><p>{{ store.session.provider.model }}</p></div></div><details class="quiet-details"><summary>请求用量</summary><dl class="practice-facts"><div><dt>请求次数</dt><dd>{{ store.session.usage.calls }}</dd></div><div><dt>输入 tokens</dt><dd>{{ store.session.usage.promptTokens.toLocaleString() }}</dd></div><div><dt>输出 tokens</dt><dd>{{ store.session.usage.completionTokens.toLocaleString() }}</dd></div></dl><p class="microcopy">服务未返回 usage 时为 0，不估算费用。</p></details><div class="save-state" :class="{ 'is-saved': store.session.persistence && !store.unsaved }">{{ store.session.persistence && !store.unsaved ? '✓ 检查点已保存到本机' : '当前有仅内存 / 未保存内容' }}</div><el-button @click="store.setPersistence(true)">{{ store.session.persistence ? '保存当前检查点' : '选择保存到本机' }}</el-button><p v-if="store.storageError" class="error" role="alert">{{ store.storageError }}<el-button text @click="store.setPersistence(false)">仅内存继续</el-button></p><div class="export-actions"><el-button text @click="downloadInterview(store.session, 'json')">导出 JSON</el-button><el-button text @click="downloadInterview(store.session, 'markdown')">导出 Markdown</el-button></div></section>
-            <details class="card resume-summary"><summary>本次简历快照</summary><p class="microcopy">原简历的后续编辑不会改变本次面试。</p><p>{{ store.session.context.basic.summary || store.session.context.basic.title || '未填写个人简介' }}</p><ul><li v-for="item in store.session.context.projects" :key="item.id">{{ item.name }}<span>{{ item.role }}</span></li><li v-for="item in store.session.context.experiences" :key="item.id">{{ item.company }}<span>{{ item.position }}</span></li></ul><details class="quiet-details"><summary>查看完整发送数据</summary><pre>{{ JSON.stringify(store.session.context, null, 2) }}</pre></details></details>
+            <details v-if="store.session.status !== 'completed'" class="access-panel card" :open="!store.consented"><summary>模型与发送范围 <span>{{ store.consented ? '已确认' : '需要确认' }}</span></summary><InterviewConsent :preview="preview" :frozen-provider="store.session.provider" :authorized="store.consented" :revision="providerRevision" :disabled="store.busy" @confirmed="confirmed" @changed="invalidate" @configure="providerDialog = true" /></details>
+            <section class="card session-tools"><div class="section-heading"><div><h2>本次练习</h2><p>{{ store.session.provider.model }}</p></div></div><details class="quiet-details"><summary>请求用量</summary><dl class="practice-facts"><div><dt>请求次数</dt><dd>{{ store.session.usage.calls }}</dd></div><div><dt>输入 tokens</dt><dd>{{ store.session.usage.promptTokens.toLocaleString() }}</dd></div><div><dt>输出 tokens</dt><dd>{{ store.session.usage.completionTokens.toLocaleString() }}</dd></div></dl><p class="microcopy">服务未返回 usage 时为 0，不估算费用。</p></details><div class="save-state" :class="{ 'is-saved': store.session.persistence && !store.unsaved }">{{ store.session.persistence && !store.unsaved ? '已保存到本机' : '尚未保存，刷新可能丢失' }}</div><el-button @click="store.setPersistence(true)">{{ store.session.persistence ? '保存当前进度' : '保存到本机' }}</el-button><p v-if="store.storageError" class="error" role="alert">{{ store.storageError }}<el-button text @click="store.setPersistence(false)">暂不保存，继续练习</el-button></p><div class="export-actions"><el-button text @click="downloadInterview(store.session, 'json')">导出 JSON</el-button><el-button text @click="downloadInterview(store.session, 'markdown')">导出 Markdown</el-button></div></section>
+            <details class="card resume-summary"><summary>本次使用的简历</summary><p class="microcopy">原简历的后续编辑不会改变本次面试。</p><p>{{ store.session.context.basic.summary || store.session.context.basic.title || '未填写个人简介' }}</p><ul><li v-for="item in store.session.context.projects" :key="item.id">{{ item.name }}<span>{{ item.role }}</span></li><li v-for="item in store.session.context.experiences" :key="item.id">{{ item.company }}<span>{{ item.position }}</span></li></ul><details class="quiet-details"><summary>查看完整发送数据</summary><pre>{{ JSON.stringify(store.session.context, null, 2) }}</pre></details></details>
           </aside>
         </div>
       </template>
       <footer class="storage-note">记录仅在当前浏览器保存，不随简历目录迁移，也不包含在简历全量备份中。可在面试记录页导出或删除。</footer>
     </main>
-    <el-dialog v-model="providerDialog" title="配置 AI 服务与会话密钥" width="min(980px, calc(100vw - 32px))"><AiProviderSettingsPanel @saved="providerRevision++" /></el-dialog>
+    <el-dialog v-model="providerDialog" title="配置 AI 服务" width="min(980px, calc(100vw - 32px))"><AiProviderSettingsPanel @saved="providerRevision++" /></el-dialog>
   </div>
 </template>
 

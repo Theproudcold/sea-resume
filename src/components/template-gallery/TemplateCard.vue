@@ -21,11 +21,13 @@
         </el-tag>
       </div>
       <div class="template-card__actions">
-        <el-button @click="$emit('preview')">预览并选择</el-button>
-        <template v-if="template.source === 'custom'">
-          <el-button @click="$emit('rename')">重命名</el-button>
-          <el-button @click="$emit('remove')">删除</el-button>
-        </template>
+        <el-button v-if="template.source !== 'custom'" type="primary" :loading="loading" :disabled="disabled" @click="$emit('select')">{{ canApplyToCurrent ? '使用此模板' : '用此模板新建' }}</el-button>
+        <el-button :type="template.source === 'custom' ? 'primary' : 'default'" :disabled="disabled" @click="$emit('preview')">{{ template.source === 'custom' ? '预览并使用' : '预览' }}</el-button>
+        <details v-if="template.source === 'custom'" class="template-card__manage">
+          <summary>管理模板</summary>
+          <el-button text :disabled="disabled" @click="$emit('rename')">重命名</el-button>
+          <el-button text type="danger" :disabled="disabled" @click="$emit('remove')">删除</el-button>
+        </details>
       </div>
     </div>
   </article>
@@ -38,10 +40,14 @@ import TemplateThumbnail from './TemplateThumbnail.vue';
 defineProps<{
   template: TemplateMetadata;
   demoData: ResumeData;
+  canApplyToCurrent?: boolean;
+  loading?: boolean;
+  disabled?: boolean;
 }>();
 
 defineEmits<{
   preview: [];
+  select: [];
   rename: [];
   remove: [];
 }>();
@@ -138,6 +144,10 @@ defineEmits<{
   font-family: var(--font-display);
 }
 
+.template-card__manage { width: 100%; color: var(--color-muted); font-size: var(--text-sm); }
+.template-card__manage summary { padding: var(--space-xs) 0; cursor: pointer; }
+.template-card__actions :deep(.el-button) { margin-left: 0; }
+
 .template-card__actions {
   display: flex;
   flex-wrap: wrap;
@@ -149,7 +159,7 @@ defineEmits<{
 @media (max-width: 768px) {
   .template-card {
     display: grid;
-    grid-template-columns: 136px minmax(0, 1fr);
+    grid-template-columns: minmax(90px, 32%) minmax(0, 1fr);
     align-items: stretch;
   }
 

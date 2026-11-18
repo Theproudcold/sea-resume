@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { nextTick } from 'vue';
+import { defineComponent, inject, nextTick, ref } from 'vue';
+import { previewPageMetricsKey } from '@/components/preview/previewPageMetrics';
+import { exportPreviewToPDF } from '@/utils/export-pdf';
+import { installElementPlus } from '@/plugins/element';
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
-import ElementPlus, { ElDropdown, ElMessage } from 'element-plus';
+import { ElDropdown, ElMessage } from 'element-plus';
 import Editor from '@/views/Editor.vue';
 import { useResumeStore } from '@/stores/resume';
 import { resetEditorLayoutState, useEditorLayout } from '@/composables/useEditorLayout';
@@ -45,10 +48,16 @@ async function mountEditor() {
   await router.isReady();
   const wrapper = mount(RouterView, {
     global: {
-      plugins: [pinia, router, ElementPlus],
+      plugins: [pinia, router, { install: installElementPlus }],
       stubs: {
-        EditorPanel: { template: '<div class="editor-panel-stub" />' },
-        PreviewPanel: { template: '<div class="preview-panel-stub" />' },
+        EditorPanel: defineComponent({
+          setup: () => ({ previewPages: inject(previewPageMetricsKey)?.pageCount }),
+          template: '<div class="editor-panel-stub">{{ previewPages }}</div>',
+        }),
+        PreviewPanel: defineComponent({
+          setup(_, { expose }) { expose({ pageCount: ref(2), pending: ref(false) }); },
+          template: '<div class="preview-panel-stub" />',
+        }),
         ResumeCanvas: true,
         ResumeQualityPanel: true,
       },
@@ -88,6 +97,27 @@ describe('编辑器布局控制', () => {
     wrapper.unmount();
   });
 
+  it('shares measured page counts with the sibling editing panel', async () => {
+    const { wrapper } = await mountEditor();
+    expect(wrapper.get('.editor-panel-stub').text()).toBe('2');
+    wrapper.unmount();
+  });
+
+  it('prevents repeated downloads until the current export finishes', async () => {
+    const { wrapper } = await mountEditor();
+    let finish!: (pages: number) => void;
+    vi.mocked(exportPreviewToPDF).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await wrapper.get('.export-pdf-button').trigger('click');
+    await flushPromises();
+    dropdownFor(wrapper, '其他格式').vm.$emit('command', 'pdf');
+    await flushPromises();
+    expect(exportPreviewToPDF).toHaveBeenCalledTimes(1);
+    finish(1);
+    await flushPromises();
+    expect(wrapper.get('.export-pdf-button').classes()).not.toContain('is-loading');
+    wrapper.unmount();
+  });
+
   it('布局工具栏可折叠与恢复预览区', async () => {
     const { wrapper } = await mountEditor();
 
@@ -109,6 +139,7 @@ describe('编辑器布局控制', () => {
     togglePane('sidebar');
     await nextTick();
     expect(resolved.value.sidebarVisible).toBe(false);
+    expect(wrapper.find('.section-quick-select').exists()).toBe(true);
 
     await layoutKey(wrapper, '恢复默认布局').trigger('click');
     await nextTick();
@@ -125,7 +156,7 @@ describe('编辑器布局控制', () => {
     expect(isPreviewVisible()).toBe(false);
 
     exportProbe.previewVisible = false;
-    dropdownFor(wrapper, '导出').vm.$emit('command', 'pdf');
+    await wrapper.get('.export-pdf-button').trigger('click');
     await flushPromises();
     expect(exportProbe.previewVisible).toBe(true);
     expect(isPreviewVisible()).toBe(false);

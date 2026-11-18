@@ -70,7 +70,7 @@ describe('StarPolishPanel', () => {
     vi.mocked(requestStarPolish).mockImplementation(() => new Promise((done) => { resolve = done; }));
     await start();
     const signal = vi.mocked(requestStarPolish).mock.calls[0]![4]!.signal!;
-    await panel.findAll('button').find((button) => button.text() === '取消')!.trigger('click');
+    await panel.findAll('button').find((button) => button.text() === '取消润色')!.trigger('click');
     expect(signal.aborted).toBe(true);
     resolve({ explanation: '', suggestions: [] });
     await flushPromises();

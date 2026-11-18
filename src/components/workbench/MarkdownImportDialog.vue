@@ -5,11 +5,14 @@
     width="var(--ui-dialog-width-md)"
     align-center
     destroy-on-close
+    :close-on-click-modal="!loading"
+    :close-on-press-escape="!loading"
+    :show-close="!loading"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <ol class="import-steps" aria-label="导入步骤">
       <li :class="{ 'is-current': !result }" :aria-current="!result ? 'step' : undefined"><b>1</b>选择文件</li>
-      <li :class="{ 'is-current': !!result }" :aria-current="result ? 'step' : undefined"><b>2</b>解析预览</li>
+      <li :class="{ 'is-current': !!result }" :aria-current="result ? 'step' : undefined"><b>2</b>确认内容</li>
     </ol>
 
     <section v-if="!result" class="import-dropzone" :class="{ 'is-dragging': isDragging }"
@@ -18,10 +21,10 @@
       @drop.prevent="handleDrop"
     >
       <el-icon class="import-icon" :size="36"><UploadFilled /></el-icon>
-      <h3>拖放 Markdown 文件到这里</h3>
-      <p>支持 .md / .markdown，文件大小不超过 1 MB。原文件不会被修改。</p>
-      <el-button type="primary" @click="fileInput?.click()">选择 Markdown 文件</el-button>
-      <input ref="fileInput" class="visually-hidden" type="file" accept=".md,.markdown,text/markdown" @change="handleFileChange" />
+      <h3>选择或拖入 Markdown 文件</h3>
+      <p>支持 .md / .markdown，最大 1 MB。仅在本机读取，不上传文件。</p>
+      <el-button type="primary" :loading="reading" @click="fileInput?.click()">选择 Markdown 文件</el-button>
+      <input ref="fileInput" class="visually-hidden" type="file" aria-label="选择 Markdown 文件" accept=".md,.markdown,text/markdown" @change="handleFileChange" />
     </section>
 
     <template v-else>
@@ -48,7 +51,7 @@
       </div>
 
       <el-form label-position="top" class="import-options">
-        <el-form-item label="新简历名称">
+        <el-form-item label="新简历名称" required :error="title.trim() ? '' : '请填写简历名称'">
           <el-input v-model="title" maxlength="80" show-word-limit />
         </el-form-item>
         <el-form-item label="模板">
@@ -68,22 +71,22 @@
           <li v-for="(warning, index) in result.warnings" :key="`${warning.code}-${index}`">{{ warning.message }}<span v-if="warning.detail"> {{ warning.detail }}</span></li>
         </ul>
       </el-alert>
-      <el-alert v-else type="success" :closable="false" show-icon title="章节映射完成，确认后会创建一份新简历。" />
+      <el-alert v-else type="success" :closable="false" show-icon title="已读取简历内容，导入不会覆盖已有简历。" />
 
       <details v-if="result.unknownSections.length" class="unknown-details">
         <summary>已保留的自定义章节（{{ result.unknownSections.length }}）</summary>
         <p v-for="section in result.unknownSections" :key="section">{{ section }}</p>
       </details>
-      <p class="privacy-note">解析在浏览器本地完成。导入内容中的 HTML 不会执行，未知章节会保留为自定义模块。</p>
+      <p class="privacy-note">导入后可继续编辑；未识别的章节已保留。</p>
     </template>
 
     <el-alert v-if="errorMessage" class="import-error" type="error" :closable="false" show-icon :title="errorMessage" />
 
     <template #footer>
       <div class="app-dialog-actions markdown-import-actions">
-        <el-button v-if="result" @click="reset">重新选择文件</el-button>
-        <el-button @click="emit('update:modelValue', false)">取消</el-button>
-        <el-button v-if="result" type="primary" :disabled="!title.trim()" :loading="loading" @click="confirmImport">确认并创建新简历</el-button>
+        <el-button v-if="result" :disabled="loading" @click="reset">重选文件</el-button>
+        <el-button :disabled="loading" @click="emit('update:modelValue', false)">取消</el-button>
+        <el-button v-if="result" type="primary" :disabled="!title.trim()" :loading="loading" @click="confirmImport">创建简历</el-button>
       </div>
     </template>
   </el-dialog>
@@ -91,7 +94,6 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
-import { ElMessage } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
 import type { ResumeData } from '@/types/resume';
 import type { MarkdownImportResult } from '@/types/markdown-import';
@@ -110,10 +112,15 @@ const title = ref('');
 const templateId = ref('modern');
 const errorMessage = ref('');
 const isDragging = ref(false);
+const reading = ref(false);
+let readGeneration = 0;
 
 watch(() => props.modelValue, (visible) => { if (!visible) reset(); });
 
 function reset() {
+  readGeneration += 1;
+  reading.value = false;
+  isDragging.value = false;
   result.value = null;
   title.value = '';
   templateId.value = 'modern';
@@ -122,6 +129,7 @@ function reset() {
 }
 
 async function readFile(file?: File) {
+  if (reading.value || props.loading) return;
   errorMessage.value = '';
   if (!file) return;
   if (!/\.(md|markdown)$/i.test(file.name)) {
@@ -136,26 +144,34 @@ async function readFile(file?: File) {
     errorMessage.value = 'Markdown 文件为空。';
     return;
   }
+  const generation = ++readGeneration;
+  reading.value = true;
   try {
-    const parsed = parseResumeMarkdown(await file.text(), file.name);
+    const content = await file.text();
+    if (generation !== readGeneration) return;
+    const parsed = parseResumeMarkdown(content, file.name);
     result.value = parsed;
     title.value = parsed.sourceTitle;
     templateId.value = parsed.resume.templateId || 'modern';
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '文件读取或解析失败，请检查文件后重试。';
+    if (generation === readGeneration) errorMessage.value = error instanceof Error ? error.message : '读取失败，请重新选择文件。';
+  } finally {
+    if (generation === readGeneration) reading.value = false;
   }
 }
 
 function handleFileChange(event: Event) {
   const target = event.target as HTMLInputElement;
-  void readFile(target.files?.[0]);
+  const file = target.files?.[0];
+  target.value = '';
+  void readFile(file);
 }
 function handleDrop(event: DragEvent) {
   isDragging.value = false;
   void readFile(event.dataTransfer?.files?.[0]);
 }
 function confirmImport() {
-  if (!result.value || !title.value.trim()) return;
+  if (!result.value || !title.value.trim() || props.loading) return;
   emit('confirm', { resume: result.value.resume, title: title.value.trim(), templateId: templateId.value });
 }
 </script>
@@ -380,6 +396,10 @@ function confirmImport() {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }
+
+  .import-dropzone { min-height: 200px; padding: var(--space-md); }
+  .markdown-import-actions { display: flex; flex-wrap: wrap; }
+  .markdown-import-actions :deep(.el-button--primary) { width: 100%; }
 
   .import-heading {
     flex-direction: column;

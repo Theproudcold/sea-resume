@@ -113,4 +113,16 @@ describe('SettingsCenter', () => {
     await reset.trigger('click');
     expect(wrapper.emitted('reset-all')).toHaveLength(1);
   });
+  it('explains the backup empty state while keeping import available', async () => {
+    const wrapper = mountCenter({ initialSection: 'backup', resumes: [] });
+    await flushPromises();
+    expect(wrapper.text()).toContain('还没有简历可导出');
+    const buttons = wrapper.findAll('button');
+    expect(buttons.find(button => button.text().includes('导出 JSON 备份'))!.attributes('disabled')).toBeDefined();
+    expect(buttons.find(button => button.text().includes('清空全部简历'))!.attributes('disabled')).toBeDefined();
+    await buttons.find(button => button.text() === '导入备份')!.trigger('click');
+    expect(wrapper.emitted('import-backup')).toHaveLength(1);
+    expect(navButton(wrapper, '备份与恢复').attributes('aria-current')).toBe('page');
+  });
+
 });

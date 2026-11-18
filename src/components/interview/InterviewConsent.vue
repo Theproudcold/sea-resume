@@ -15,7 +15,7 @@ import {
   type AiProviderProfile,
 } from '@/services/ai/AiSettings';
 
-const props = defineProps<{ preview: unknown; frozenProvider?: { baseUrl: string; model: string }; disabled?: boolean; revision?: number }>();
+const props = defineProps<{ preview: unknown; frozenProvider?: { baseUrl: string; model: string }; disabled?: boolean; revision?: number; authorized?: boolean }>();
 const emit = defineEmits<{ confirmed: [config: AiProviderConfig]; changed: []; configure: [] }>();
 
 // Service and model are configured once in the settings panel; this step only picks
@@ -62,6 +62,12 @@ function invalidate() {
   emit('changed');
 }
 
+function changeConsent() {
+  confirmed.value = false;
+  // Unchecking consent must also revoke the parent's permission to send.
+  emit('changed');
+}
+
 function selectProfile() {
   apiKey.value = '';
   editingKey.value = false;
@@ -93,16 +99,21 @@ function confirm() {
 }
 
 reload();
+// The session form is a new instance; the parent remains the source of active consent.
+watch(() => props.authorized, (authorized) => {
+  if (authorized === undefined) return;
+  consent.value = authorized;
+  confirmed.value = authorized;
+}, { immediate: true });
 watch(() => props.revision, () => { reload(); invalidate(); });
 // Clearing consent must not snap the chosen service back, so reset does not reload saved settings.
 defineExpose({ reset: () => { editingKey.value = false; invalidate(); } });
 </script>
 <template>
   <section class="consent-card">
-    <header class="consent-heading"><div><h2>发送范围与服务确认</h2><p>你决定内容发送到哪里，以及何时开始。</p></div></header>
     <div v-if="!profiles.length" class="empty-provider">
-      <p>还没有可用的模型服务。模型与地址只需在设置中心配置一次，之后每场练习在这里确认发送范围即可。</p>
-      <el-button :disabled="disabled" @click="emit('configure')">打开设置中心配置模型</el-button>
+      <p>还没有可用的 AI 服务。先完成配置，再确认发送范围。</p>
+      <el-button :disabled="disabled" @click="emit('configure')">配置 AI 服务</el-button>
     </div>
     <template v-else>
       <div class="service-summary">
@@ -129,12 +140,13 @@ defineExpose({ reset: () => { editingKey.value = false; invalidate(); } });
           <el-button text :disabled="disabled" @click="editKey">更换密钥</el-button>
         </div>
       </template>
-      <div class="sending-destination"><span>本次发送至</span><strong>{{ selectedProfile?.model || '未填写模型' }}</strong><code>{{ selectedProfile?.baseUrl || '未填写服务地址' }}</code></div>
+      <p v-if="!ready" role="status">{{ needsKey && !effectiveKey ? '请先输入 API Key，再确认发送范围。' : '服务配置不完整，请检查模型和服务地址。' }}</p>
     </template>
-    <details class="privacy-details"><summary>隐私边界与密钥保存方式</summary><p>仅发送白名单快照、岗位 / JD 和后续实际回答。隐藏内容、照片、生日和结构化联系方式不发送；正文仍可能含敏感信息，请检查。Key 默认仅在内存；勾选记住后会以明文保存在本机浏览器，可随时在设置中心清除。</p></details>
-    <details><summary>预览实际发送数据（不含 Key）</summary><pre>{{ JSON.stringify(preview, null, 2) }}</pre></details>
-    <label class="check"><input v-model="consent" data-testid="interview-consent" type="checkbox" :disabled="disabled" @change="confirmed = false" />我已检查发送范围，同意发送至此服务。更换服务 / 模型后重新确认。</label>
-    <div class="consent-actions"><el-button :disabled="disabled || !consent || !ready" @click="confirm">{{ confirmed ? '已确认，可继续' : '确认服务与发送范围' }}</el-button><el-button text :disabled="disabled" @click="consent = false; confirmed = false; emit('changed')">撤回同意</el-button></div>
+    <p>将发送简历可见内容、岗位要求和后续回答。正文可能含敏感信息，请先检查。</p>
+    <details class="privacy-details"><summary>哪些内容不会发送？密钥如何保存？</summary><p>结构化姓名、联系方式、生日、照片和隐藏内容不发送。API Key 默认仅在本次页面会话中保留；勾选记住后会以明文保存在本机浏览器，可在设置中心清除。</p></details>
+    <details><summary>预览发送内容（不含密钥）</summary><pre>{{ JSON.stringify(preview, null, 2) }}</pre></details>
+    <label class="check"><input v-model="consent" data-testid="interview-consent" type="checkbox" :disabled="disabled || !profiles.length" @change="changeConsent" />我已检查发送范围，同意发送至上述 AI 服务。</label>
+    <div class="consent-actions"><el-button :disabled="disabled || !consent || !ready || confirmed" @click="confirm">{{ confirmed ? '已确认，可继续' : '确认服务与发送范围' }}</el-button><el-button v-if="confirmed" text :disabled="disabled" @click="invalidate">撤回同意</el-button></div>
   </section>
 </template>
 <style scoped>

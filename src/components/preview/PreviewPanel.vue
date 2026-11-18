@@ -10,12 +10,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, provide, useTemplateRef } from 'vue';
+import { computed, useTemplateRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
 import { getTemplateComponent } from '@/components/preview/template-registry';
 import ResumeCanvas from './ResumeCanvas.vue';
-import { previewPageMetricsKey } from './previewPageMetrics';
 import { createPrivacyMaskedResume } from '@/utils/privacyMask';
 
 const props = withDefaults(defineProps<{ privacyMode?: boolean }>(), { privacyMode: false });
@@ -25,9 +24,9 @@ const previewData = computed(() => props.privacyMode ? createPrivacyMaskedResume
 
 const currentTemplate = computed(() => getTemplateComponent(previewData.value.templateId));
 
-// 页数由画布的实测结果发布给主题面板；面板不再自己量一遍 DOM。
+// Expose measurements to the common editor parent; sibling panels cannot inject from here.
 const canvasRef = useTemplateRef<InstanceType<typeof ResumeCanvas>>('canvasRef');
-provide(previewPageMetricsKey, {
+defineExpose({
   pending: computed(() => canvasRef.value?.pending ?? true),
   pageCount: computed(() => canvasRef.value?.pageCount ?? null),
 });

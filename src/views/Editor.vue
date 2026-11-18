@@ -10,9 +10,8 @@
     <template v-else>
       <AppHeader
         :title="privacyMode ? '匿名简历' : (data.title || '简历编辑')"
-        subtitle="编辑与预览"
         show-back
-        back-label="简历工作台"
+        back-label="我的简历"
         inline-toolbar
         :editable-title="!privacyMode"
         @back="handleBack"
@@ -23,7 +22,8 @@
             <el-tag v-if="saveStatus === 'saving'" effect="plain">保存中…</el-tag>
             <el-tag v-else-if="saveStatus === 'error'" type="danger" effect="plain" :title="saveError || ''">保存失败</el-tag>
             <el-tag v-else type="success" effect="plain">已保存</el-tag>
-            <el-tag v-if="privacyMode" type="warning" effect="plain">预览及打印已脱敏</el-tag>
+            <el-tag v-if="privacyMode" type="warning" effect="plain">正在隐藏个人信息</el-tag>
+            <el-button v-if="privacyMode" size="small" @click="togglePrivacyMode">返回编辑</el-button>
             <el-button v-if="saveStatus === 'error'" size="small" type="danger" plain @click="retrySave">重试</el-button>
           </div>
         </template>
@@ -39,34 +39,34 @@
             <div class="editor-toolbar__group" role="group" aria-label="去向">
               <el-button link :disabled="privacyMode" @click="showAiAssistant = true">AI 助手</el-button>
               <el-button link :disabled="privacyMode" @click="router.push({ path: '/interview/new', query: { resumeId: data.id } })">模拟面试</el-button>
-              <el-button link @click="goToTemplates">模板</el-button>
+              <el-button link @click="goToTemplates">更换模板</el-button>
             </div>
-            <el-dropdown @command="handleHeaderMenuCommand">
+            <el-dropdown trigger="click" @command="handleHeaderMenuCommand">
               <el-button link>更多<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="privacy"><el-icon><Hide /></el-icon>{{ privacyMode ? '关闭隐私打码' : '隐私打码' }}</el-dropdown-item>
-                  <el-dropdown-item command="quality"><el-icon><CircleCheck /></el-icon>质量检查</el-dropdown-item>
-                  <el-dropdown-item command="external-ai" :disabled="privacyMode"><el-icon><Connection /></el-icon>外部 AI · Codex / Claude Code</el-dropdown-item>
+                  <el-dropdown-item command="privacy"><el-icon><Hide /></el-icon>{{ privacyMode ? '显示个人信息' : '隐藏个人信息' }}</el-dropdown-item>
+                  <el-dropdown-item command="quality"><el-icon><CircleCheck /></el-icon>检查简历</el-dropdown-item>
+                  <el-dropdown-item command="external-ai" :disabled="privacyMode"><el-icon><Connection /></el-icon>连接外部 AI 工具</el-dropdown-item>
                   <el-dropdown-item command="shortcuts"><el-icon><Key /></el-icon>快捷键</el-dropdown-item>
                   <el-dropdown-item command="fullscreen"><el-icon><FullScreen /></el-icon>全屏预览</el-dropdown-item>
                   <el-dropdown-item command="save-template" :disabled="privacyMode"><el-icon><Collection /></el-icon>存为模板</el-dropdown-item>
                   <el-dropdown-item v-if="aiUndoSnapshot" command="undo-ai"><el-icon><RefreshLeft /></el-icon>撤销 AI 修改</el-dropdown-item>
-                  <el-dropdown-item command="import" divided><el-icon><Upload /></el-icon>导入 JSON 副本</el-dropdown-item>
+                  <el-dropdown-item command="import" divided><el-icon><Upload /></el-icon>导入简历备份（JSON）</el-dropdown-item>
                   <el-dropdown-item command="reset" divided class="danger-menu-item"><el-icon><RefreshRight /></el-icon>重置当前简历</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
-            <el-dropdown @command="handleCommand">
-              <el-button type="primary">导出<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+            <el-button type="primary" class="export-pdf-button" :loading="exporting" @click="handleCommand('pdf')">下载 PDF</el-button>
+            <el-dropdown trigger="click" :disabled="exporting" @command="handleCommand">
+              <el-button :disabled="exporting" aria-label="更多导出格式">其他格式<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="pdf"><el-icon><Document /></el-icon>导出为 PDF（与预览一致）</el-dropdown-item>
-                  <el-dropdown-item command="searchable-pdf"><el-icon><Document /></el-icon>导出可搜索 PDF（独立排版）</el-dropdown-item>
+                  <el-dropdown-item command="searchable-pdf"><el-icon><Document /></el-icon>可复制文字的 PDF（排版可能不同）</el-dropdown-item>
                   <el-dropdown-item command="print"><el-icon><Printer /></el-icon>打印预览…</el-dropdown-item>
                   <el-dropdown-item command="image"><el-icon><Picture /></el-icon>导出为图片</el-dropdown-item>
-                  <el-dropdown-item command="json"><el-icon><Folder /></el-icon>导出为 JSON</el-dropdown-item>
-                  <el-dropdown-item command="markdown"><el-icon><Document /></el-icon>导出为 Markdown</el-dropdown-item>
+                  <el-dropdown-item command="json" :disabled="privacyMode"><el-icon><Folder /></el-icon>简历备份（JSON）</el-dropdown-item>
+                  <el-dropdown-item command="markdown" :disabled="privacyMode"><el-icon><Document /></el-icon>Markdown 文本</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -95,6 +95,9 @@
             <span>{{ pane.name }}</span>
           </button>
         </div>
+        <el-select v-if="!sidebarVisible" class="section-quick-select" :model-value="resumeStore.activeSection || 'basic'" aria-label="选择要编辑的内容" @change="openMobileSection">
+          <el-option v-for="section in mobileSections" :key="section.id" :label="section.title" :value="section.id" />
+        </el-select>
         <button type="button" class="layout-bar__reset" aria-label="恢复默认布局" title="恢复默认布局" @click="resetLayout">
           <el-icon aria-hidden="true"><RefreshRight /></el-icon>
           <span>恢复默认布局</span>
@@ -102,8 +105,8 @@
       </div>
 
       <!-- 窄屏：编辑 / 预览切换；预览时仍能点模块名回到编辑 -->
-      <div class="mobile-tabs">
-        <el-radio-group v-model="activeTab" class="w-full">
+      <div v-if="!privacyMode" class="mobile-tabs">
+        <el-radio-group v-model="activeTab" class="w-full" aria-label="编辑与预览">
           <el-radio-button value="edit" class="w-1/2">编辑</el-radio-button>
           <el-radio-button value="preview" class="w-1/2">预览</el-radio-button>
         </el-radio-group>
@@ -138,7 +141,7 @@
           @toggle="togglePane('editor')"
           @reset="resetLayout"
         />
-        <PreviewPanel v-show="previewVisible || privacyMode" :privacy-mode="privacyMode" :class="{ 'mobile-hidden': activeTab === 'edit', 'mobile-active': activeTab === 'preview' }" />
+        <PreviewPanel ref="previewPanelRef" v-show="previewVisible || privacyMode" :privacy-mode="privacyMode" :class="{ 'mobile-hidden': activeTab === 'edit', 'mobile-active': activeTab === 'preview' }" />
       </div>
 
       <!-- 全屏预览对话框 -->
@@ -169,7 +172,7 @@
         @applied="router.push(`/editor/${$event}`)"
       />
       <ExternalAiPanel v-if="showExternalAi" :visible="showExternalAi" @update:visible="showExternalAi = $event" />
-      <el-dialog v-model="showAiSettings" title="AI 模型配置" width="var(--ui-dialog-width-md)" align-center class="app-dialog ai-model-dialog">
+      <el-dialog v-model="showAiSettings" title="AI 服务设置" width="var(--ui-dialog-width-md)" align-center class="app-dialog ai-model-dialog">
         <AiProviderSettingsPanel @saved="handleAiSettingsSaved" />
       </el-dialog>
       <ResumeQualityPanel v-model="showQualityPanel" :issues="qualityIssues" @navigate="(section, target) => jumpToQualitySection(section, target)" />
@@ -195,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, nextTick, watch, defineAsyncComponent, markRaw } from 'vue';
+import { ref, onMounted, onUnmounted, computed, nextTick, watch, defineAsyncComponent, markRaw, provide } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import { ElMessage, ElLoading, ElMessageBox } from 'element-plus';
@@ -214,6 +217,7 @@ import PanelSplitter from '@/components/common/PanelSplitter.vue';
 import EditorPanel from '@/components/editor/EditorPanel.vue';
 import PreviewPanel from '@/components/preview/PreviewPanel.vue';
 import ResumeCanvas from '@/components/preview/ResumeCanvas.vue';
+import { previewPageMetricsKey } from '@/components/preview/previewPageMetrics';
 import { useEditorLayout } from '@/composables/useEditorLayout';
 import { EDITOR_WIDTH_MIN } from '@/utils/editorLayout';
 import type { ResumeData } from '@/types/resume';
@@ -238,8 +242,14 @@ const { data, saveStatus, saveError, canUndo, canRedo } = storeToRefs(resumeStor
 
 const loading = ref(true);
 const showFullscreen = ref(false);
+const exporting = ref(false);
 const activeTab = ref<'edit' | 'preview'>('edit');
 const previewNavigationKey = ref(0);
+const previewPanelRef = ref<InstanceType<typeof PreviewPanel> | null>(null);
+provide(previewPageMetricsKey, {
+  pending: computed(() => previewPanelRef.value?.pending ?? true),
+  pageCount: computed(() => previewPanelRef.value?.pageCount ?? null),
+});
 
 // 三栏宽度、折叠与 A4 优先策略；容器宽度由 ResizeObserver 同步。
 const {
@@ -286,7 +296,7 @@ const qualityIssues = computed(() => checkResumeQuality(data.value));
 const qualityWarningCount = computed(() => qualityIssues.value.filter((issue) => issue.severity === 'warning').length);
 /** Only real problems justify "质量问题"; suggestions alone must not look like errors. */
 const qualityButtonLabel = computed(() => qualityWarningCount.value
-  ? `质量问题 ${qualityIssues.value.length}`
+  ? `${qualityWarningCount.value} 项待完善`
   : `${qualityIssues.value.length} 项建议`);
 // Bumped on every jump and on unmount so an outdated retry loop stops touching a stale page.
 let qualityJumpToken = 0;
@@ -296,6 +306,8 @@ const togglePrivacyMode = () => {
     activeTab.value = 'preview';
     showAiAssistant.value = false;
     showExternalAi.value = false;
+  } else {
+    activeTab.value = 'edit';
   }
 };
 
@@ -533,6 +545,11 @@ const saveCurrentAsTemplate = async (payload: { name: string; description: strin
 };
 
 const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' | 'markdown' | 'print' | 'import' | 'reset') => {
+  if (exporting.value) return;
+  if (privacyMode.value && (type === 'json' || type === 'markdown')) {
+    ElMessage.warning('备份和 Markdown 包含完整个人信息，请先返回编辑再导出。');
+    return;
+  }
   if (type === 'import') {
     try {
       const imported = await importFromJSON();
@@ -561,10 +578,26 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
     }
     return;
   }
+  exporting.value = true;
+  try {
+    await exportResume(type);
+  } catch (error) {
+    ElMessage.error(`导出失败：${describeError(error)}`);
+  } finally {
+    exporting.value = false;
+  }
+};
+
+async function exportResume(type: 'pdf' | 'searchable-pdf' | 'image' | 'json' | 'markdown' | 'print') {
   try {
     await resumeStore.flushSave();
   } catch (error) {
     ElMessage.error(`保存失败，未开始导出：${describeError(error)}`);
+    return;
+  }
+  // Privacy may change while a slow filesystem save is pending.
+  if (privacyMode.value && (type === 'json' || type === 'markdown')) {
+    ElMessage.warning('备份和 Markdown 包含完整个人信息，请先返回编辑再导出。');
     return;
   }
   if (type === 'markdown') {
@@ -586,9 +619,7 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
     background: 'rgba(0, 0, 0, 0.7)',
   });
 
-  const filename = type === 'pdf' || type === 'searchable-pdf'
-    ? previewData.value.title || previewData.value.basic.name || 'resume'
-    : data.value.title || data.value.basic.name || 'resume';
+  const filename = previewData.value.title || previewData.value.basic.name || 'resume';
 
   try {
     switch (type) {
@@ -808,6 +839,8 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
   border-bottom: var(--rule-hair) solid var(--color-rule);
   background: var(--color-paper-3);
 }
+
+.section-quick-select { width: 160px; }
 
 .layout-bar__label {
   color: var(--color-muted);

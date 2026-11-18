@@ -1,11 +1,11 @@
 import { createApp } from 'vue';
 import { createPinia } from 'pinia';
-import './styles/main.scss';
-
 import App from './App.vue';
 import router from './router';
 import { installElementPlus } from './plugins/element';
 import { installGlobalErrorReporting, reportRuntimeError } from './utils/globalErrorReporting';
+// Load product styles after Element Plus so its defaults cannot override our themes.
+import './styles/main.scss';
 
 const app = createApp(App);
 

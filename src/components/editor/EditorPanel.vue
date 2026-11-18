@@ -187,7 +187,7 @@ const props = withDefaults(defineProps<{ previewNavigationKey?: number }>(), { p
 type EditorScrollbar = { scrollTo: (options: ScrollToOptions) => void };
 const editorScrollbar = ref<EditorScrollbar | null>(null);
 
-const selectedSectionId = ref<string>(resumeStore.activeSection || data.value.sectionOrder[0] || 'basic');
+const selectedSectionId = ref<string>(resumeStore.activeSection || 'basic');
 const isDraggingSections = ref(false);
 
 const selectSection = (id: string) => {
@@ -412,7 +412,7 @@ watch(() => data.value.id, () => {
   transitionMinHeight.value = '';
   selectedSectionId.value = validSectionIds.value.includes(resumeStore.activeSection || '')
     ? resumeStore.activeSection!
-    : data.value.sectionOrder.find(id => validSectionIds.value.includes(id)) || 'basic';
+    : 'basic';
 });
 
 const transitionShell = ref<HTMLElement | null>(null);

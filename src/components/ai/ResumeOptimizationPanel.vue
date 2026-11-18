@@ -1,52 +1,52 @@
 <template>
   <section class="optimization-panel" aria-label="简历优化">
-    <header><span class="panel-eyebrow">AI 简历工作室</span><h2>让真实经历，更清楚地被看见</h2><p>分析、补充、改写与单轮审查。通常 3 次模型调用，每项修改由你决定。</p></header>
+    <header><h2>简历优化</h2><p>先分析，再逐项确认修改。通常请求 AI 3 次，可能产生费用。</p></header>
     <AiWorkflowSteps :steps="['分析', '补充', '改写', '审查', '采纳']" :current="workflowIndex" :complete="workspace.run?.stage === 'completed'" label="简历优化步骤" />
     <div class="provider">
       <div><strong>{{ providerLabel }}</strong><p>{{ settings?.model || '未配置模型' }} · {{ keyAvailable ? '服务已就绪' : '需要完成服务配置' }}</p></div>
-      <button type="button" @click="emit('configure')">配置模型 / 密钥</button>
+      <button type="button" @click="emit('configure')">配置 AI 服务</button>
       <button type="button" @click="refreshProvider">刷新配置</button>
     </div>
-    <p class="notice">不发送照片、生日、姓名或联系方式；只发送可见白名单内容。正文、JD 和补充仍可能含敏感信息，请检查预览。自然表达不是 AI 率检测，不承诺规避检测。</p>
+    <p class="notice">仅发送简历可见正文，不发送照片、生日、结构化姓名或联系方式。正文、岗位要求和补充回答仍可能含敏感信息，请检查预览。</p>
     <fieldset :disabled="workspace.busy || !!workspace.run || applying">
       <legend>目标与风格</legend>
       <div class="form-grid">
         <label>目标岗位（可选）<input v-model="options.target" maxlength="200" /></label>
         <label>目标公司（可选）<input v-model="options.company" maxlength="200" /></label>
       </div>
-      <label>JD（可选；不提供时做通用诊断）<textarea v-model="options.jd" rows="4" maxlength="20000" /></label>
+      <label>岗位要求（选填）<textarea v-model="options.jd" rows="4" maxlength="20000" /></label>
       <label>表达风格<select v-model="options.style"><option value="concise">简洁直接</option><option value="professional">专业克制</option></select></label>
-      <label>个人表达样例（仅作风格参考，不视为事实）<textarea v-model="options.personalSample" rows="2" maxlength="3000" /></label>
-      <label class="check"><input v-model="options.generalizeOrganizations" type="checkbox" />泛化公司 / 学校名称（始终禁止修改组织与日期）</label>
+      <details><summary>提供表达样例（选填）</summary><label>你平时的表达方式<textarea v-model="options.personalSample" rows="2" maxlength="3000" placeholder="仅参考语言风格，不会把样例当作你的经历。" /></label><p class="muted">仅参考风格，不视为事实；不提供 AI 生成率检测，也不承诺规避检测。</p></details>
+      <label class="check"><input v-model="options.generalizeOrganizations" type="checkbox" />发送时替换公司和学校名称（正文中的名称需自行检查）</label>
       <div v-if="incomingFacts.length" class="notice">
         <strong>面试回补事实：请再次逐项确认真实性和关联目标</strong>
-        <label v-for="fact in incomingFacts" :key="fact.id" class="check"><input v-model="acceptedFacts[fact.id]" type="checkbox" />{{ fact.text }} · 关联：{{ fact.targetId }}</label>
+        <label v-for="fact in incomingFacts" :key="fact.id" class="check"><input v-model="acceptedFacts[fact.id]" type="checkbox" />{{ fact.text }} · 关联：{{ targetLabel(fact.targetId) }}</label>
         <p>仅用户原回答里的真实事实；教练提示、参考答案和知识讲解不是经历证据。</p>
       </div>
     </fieldset>
-    <details><summary>发送预览（不含 API Key / 私有字段）</summary><pre data-testid="sending-preview">{{ sendingPreview }}</pre></details>
-    <label class="check"><input v-model="consent" type="checkbox" :disabled="workspace.busy || applying" data-testid="consent" />我确认以上发送范围及当前服务 / 模型，允许本次固定流程发送。</label>
-    <label class="check"><input :checked="workspace.saveLocally" type="checkbox" @change="workspace.setPersistence(checked($event))" />保存到本机（可选，未勾选仅内存保留）</label>
-    <p class="muted">AI 记录仅在当前浏览器，不随简历目录迁移，不纳入全量简历备份。恢复后仍需确认发送范围；未记住密钥时需重新输入 API Key。</p>
+    <details><summary>预览发送内容（不含密钥）</summary><pre data-testid="sending-preview">{{ sendingPreview }}</pre></details>
+    <label class="check"><input v-model="consent" type="checkbox" :disabled="workspace.busy || applying" data-testid="consent" />我已检查发送范围，同意发送至上述 AI 服务进行本次优化。</label>
+    <label class="check"><input :checked="workspace.saveLocally" type="checkbox" @change="workspace.setPersistence(checked($event))" />保存到本机（未勾选时，刷新可能丢失）</label>
+    <details><summary>关于记录保存</summary><p class="muted">AI 记录仅在当前浏览器，不随简历目录迁移，不纳入全量简历备份。恢复后仍需确认发送范围；未记住密钥时需重新输入 API Key。</p></details>
     <p v-if="workspace.unsaved || answerDirty" class="notice">存在未保存的优化内容 / 补充输入，关闭或刷新可能丢失；可选择保存到本机。</p>
     <div class="actions">
       <button v-if="!workspace.run" type="button" data-testid="start" :disabled="!canSend" @click="start">开始分析</button>
       <button v-if="workspace.busy" type="button" @click="workspace.cancel">取消请求</button>
-      <button v-if="workspace.run && !workspace.busy" type="button" :disabled="applying" @click="restart">重新配置 / 生成</button>
+      <button v-if="workspace.run && !workspace.busy" type="button" :disabled="applying" @click="restart">重新开始</button>
     </div>
     <div v-if="workspace.run" class="run-content">
-      <p class="run-status" role="status"><strong>当前步骤：{{ stageLabel }}</strong><span>请求 {{ workspace.run.usage.calls }} 次 · 输入 {{ workspace.run.usage.promptTokens }} / 输出 {{ workspace.run.usage.completionTokens }} tokens（服务未返回时为 0）</span></p>
+      <p class="run-status" role="status"><strong>{{ stageLabel }}</strong></p><details><summary>请求用量 · {{ workspace.run.usage.calls }} 次</summary><p>输入 {{ workspace.run.usage.promptTokens }} / 输出 {{ workspace.run.usage.completionTokens }} tokens（服务未返回时为 0，不估算费用）</p></details>
       <details v-if="workspace.run.analysis" open>
-        <summary>简要分析结论与执行步骤（不是思维链）</summary>
+        <summary>分析结果</summary>
         <p>{{ workspace.run.analysis.summary }}</p>
         <ul><li v-for="(issue, i) in workspace.run.analysis.issues" :key="i">{{ issue }}</li></ul>
         <div v-for="(match, i) in workspace.run.analysis.matches" :key="i" class="match"><strong>{{ match.requirement }}</strong><p>{{ match.assessment }}</p><small>来源：{{ match.sourceRefs.join('、') || '未找到现有证据' }}</small></div>
       </details>
-      <div v-if="workspace.run.facts.length" class="notice"><strong>本次已确认事实</strong><p v-for="fact in workspace.run.facts" :key="fact.id">{{ fact.text }} · {{ fact.targetId }}</p></div>
+      <div v-if="workspace.run.facts.length" class="notice"><strong>本次已确认事实</strong><p v-for="fact in workspace.run.facts" :key="fact.id">{{ fact.text }} · {{ targetLabel(fact.targetId) }}</p></div>
       <form v-if="workspace.run.stage === 'supplement'" @submit.prevent="continueRun(false)">
         <h3>事实补充（最多 3 题，可跳过）</h3>
         <div v-for="question in workspace.run.analysis?.questions" :key="question.id" class="question">
-          <label>{{ question.text }} · 关联：{{ question.targetId }}<textarea v-model="answers[question.id]" rows="3" maxlength="3000" /></label>
+          <label>{{ question.text }} · 关联：{{ targetLabel(question.targetId) }}<textarea v-model="answers[question.id]" rows="3" maxlength="3000" /></label>
           <label class="check"><input v-model="answerConfirmed[question.id]" type="checkbox" />我确认这段补充是真实个人经历，可用于该目标条目</label>
         </div>
         <p v-if="!workspace.run.analysis?.questions.length">没有待补充问题，也可以继续。</p>
@@ -54,10 +54,10 @@
       </form>
       <div v-if="['ready', 'completed'].includes(workspace.run.stage)">
         <h3>逐项审阅</h3>
-        <p class="notice">同模型审查不是独立事实核验，请亲自核对。被拒绝项不可应用；待确认项必须明确勾选真实性。</p>
-        <p v-if="!workspace.run.suggestions.length">本次没有修改建议，这是有效结果；原简历保持不变。</p>
+        <p class="notice">AI 审查不能代替事实核实，请逐项核对。未通过的建议不可应用，待确认的建议需勾选真实性。</p>
+        <p v-if="!workspace.run.suggestions.length">本次没有修改建议，原简历保持不变。</p>
         <article v-for="suggestion in workspace.run.suggestions" :key="suggestion.id" class="suggestion" :data-review="suggestion.review">
-          <strong>{{ operationKey(suggestion.operation) }} · {{ suggestion.rejected ? '用户已拒绝' : reviewLabels[suggestion.review] }}</strong>
+          <strong>{{ operationLabel(suggestion.operation) }} · {{ suggestion.rejected ? '用户已拒绝' : reviewLabels[suggestion.review] }}</strong>
           <div class="diff"><div><small>原文</small><p>{{ display(suggestion.before) || '（空）' }}</p></div><div><small>建议</small><p>{{ display(suggestion.operation.value) || '（空）' }}</p></div></div>
           <p>理由：{{ suggestion.reason }}</p><p v-if="suggestion.requirement">对应要求：{{ suggestion.requirement }}</p>
           <p>审查：{{ suggestion.reviewReason }}</p>
@@ -71,10 +71,10 @@
           <label v-if="applyMode === 'current'" class="check"><input v-model="overwriteConfirmed" type="checkbox" :disabled="applying" />我明确同意更新来源简历，保留现有撤销历史</label>
           <button type="button" data-testid="apply" :disabled="!selectedCount || applying || (applyMode === 'current' && !overwriteConfirmed)" @click="applySelected">{{ applying ? '应用中…' : `应用 ${selectedCount} 条已选建议` }}</button>
         </div>
-        <p v-if="workspace.run.stage === 'completed'">已应用，简历 ID：{{ workspace.run.appliedResumeId }}。可用该版本开始模拟面试。</p>
+        <p v-if="workspace.run.stage === 'completed'">已应用所选建议，可用更新后的简历开始模拟面试。</p>
       </div>
       <label v-if="workspace.compatibilityError" class="check"><input v-model="compatible" type="checkbox" />兼容模式：省略 response_format 后手动重试（仍校验 JSON）</label>
-      <button v-if="['failed', 'cancelled'].includes(workspace.run.stage)" type="button" data-testid="retry" :disabled="!canSend" @click="retry">仅重试 {{ workspace.run.failedStep }} 步骤（可能产生费用）</button>
+      <button v-if="['failed', 'cancelled'].includes(workspace.run.stage)" type="button" data-testid="retry" :disabled="!canSend" @click="retry">重试{{ stageNames[workspace.run.failedStep || ''] || '上一步' }}（可能产生费用）</button>
     </div>
     <p v-if="workspace.error || localError" role="alert" class="error">{{ localError || workspace.error }}</p>
     <p v-if="workspace.storageError" role="alert" class="error">{{ workspace.storageError }} <button type="button" @click="workspace.persist">重试保存</button><button type="button" @click="workspace.setPersistence(false)">仅内存继续</button></p>
@@ -82,7 +82,7 @@
     <details @toggle="historyOpened"><summary>本机优化历史</summary>
       <button type="button" @click="workspace.refreshHistory">刷新记录</button>
       <p v-if="!workspace.history.length">没有本机优化记录。</p>
-      <div v-for="record in workspace.history" :key="record.id" class="history-row"><span>{{ record.options.target || '通用优化' }} · {{ record.updatedAt }} · {{ record.stage }}</span><button type="button" :disabled="workspace.busy || applying" @click="restore(record.id)">恢复</button><button type="button" :disabled="workspace.busy || applying" @click="deleteRecord(record.id)">删除</button></div>
+      <div v-for="record in workspace.history" :key="record.id" class="history-row"><span>{{ record.options.target || '通用优化' }} · {{ record.updatedAt }} · {{ stageNames[record.stage] || '已保存' }}</span><button type="button" :disabled="workspace.busy || applying" @click="restore(record.id)">恢复</button><button type="button" :disabled="workspace.busy || applying" @click="deleteRecord(record.id)">删除</button></div>
     </details>
   </section>
 </template>
@@ -90,10 +90,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import type { ResumeData } from '@/types/resume';
-import type { OptimizationFact, OptimizationOptions } from '@/types/ai';
+import type { OptimizationFact, OptimizationOperation, OptimizationOptions } from '@/types/ai';
 import { AI_PROVIDER_PRESETS, getAiSessionApiKey, loadAiModelSettings, isAiProviderReady, toAiProviderConfig } from '@/services/ai/AiSettings';
 import { buildResumeContext, aiPlainText } from '@/services/ai/resumeContext';
-import { applyOptimizationSuggestions, operationKey, optimizationSources, suggestionApplicable } from '@/services/ai/resumeOptimization';
+import { applyOptimizationSuggestions, optimizationSources, suggestionApplicable } from '@/services/ai/resumeOptimization';
 import { useAiWorkspaceStore } from '@/stores/aiWorkspace';
 import { useResumeStore } from '@/stores/resume';
 import { useWorkbenchStore } from '@/stores/workbench';
@@ -135,11 +135,28 @@ const sources = computed(() => workspace.run ? optimizationSources(workspace.run
 const answerDirty = computed(() => !workspace.saveLocally && Object.values(answers).some(value => !!value?.trim()));
 const invalidAnswers = computed(() => workspace.run?.analysis?.questions.some(q => !!answers[q.id]?.trim() && !answerConfirmed[q.id]) || false);
 const selectedCount = computed(() => workspace.run?.suggestions.filter(suggestionApplicable).length || 0);
-const stageNames: Record<string, string> = { configuration: '配置', analysis: '岗位与简历分析', supplement: '等待用户补充', rewrite: '内容改写', review: '单轮内容审查', ready: '待采纳', completed: '完成', failed: '失败', cancelled: '已取消 / 中断' };
+const stageNames: Record<string, string> = { configuration: '准备开始', analysis: '分析简历', supplement: '待补充经历', rewrite: '改写内容', review: '审查建议', ready: '待确认建议', completed: '已应用', failed: '请求未完成', cancelled: '已取消' };
 const workflowStages: Record<string, number> = { configuration: 0, analysis: 0, supplement: 1, rewrite: 2, review: 3, ready: 4, completed: 4 };
 const workflowIndex = computed(() => workflowStages[workspace.run?.failedStep && ['failed', 'cancelled'].includes(workspace.run.stage) ? workspace.run.failedStep : workspace.run?.stage || 'configuration'] || 0);
 const stageLabel = computed(() => stageNames[workspace.run?.stage || 'configuration']);
-const reviewLabels = { unreviewed: '未审查', pass: '可采纳', confirm: '待确认', reject: '审查拒绝' };
+const reviewLabels = { unreviewed: '未审查', pass: '可采纳', confirm: '待确认', reject: '未通过审查' };
+function targetLabel(id: string): string {
+  if (id === 'basic') return '个人简介与求职意向';
+  const context = workspace.run?.context || buildResumeContext(props.resume, options);
+  const targets = [
+    ...context.experiences.map(item => ({ id: item.id, label: `工作经历 · ${item.company || item.position || '未命名经历'}` })),
+    ...context.projects.map(item => ({ id: item.id, label: `项目 · ${item.name || '未命名项目'}` })),
+    ...context.education.map(item => ({ id: item.id, label: `教育经历 · ${item.school || '未命名学校'}` })),
+    ...context.skills.map(item => ({ id: item.id, label: `技能 · ${item.category || '未命名分类'}` })),
+    ...context.customBlocks.map(item => ({ id: item.id, label: item.title || '自定义内容' })),
+  ];
+  return targets.find(item => item.id === id)?.label || '原条目不可用';
+}
+function operationLabel(operation: OptimizationOperation): string {
+  const fields: Record<string, string> = { title: '标题', summary: '个人简介', position: '职位', description: '描述', highlights: '工作亮点', role: '职责', techStack: '技术栈', degree: '学历', major: '专业', category: '技能分类', items: '技能条目', content: '正文' };
+  if (operation.type === 'set_basic') return operation.field === 'title' ? '求职意向' : '个人简介';
+  return `${targetLabel(operation.id)} · ${fields[operation.field] || '内容'}`;
+}
 const display = (value: string | string[]) => Array.isArray(value) ? value.map(v => aiPlainText(v)).join('、') : aiPlainText(value);
 function clearAnswers() { for (const key of Object.keys(answers)) delete answers[key]; for (const key of Object.keys(answerConfirmed)) delete answerConfirmed[key]; }
 function refreshProvider() {

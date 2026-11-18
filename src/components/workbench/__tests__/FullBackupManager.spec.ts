@@ -75,7 +75,7 @@ describe('FullBackupManager', () => {
     expect(preview.counts.idConflicts).toBe(1);
     expect(preview.counts.nameConflicts).toBe(1);
 
-    await wrapper.findAll('button').find((button) => button.text().includes('按预览结果安全恢复'))?.trigger('click');
+    await wrapper.find('.restore-button')?.trigger('click');
     await flushPromises();
     const restored = vi.mocked(storageManager.save).mock.calls[0]?.[0];
     expect(restored).toBeTruthy();
@@ -92,11 +92,12 @@ describe('FullBackupManager', () => {
     const save = vi.mocked(storageManager.save);
     save.mockResolvedValueOnce().mockRejectedValueOnce(new Error('disk full')).mockResolvedValueOnce();
 
-    const restoreButton = () => wrapper.findAll('button').find((button) => button.text().includes('按预览结果安全恢复'));
+    const restoreButton = () => wrapper.find('.restore-button');
     await restoreButton()?.trigger('click');
     await flushPromises();
     expect(save).toHaveBeenCalledTimes(2);
     expect((wrapper.vm as any).$.setupState.errorMessage).toContain('新增 1 份');
+    expect(restoreButton().text()).toBe('继续恢复剩余 1 份');
 
     await restoreButton()?.trigger('click');
     await flushPromises();
@@ -130,4 +131,28 @@ describe('FullBackupManager', () => {
     expect(state.errorMessage).toBe('');
     expect(state.preview.items).toHaveLength(1);
   });
+  it('keeps export errors visible outside the restore tab', async () => {
+    vi.mocked(storageManager.list).mockRejectedValueOnce(new Error('无法读取本地文件夹'));
+    const wrapper = createWrapper();
+    await wrapper.findAll('button').find(button => button.text() === '下载全部简历备份')!.trigger('click');
+    await flushPromises();
+    const error = wrapper.get('.backup-error');
+    expect(error.attributes('title')).toContain('无法读取本地文件夹');
+    expect(error.element.closest('section')).toBeNull();
+  });
+
+  it('blocks changing files and closing while a restore is writing', async () => {
+    let finish!: () => void;
+    vi.mocked(storageManager.save).mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    const wrapper = createWrapper();
+    await chooseBackup(wrapper, JSON.stringify(createFullBackup([incoming])));
+    await wrapper.get('.restore-button').trigger('click');
+    await flushPromises();
+    expect(wrapper.findAll('button').find(button => button.text() === '重选备份文件')!.attributes('disabled')).toBeDefined();
+    expect(wrapper.findAll('button').find(button => button.text() === '关闭')!.attributes('disabled')).toBeDefined();
+    finish();
+    await flushPromises();
+    expect(storageManager.save).toHaveBeenCalledTimes(1);
+  });
+
 });

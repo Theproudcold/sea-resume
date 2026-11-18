@@ -11,18 +11,20 @@
     <el-tabs v-model="activeTab">
       <el-tab-pane name="create" label="创建岗位版本">
         <el-form label-position="top">
-          <el-form-item label="基于简历">
+          <el-form-item label="基于简历" required>
             <el-select v-model="sourceId" class="w-full" placeholder="选择基础简历">
               <el-option v-for="resume in resumes" :key="resume.id" :label="resume.title" :value="resume.id" />
             </el-select>
           </el-form-item>
           <div class="target-grid">
-            <el-form-item label="版本名称"><el-input v-model="versionName" maxlength="80" placeholder="例如：Acme 前端工程师" /></el-form-item>
-            <el-form-item label="目标公司"><el-input v-model="company" maxlength="80" placeholder="选填" /></el-form-item>
-            <el-form-item label="目标岗位"><el-input v-model="position" maxlength="80" placeholder="例如：前端工程师" /></el-form-item>
+            <el-form-item label="版本名称" required><el-input v-model="versionName" maxlength="80" placeholder="例如：Acme 前端工程师" /></el-form-item>
+            <el-form-item label="目标公司（选填）"><el-input v-model="company" maxlength="80" placeholder="选填" /></el-form-item>
+            <el-form-item label="目标岗位（选填）"><el-input v-model="position" maxlength="80" placeholder="例如：前端工程师" /></el-form-item>
           </div>
         </el-form>
-        <p class="help-text">新版本会复制当前内容；后续修改不会影响原简历。</p>
+        <p class="help-text">新版本是独立副本，修改不会影响原简历。</p>
+        <p v-if="!resumes.length" class="help-text">请先在工作台创建一份简历，再为不同岗位创建版本。</p>
+        <el-alert v-if="createError" type="error" :closable="false" :title="createError" />
         <el-button type="primary" :loading="creating" :disabled="!sourceId || !versionName.trim()" @click="createVersion">创建独立版本</el-button>
       </el-tab-pane>
 
@@ -43,17 +45,21 @@
           </label>
           <el-button :type="compared && differences.length ? 'default' : 'primary'" :loading="comparing" :disabled="!beforeId || !afterId || beforeId === afterId || comparing" @click="compare">查看差异</el-button>
         </div>
-        <p class="compare-hint">仅比较简历正文；模板、配色和排版设置不会计入差异。</p>
+        <p v-if="beforeId && beforeId === afterId" class="compare-hint" role="status">请选择两份不同的简历。</p>
+        <p v-else class="compare-hint">比较正文内容，不含模板和排版。</p>
 
         <el-alert v-if="compareError" class="compare-error" type="error" :closable="false" :title="compareError" />
         <el-empty v-else-if="compared && !differences.length" description="这两份简历的正文内容完全一致。" />
-        <el-empty v-else-if="!compared" description="选择两份简历后查看正文变化。" />
+        <p v-else-if="comparing" class="compare-hint" role="status">正在比较简历…</p>
+        <el-empty v-else-if="!compared" :description="resumes.length < 2 ? '需要两份简历才能比较' : '选择两份简历，查看内容有什么不同'">
+          <el-button v-if="resumes.length === 1" @click="activeTab = 'create'">创建岗位版本</el-button>
+        </el-empty>
 
         <section v-else class="compare-results" aria-label="简历内容差异">
           <header class="compare-summary">
             <div>
               <strong>{{ differences.length }} 处内容变化</strong>
-              <p>按章节整理；同一经历按内容身份匹配，不受列表顺序影响。</p>
+              <p>勾选要采用的修改，再另存为新简历。</p>
             </div>
             <div class="change-counts" aria-label="变化统计">
               <span class="count-chip added">新增 <b>{{ changeCounts.added }}</b></span>
@@ -159,14 +165,18 @@
               </article>
             </section>
           </div>
-          <el-empty v-else description="当前筛选条件下没有差异。" />
+          <el-empty v-else description="没有匹配的差异">
+            <el-button @click="searchText = ''; sectionFilter = 'all'; typeFilter = 'all'">清除筛选</el-button>
+          </el-empty>
         </section>
       </el-tab-pane>
       <el-tab-pane name="history" label="岗位版本历史">
         <p class="history-intro">这里汇总保存过的岗位版本及其来源。岗位版本是独立副本，原简历不会被覆盖。</p>
         <el-alert v-if="historyError" type="error" :closable="false" :title="historyError" />
         <p v-else-if="historyLoading" class="history-state">正在读取岗位版本…</p>
-        <el-empty v-else-if="!historyEntries.length" description="还没有岗位版本。先创建或另存一份岗位版本，它会显示在这里。" />
+        <el-empty v-else-if="!historyEntries.length" description="还没有岗位版本">
+          <el-button v-if="resumes.length" type="primary" @click="activeTab = 'create'">创建岗位版本</el-button>
+        </el-empty>
         <div v-else class="history-list">
           <article v-for="entry in historyEntries" :key="entry.resume.id" class="history-entry">
             <div class="history-entry-main">
@@ -220,6 +230,7 @@ const versionName = ref('');
 const company = ref('');
 const position = ref('');
 const creating = ref(false);
+const createError = ref('');
 const beforeId = ref('');
 const afterId = ref('');
 const comparing = ref(false);
@@ -245,6 +256,7 @@ let compareGeneration = 0;
 const legacyJobTargets = new Map<string, ResumeJobTarget | null>();
 
 watch(() => props.resumes, (resumes) => {
+  if (resumes.length < 2 && activeTab.value === 'compare') activeTab.value = 'create';
   if (!resumes.some((resume) => resume.id === sourceId.value)) sourceId.value = resumes[0]?.id || '';
   if (!resumes.some((resume) => resume.id === beforeId.value)) beforeId.value = resumes[0]?.id || '';
   if (!resumes.some((resume) => resume.id === afterId.value)) afterId.value = resumes[1]?.id || '';
@@ -412,8 +424,9 @@ function displayedValue(difference: ResumeDifference, side: 'before' | 'after'):
 }
 
 async function createVersion() {
-  if (!sourceId.value || !versionName.value.trim()) return;
+  if (!sourceId.value || !versionName.value.trim() || creating.value) return;
   creating.value = true;
+  createError.value = '';
   try {
     const id = await workbench.createJobVersion(sourceId.value, {
       versionName: versionName.value,
@@ -423,7 +436,7 @@ async function createVersion() {
     ElMessage.success('岗位版本已创建，原简历保持不变。');
     emit('created', id);
   } catch (error) {
-    ElMessage.error(`创建岗位版本失败：${describeError(error)}`);
+    createError.value = `创建失败，请重试：${describeError(error)}`;
   } finally {
     creating.value = false;
   }
@@ -468,7 +481,7 @@ async function compare() {
 async function createMergedVersion() {
   const snapshot = comparisonSnapshot.value;
   const title = mergeTitle.value.trim();
-  if (!snapshot || !selectedDifferenceIds.value.length || !title) return;
+  if (!snapshot || !selectedDifferenceIds.value.length || !title || savingMerged.value) return;
   savingMerged.value = true;
   try {
     const merged = applyResumeDifferences(snapshot.before, snapshot.after, differences.value, selectedDifferenceIds.value);
