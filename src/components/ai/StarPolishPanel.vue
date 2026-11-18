@@ -1,14 +1,15 @@
 <template>
-  <section class="star-panel" aria-label="STAR 润色">
-    <p class="hint">按 STAR 法则重组已有经历：情境、任务、行动、结果。只润色你勾选的内容，不编造数字和结果；原文没有结果时不会补写。</p>
+  <section class="star-panel" aria-label="经历润色">
+    <p class="hint">把所选经历写清楚：你做了什么、如何行动、取得什么结果。不补写原文没有的数字和结果。</p>
     <div class="provider">
       <span>{{ settings?.profileName || '未配置模型' }} · {{ settings?.model || '请选择模型' }}</span>
       <el-button text type="primary" @click="emit('configure')">配置模型</el-button>
     </div>
+    <p v-if="!providerReady" class="hint" role="status">请先配置 AI 服务和所需密钥，再开始生成。</p>
     <template v-if="!draft">
       <p v-if="!targets.length" class="hint">当前没有可润色的个人简介、工作描述、亮点或项目描述。请先在编辑器中填写。</p>
       <fieldset v-else :disabled="loading">
-        <legend>选择要润色的内容（最多 12 条）</legend>
+        <legend>选择要润色的内容（已选 {{ selected.length }} / 12）</legend>
         <label v-for="target in targets" :key="target.key" class="target">
           <input v-model="selected" type="checkbox" :value="target.key" :disabled="loading || (!selected.includes(target.key) && selected.length >= 12)" />
           <span><strong>{{ target.label }}</strong><small>{{ kindLabels[target.kind] }} · {{ preview(target.text) }}</small></span>
@@ -20,7 +21,7 @@
       <label class="consent"><input v-model="consent" data-testid="star-consent" type="checkbox" :disabled="loading" />我同意把所选内容发送给当前 AI 服务做本次润色</label>
       <div class="actions">
         <el-button type="primary" data-testid="star-start" :disabled="!canPolish" :loading="loading" @click="polish">开始润色</el-button>
-        <el-button v-if="loading" @click="cancel">取消</el-button>
+        <el-button v-if="loading" @click="cancel">取消润色</el-button>
       </div>
     </template>
     <template v-else>
@@ -39,7 +40,7 @@
         <p v-if="suggestion.novelNumbers.length" class="warning">出现了原文没有的数字：{{ suggestion.novelNumbers.join('、') }}。请核对后再勾选。</p>
       </article>
       <div class="actions">
-        <el-button :disabled="applying" @click="draft = null">放弃</el-button>
+        <el-button :disabled="applying" @click="draft = null">返回选择内容</el-button>
         <el-button type="primary" data-testid="star-apply" :disabled="!accepted.length || applying" :loading="applying" @click="apply">应用 {{ accepted.length }} 条</el-button>
       </div>
     </template>
@@ -74,7 +75,8 @@ let controller: AbortController | undefined;
 let generation = 0;
 const kindLabels: Record<StarPolishKind, string> = { summary: '个人简介', experience: '工作描述', project: '项目描述', highlights: '工作亮点' };
 const targets = computed(() => collectStarPolishTargets(props.resume));
-const canPolish = computed(() => consent.value && selected.value.length > 0 && selected.value.length <= 12 && isAiProviderReady(settings.value, keyAvailable.value ? getAiSessionApiKey(settings.value?.profileId) : '') && !loading.value);
+const providerReady = computed(() => isAiProviderReady(settings.value, keyAvailable.value ? getAiSessionApiKey(settings.value?.profileId) : ''));
+const canPolish = computed(() => consent.value && providerReady.value && selected.value.length > 0 && selected.value.length <= 12 && !loading.value);
 const preview = (value: string) => value.replace(/\s+/g, ' ').slice(0, 72);
 function cancel() { generation++; controller?.abort(); loading.value = false; }
 function refreshSettings() {

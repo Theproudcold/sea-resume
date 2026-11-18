@@ -5,12 +5,15 @@
     width="var(--ui-dialog-width-md)"
     align-center
     destroy-on-close
+    :close-on-click-modal="!loading"
+    :close-on-press-escape="!loading"
+    :show-close="!loading"
     @update:model-value="emit('update:modelValue', $event)"
   >
     <ol class="import-steps" aria-label="导入步骤">
       <li :class="{ 'is-current': !hasSource }" :aria-current="!hasSource ? 'step' : undefined"><b>1</b>选择 PDF</li>
       <li :class="{ 'is-current': hasSource && !parsed }" :aria-current="hasSource && !parsed ? 'step' : undefined"><b>2</b>发送前确认</li>
-      <li :class="{ 'is-current': !!parsed }" :aria-current="parsed ? 'step' : undefined"><b>3</b>AI 解析预览</li>
+      <li :class="{ 'is-current': !!parsed }" :aria-current="parsed ? 'step' : undefined"><b>3</b>确认内容</li>
     </ol>
 
     <div v-if="!hasSource" class="pdf-dropzone" :class="{ 'is-dragging': isDragging }"
@@ -19,14 +22,14 @@
       @drop.prevent="handleDrop"
     >
       <el-icon class="pdf-dropzone-icon" :size="38"><UploadFilled /></el-icon>
-      <h3>{{ mode === 'vision' ? '选择 PDF，由多模态模型读取页面' : '选择可复制文本的 PDF 简历' }}</h3>
+      <h3>{{ mode === 'vision' ? '导入扫描版 PDF' : '选择或拖入 PDF 简历' }}</h3>
       <el-radio-group v-model="mode" class="pdf-mode-group" :disabled="extracting" aria-label="识别方式">
-        <el-radio-button value="text">文本提取</el-radio-button>
-        <el-radio-button value="vision">视觉识别</el-radio-button>
+        <el-radio-button value="text">文字版 PDF</el-radio-button>
+        <el-radio-button value="vision">扫描版 / 图片</el-radio-button>
       </el-radio-group>
       <p>{{ modeDescription }}</p>
       <el-button type="primary" :loading="extracting" @click="fileInput?.click()">选择 PDF 文件</el-button>
-      <input ref="fileInput" class="visually-hidden" type="file" accept="application/pdf,.pdf" @change="handleFileChange" />
+      <input ref="fileInput" class="visually-hidden" type="file" aria-label="选择 PDF 文件" accept="application/pdf,.pdf" @change="handleFileChange" />
     </div>
 
     <template v-else-if="!parsed">
@@ -42,7 +45,7 @@
       </div>
       <template v-if="mode === 'text'">
         <details class="text-preview">
-          <summary>查看本地提取的文本（仅预览前 4,000 字符）</summary>
+          <summary>查看待发送文本（前 4,000 字）</summary>
           <pre>{{ extracted?.text.slice(0, 4000) }}<span v-if="(extracted?.text.length ?? 0) > 4000">…</span></pre>
         </details>
         <el-alert v-if="extracted?.columnPages" class="column-hint" type="info" :closable="false" show-icon
@@ -60,8 +63,8 @@
       </template>
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>发送前请确认</template>
-        <p v-if="mode === 'text'">PDF 文件未上传；只有提取出的文本和文件名会在你点击解析并明确勾选后发送给配置的 AI 服务。API Key 默认仅在本次会话内存，可在配置中选择记住到本机。</p>
-        <p v-else>PDF 文件本身不上传，但在本机渲染出的页面图片会随请求发送给配置的 AI 服务。图片包含页面上的全部可见内容（照片、证件号等一概在内），发送前请自行确认。</p>
+        <p v-if="mode === 'text'">确认后，提取的文本和文件名将发送给下方 AI 服务。PDF 原文件和图片不会上传。</p>
+        <p v-else>PDF 原文件不上传，但页面图片会随请求发送给下方 AI 服务，包含照片、证件号等全部可见内容。请确认没有不愿分享的信息。</p>
       </el-alert>
       <div class="pdf-provider-card">
         <div class="pdf-provider-summary">
@@ -69,15 +72,16 @@
           <span class="pdf-provider-name"><strong>{{ providerLabel }}</strong><span>{{ modelSettings?.model || '未配置模型' }}</span></span>
           <span class="pdf-provider-state" :class="{ 'is-ready': isModelReady }">{{ isModelReady ? '模型服务已就绪' : '需要完成模型配置' }}</span>
         </div>
-        <el-button @click="showModelSettings = !showModelSettings">
+        <el-button :disabled="requesting" @click="showModelSettings = !showModelSettings">
           {{ showModelSettings ? '收起配置' : '配置模型' }}
         </el-button>
       </div>
-      <AiProviderSettingsPanel v-if="showModelSettings" @saved="refreshAiConfiguration" />
-      <p class="pdf-model-note">服务商与模型设置会和 AI 助手共用，只需配置一次；API Key 默认仅在当前页面会话。视觉识别需要使用支持图片输入的多模态模型。</p>
-      <el-checkbox v-model="consent" class="consent-check">
+      <AiProviderSettingsPanel v-if="showModelSettings" @saved="handleModelSettingsSaved" />
+      <p v-if="mode === 'vision'" class="pdf-model-note">请选用支持图片的模型，例如 GPT-4o 或 Qwen-VL。</p>
+      <el-checkbox v-model="consent" :disabled="requesting" class="consent-check">
         {{ mode === 'text' ? '我确认将 PDF 提取文本发送给上方 AI 服务用于本次解析。' : '我确认将 PDF 页面图片发送给上方 AI 服务用于本次解析。' }}
       </el-checkbox>
+      <p v-if="!isModelReady" class="pdf-model-note" role="status">请先配置 AI 服务，再确认发送。</p>
       <el-button :type="showModelSettings ? 'default' : 'primary'" class="parse-button" :loading="requesting" :disabled="!canRequest" @click="parseWithAi">
         {{ mode === 'text' ? '发送文本并解析简历' : '发送页面图片并解析简历' }}
       </el-button>
@@ -115,83 +119,86 @@
       </el-alert>
       <el-alert v-else class="parser-warnings" type="success" :closable="false" title="识别完成。请校对以下信息；确认后将创建一份新简历，原简历不会被覆盖。" />
 
-      <section class="resume-editor" aria-label="简历内容校对">
-        <div class="section-head"><h4>基本信息</h4></div>
-        <el-form label-position="top" class="editor-fields basic-fields">
-          <el-form-item label="姓名"><el-input v-model="draftResume.basic.name" /></el-form-item>
-          <el-form-item label="求职意向"><el-input v-model="draftResume.basic.title" /></el-form-item>
-          <el-form-item label="邮箱"><el-input v-model="draftResume.basic.email" /></el-form-item>
-          <el-form-item label="电话"><el-input v-model="draftResume.basic.phone" /></el-form-item>
-          <el-form-item label="所在地"><el-input v-model="draftResume.basic.location" /></el-form-item>
-          <el-form-item label="个人网站"><el-input v-model="draftResume.basic.website" /></el-form-item>
-          <el-form-item label="出生日期"><el-input v-model="draftResume.basic.birthDate" placeholder="可选" /></el-form-item>
-          <el-form-item label="个人简介" class="wide-field"><el-input type="textarea" :rows="3" :model-value="richTextToEditorText(draftResume.basic.summary)" @update:model-value="draftResume.basic.summary = markdownToSafeHtml($event)" /></el-form-item>
-        </el-form>
+      <details class="resume-review" open>
+        <summary>检查与修改识别内容</summary>
+        <section class="resume-editor" aria-label="简历内容校对">
+          <div class="section-head"><h4>基本信息</h4></div>
+          <el-form label-position="top" class="editor-fields basic-fields">
+            <el-form-item label="姓名"><el-input v-model="draftResume.basic.name" /></el-form-item>
+            <el-form-item label="求职意向"><el-input v-model="draftResume.basic.title" /></el-form-item>
+            <el-form-item label="邮箱"><el-input v-model="draftResume.basic.email" /></el-form-item>
+            <el-form-item label="电话"><el-input v-model="draftResume.basic.phone" /></el-form-item>
+            <el-form-item label="所在地"><el-input v-model="draftResume.basic.location" /></el-form-item>
+            <el-form-item label="个人网站"><el-input v-model="draftResume.basic.website" /></el-form-item>
+            <el-form-item label="出生日期"><el-input v-model="draftResume.basic.birthDate" placeholder="可选" /></el-form-item>
+            <el-form-item label="个人简介" class="wide-field"><el-input type="textarea" :rows="3" :model-value="richTextToEditorText(draftResume.basic.summary)" @update:model-value="draftResume.basic.summary = markdownToSafeHtml($event)" /></el-form-item>
+          </el-form>
 
-        <div class="section-head"><h4>工作经历</h4><span class="section-count">{{ draftResume.experiences.length }}</span></div>
-        <div v-if="draftResume.experiences.length" class="entry-list">
-          <div v-for="(experience, index) in draftResume.experiences" :key="experience.id || index" class="entry-editor">
-            <strong>工作 {{ index + 1 }}</strong>
-            <el-form label-position="top" class="editor-fields">
-              <el-form-item label="公司"><el-input v-model="experience.company" /></el-form-item>
-              <el-form-item label="职位"><el-input v-model="experience.position" /></el-form-item>
-              <el-form-item label="开始日期"><el-input v-model="experience.startDate" placeholder="YYYY-MM" /></el-form-item>
-              <el-form-item label="结束日期"><el-input v-model="experience.endDate" placeholder="YYYY-MM 或 present" /></el-form-item>
-              <el-form-item label="工作描述" class="wide-field"><el-input type="textarea" :rows="3" :model-value="richTextToEditorText(experience.description)" @update:model-value="experience.description = markdownToSafeHtml($event)" /></el-form-item>
-              <el-form-item label="成果亮点（每行一项）" class="wide-field"><el-input type="textarea" :rows="2" :model-value="(experience.highlights ?? []).join('\n')" @update:model-value="setExperienceHighlights(index, $event)" /></el-form-item>
-            </el-form>
+          <div class="section-head"><h4>工作经历</h4><span class="section-count">{{ draftResume.experiences.length }}</span></div>
+          <div v-if="draftResume.experiences.length" class="entry-list">
+            <div v-for="(experience, index) in draftResume.experiences" :key="experience.id || index" class="entry-editor">
+              <strong>工作 {{ index + 1 }}</strong>
+              <el-form label-position="top" class="editor-fields">
+                <el-form-item label="公司"><el-input v-model="experience.company" /></el-form-item>
+                <el-form-item label="职位"><el-input v-model="experience.position" /></el-form-item>
+                <el-form-item label="开始日期"><el-input v-model="experience.startDate" placeholder="YYYY-MM" /></el-form-item>
+                <el-form-item label="结束日期"><el-input v-model="experience.endDate" placeholder="YYYY-MM 或 present" /></el-form-item>
+                <el-form-item label="工作描述" class="wide-field"><el-input type="textarea" :rows="3" :model-value="richTextToEditorText(experience.description)" @update:model-value="experience.description = markdownToSafeHtml($event)" /></el-form-item>
+                <el-form-item label="成果亮点（每行一项）" class="wide-field"><el-input type="textarea" :rows="2" :model-value="(experience.highlights ?? []).join('\n')" @update:model-value="setExperienceHighlights(index, $event)" /></el-form-item>
+              </el-form>
+            </div>
           </div>
-        </div>
-        <p v-else class="empty-section">未识别到工作经历。</p>
+          <p v-else class="empty-section">未识别到工作经历。</p>
 
-        <div class="section-head"><h4>项目经历</h4><span class="section-count">{{ draftResume.projects.length }}</span></div>
-        <div v-if="draftResume.projects.length" class="entry-list">
-          <div v-for="(project, index) in draftResume.projects" :key="project.id || index" class="entry-editor">
-            <strong>项目 {{ index + 1 }}</strong>
-            <el-form label-position="top" class="editor-fields">
-              <el-form-item label="项目名称"><el-input v-model="project.name" /></el-form-item>
-              <el-form-item label="角色"><el-input v-model="project.role" /></el-form-item>
-              <el-form-item label="开始日期"><el-input v-model="project.startDate" placeholder="YYYY-MM" /></el-form-item>
-              <el-form-item label="结束日期"><el-input v-model="project.endDate" placeholder="YYYY-MM 或 present" /></el-form-item>
-              <el-form-item label="项目链接"><el-input v-model="project.link" /></el-form-item>
-              <el-form-item label="技术栈（逗号分隔）"><el-input :model-value="(project.techStack ?? []).join(', ')" @update:model-value="setProjectTechStack(index, $event)" /></el-form-item>
-              <el-form-item label="项目描述" class="wide-field"><el-input type="textarea" :rows="3" :model-value="richTextToEditorText(project.description)" @update:model-value="project.description = markdownToSafeHtml($event)" /></el-form-item>
-            </el-form>
+          <div class="section-head"><h4>项目经历</h4><span class="section-count">{{ draftResume.projects.length }}</span></div>
+          <div v-if="draftResume.projects.length" class="entry-list">
+            <div v-for="(project, index) in draftResume.projects" :key="project.id || index" class="entry-editor">
+              <strong>项目 {{ index + 1 }}</strong>
+              <el-form label-position="top" class="editor-fields">
+                <el-form-item label="项目名称"><el-input v-model="project.name" /></el-form-item>
+                <el-form-item label="角色"><el-input v-model="project.role" /></el-form-item>
+                <el-form-item label="开始日期"><el-input v-model="project.startDate" placeholder="YYYY-MM" /></el-form-item>
+                <el-form-item label="结束日期"><el-input v-model="project.endDate" placeholder="YYYY-MM 或 present" /></el-form-item>
+                <el-form-item label="项目链接"><el-input v-model="project.link" /></el-form-item>
+                <el-form-item label="技术栈（逗号分隔）"><el-input :model-value="(project.techStack ?? []).join(', ')" @update:model-value="setProjectTechStack(index, $event)" /></el-form-item>
+                <el-form-item label="项目描述" class="wide-field"><el-input type="textarea" :rows="3" :model-value="richTextToEditorText(project.description)" @update:model-value="project.description = markdownToSafeHtml($event)" /></el-form-item>
+              </el-form>
+            </div>
           </div>
-        </div>
-        <p v-else class="empty-section">未识别到项目经历。</p>
+          <p v-else class="empty-section">未识别到项目经历。</p>
 
-        <div class="section-head"><h4>教育背景</h4><span class="section-count">{{ draftResume.education.length }}</span></div>
-        <div v-if="draftResume.education.length" class="entry-list">
-          <div v-for="(education, index) in draftResume.education" :key="education.id || index" class="entry-editor">
-            <strong>教育 {{ index + 1 }}</strong>
-            <el-form label-position="top" class="editor-fields">
-              <el-form-item label="学校"><el-input v-model="education.school" /></el-form-item>
-              <el-form-item label="学历"><el-input v-model="education.degree" /></el-form-item>
-              <el-form-item label="专业"><el-input v-model="education.major" /></el-form-item>
-              <el-form-item label="开始日期"><el-input v-model="education.startDate" placeholder="YYYY-MM" /></el-form-item>
-              <el-form-item label="结束日期"><el-input v-model="education.endDate" placeholder="YYYY-MM" /></el-form-item>
-              <el-form-item label="GPA"><el-input v-model="education.gpa" /></el-form-item>
-            </el-form>
+          <div class="section-head"><h4>教育背景</h4><span class="section-count">{{ draftResume.education.length }}</span></div>
+          <div v-if="draftResume.education.length" class="entry-list">
+            <div v-for="(education, index) in draftResume.education" :key="education.id || index" class="entry-editor">
+              <strong>教育 {{ index + 1 }}</strong>
+              <el-form label-position="top" class="editor-fields">
+                <el-form-item label="学校"><el-input v-model="education.school" /></el-form-item>
+                <el-form-item label="学历"><el-input v-model="education.degree" /></el-form-item>
+                <el-form-item label="专业"><el-input v-model="education.major" /></el-form-item>
+                <el-form-item label="开始日期"><el-input v-model="education.startDate" placeholder="YYYY-MM" /></el-form-item>
+                <el-form-item label="结束日期"><el-input v-model="education.endDate" placeholder="YYYY-MM" /></el-form-item>
+                <el-form-item label="GPA"><el-input v-model="education.gpa" /></el-form-item>
+              </el-form>
+            </div>
           </div>
-        </div>
-        <p v-else class="empty-section">未识别到教育背景。</p>
+          <p v-else class="empty-section">未识别到教育背景。</p>
 
-        <div class="section-head"><h4>技能</h4><span class="section-count">{{ draftResume.skills.length }}</span></div>
-        <div v-if="draftResume.skills.length" class="entry-list">
-          <div v-for="(skill, index) in draftResume.skills" :key="skill.id || index" class="entry-editor">
-            <strong>技能组 {{ index + 1 }}</strong>
-            <el-form label-position="top" class="editor-fields">
-              <el-form-item label="分类"><el-input v-model="skill.category" /></el-form-item>
-              <el-form-item label="技能项（逗号分隔）"><el-input :model-value="skill.items.join(', ')" @update:model-value="setSkillItems(index, $event)" /></el-form-item>
-            </el-form>
+          <div class="section-head"><h4>技能</h4><span class="section-count">{{ draftResume.skills.length }}</span></div>
+          <div v-if="draftResume.skills.length" class="entry-list">
+            <div v-for="(skill, index) in draftResume.skills" :key="skill.id || index" class="entry-editor">
+              <strong>技能组 {{ index + 1 }}</strong>
+              <el-form label-position="top" class="editor-fields">
+                <el-form-item label="分类"><el-input v-model="skill.category" /></el-form-item>
+                <el-form-item label="技能项（逗号分隔）"><el-input :model-value="skill.items.join(', ')" @update:model-value="setSkillItems(index, $event)" /></el-form-item>
+              </el-form>
+            </div>
           </div>
-        </div>
-        <p v-else class="empty-section">未识别到技能。</p>
-      </section>
+          <p v-else class="empty-section">未识别到技能。</p>
+        </section>
+      </details>
 
       <el-form label-position="top" class="result-options">
-        <el-form-item label="新简历名称"><el-input v-model="title" maxlength="80" show-word-limit /></el-form-item>
+        <el-form-item label="新简历名称" required :error="title.trim() ? '' : '请填写简历名称'"><el-input v-model="title" maxlength="80" show-word-limit /></el-form-item>
         <el-form-item label="模板">
           <el-select v-model="templateId" class="w-full">
             <el-option label="现代简约" value="modern" />
@@ -206,13 +213,13 @@
     </template>
 
     <el-alert v-if="errorMessage" class="error-alert" type="error" :closable="false" show-icon :title="errorMessage">
-      <el-button v-if="mode === 'text' && selectedFile" size="small" :loading="extracting" @click="toggleMode">改用视觉识别</el-button>
+      <el-button v-if="mode === 'text' && selectedFile && !hasSource" size="small" :loading="extracting" @click="toggleMode">改用视觉识别</el-button>
     </el-alert>
     <template #footer>
       <div class="app-dialog-actions">
-        <el-button v-if="hasSource" @click="reset">重新选择 PDF</el-button>
-        <el-button @click="emit('update:modelValue', false)">取消</el-button>
-        <el-button v-if="parsed" type="primary" :loading="loading" :disabled="!title.trim()" @click="confirmImport">确认并创建新简历</el-button>
+        <el-button v-if="hasSource" :disabled="requesting || extracting || loading" @click="reset">重选 PDF</el-button>
+        <el-button :disabled="loading" @click="emit('update:modelValue', false)">取消</el-button>
+        <el-button v-if="parsed" type="primary" :loading="loading" :disabled="!title.trim()" @click="confirmImport">创建简历</el-button>
       </div>
     </template>
   </el-dialog>
@@ -255,19 +262,27 @@ const extracting = ref(false);
 const requesting = ref(false);
 const isDragging = ref(false);
 const errorMessage = ref('');
+let sourceGeneration = 0;
+let requestGeneration = 0;
 const isModelReady = computed(() => sessionKeyAvailable.value);
 const hasSource = computed(() => extracted.value !== null || rendered.value !== null);
 const pageCount = computed(() => extracted.value?.pageCount ?? rendered.value?.pageCount ?? 0);
-const canRequest = computed(() => isModelReady.value && consent.value && !requesting.value
+const canRequest = computed(() => isModelReady.value && consent.value && !requesting.value && !extracting.value
   && (mode.value === 'text' ? !!extracted.value : !!rendered.value?.images.length));
 const modeDescription = computed(() => mode.value === 'text'
-  ? 'PDF 最大 15 MB、最多 30 页。文本在浏览器本地按版面提取，不上传图片；扫描图片版请切换到视觉识别。'
-  : `PDF 最大 15 MB、最多 30 页。页面在本机渲染成图片后发送给多模态模型（如 gpt-4o、qwen-vl-max、qwen2.5-vl、llava），扫描件与复杂排版也能识别；单次最多 ${MAX_VISION_PAGES} 页。`);
+  ? '适合能复制文字的 PDF，最大 15 MB、30 页。发送给 AI 前会请你确认。'
+  : `适合扫描件或图片排版。最大 15 MB、30 页；每次识别前 ${MAX_VISION_PAGES} 页，需支持图片的 AI 模型。`);
 const providerLabel = computed(() => modelSettings.value?.profileName || AI_PROVIDER_PRESETS.find((preset) => preset.id === modelSettings.value?.presetId)?.label || '未配置');
 
 function refreshAiConfiguration() {
+  consent.value = false;
   modelSettings.value = loadAiModelSettings();
   sessionKeyAvailable.value = isAiProviderReady(modelSettings.value);
+}
+
+function handleModelSettingsSaved() {
+  refreshAiConfiguration();
+  if (isModelReady.value) showModelSettings.value = false;
 }
 
 onMounted(refreshAiConfiguration);
@@ -277,6 +292,12 @@ watch(() => props.modelValue, (visible) => {
 });
 
 function reset() {
+  sourceGeneration += 1;
+  requestGeneration += 1;
+  extracting.value = false;
+  requesting.value = false;
+  isDragging.value = false;
+  templateId.value = 'modern';
   extracted.value = null;
   rendered.value = null;
   selectedFile.value = null;
@@ -295,14 +316,19 @@ function reset() {
 async function loadSource() {
   const file = selectedFile.value;
   if (!file) return;
+  const generation = ++sourceGeneration;
   extracting.value = true;
   errorMessage.value = '';
   try {
     if (mode.value === 'text') {
-      extracted.value = await extractPdfText(file);
+      const result = await extractPdfText(file);
+      if (generation !== sourceGeneration) return;
+      extracted.value = result;
       rendered.value = null;
     } else {
-      rendered.value = await renderPdfPagesToImages(file);
+      const result = await renderPdfPagesToImages(file);
+      if (generation !== sourceGeneration) return;
+      rendered.value = result;
       extracted.value = null;
     }
     fileName.value = file.name;
@@ -312,15 +338,17 @@ async function loadSource() {
     refreshAiConfiguration();
     showModelSettings.value = !isModelReady.value;
   } catch (error) {
+    if (generation !== sourceGeneration) return;
     extracted.value = null;
     rendered.value = null;
     errorMessage.value = describeError(error);
   } finally {
-    extracting.value = false;
+    if (generation === sourceGeneration) extracting.value = false;
   }
 }
 
 async function toggleMode() {
+  if (extracting.value || requesting.value || props.loading) return;
   const previous = mode.value;
   mode.value = previous === 'text' ? 'vision' : 'text';
   await loadSource();
@@ -328,6 +356,7 @@ async function toggleMode() {
 }
 
 async function readFile(file?: File) {
+  if (extracting.value || requesting.value || props.loading) return;
   errorMessage.value = '';
   if (!file) return;
   selectedFile.value = file;
@@ -335,7 +364,10 @@ async function readFile(file?: File) {
 }
 
 function handleFileChange(event: Event) {
-  void readFile((event.target as HTMLInputElement).files?.[0]);
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  void readFile(file);
 }
 
 function handleDrop(event: DragEvent) {
@@ -345,6 +377,7 @@ function handleDrop(event: DragEvent) {
 
 async function parseWithAi() {
   if (!canRequest.value || !modelSettings.value) return;
+  const generation = ++requestGeneration;
   requesting.value = true;
   errorMessage.value = '';
   try {
@@ -352,6 +385,7 @@ async function parseWithAi() {
     const result = mode.value === 'text'
       ? await requestAiPdfMarkdown(config, fileName.value, extracted.value?.text ?? '')
       : await requestAiPdfMarkdownFromImages(config, fileName.value, rendered.value?.images ?? []);
+    if (generation !== requestGeneration) return;
     const imported = parseResumeMarkdown(result.markdown, fileName.value.replace(/\.pdf$/i, '.md'));
     if (mode.value === 'vision' && rendered.value) {
       const truncation = buildVisionTruncationWarning(rendered.value.pageCount, rendered.value.renderedPages);
@@ -367,9 +401,9 @@ async function parseWithAi() {
     title.value = imported.sourceTitle;
     templateId.value = imported.resume.templateId || 'modern';
   } catch (error) {
-    errorMessage.value = describeError(error);
+    if (generation === requestGeneration) errorMessage.value = describeError(error);
   } finally {
-    requesting.value = false;
+    if (generation === requestGeneration) requesting.value = false;
   }
 }
 
@@ -398,7 +432,7 @@ function setSkillItems(index: number, value: string) {
 }
 
 function confirmImport() {
-  if (!draftResume.value || !title.value.trim()) return;
+  if (!draftResume.value || !title.value.trim() || props.loading) return;
   emit('confirm', { resume: draftResume.value, title: title.value.trim(), templateId: templateId.value });
 }
 </script>
@@ -440,7 +474,10 @@ function confirmImport() {
 .pdf-provider-state { color: var(--color-warning); font-size: var(--text-xs); font-weight: 500; }
 .pdf-provider-state.is-ready { color: var(--color-success); }
 .pdf-model-note { margin: var(--space-xs) 0 var(--space-md); color: var(--color-muted); font-size: var(--text-xs); line-height: var(--ui-line-height); }
-.consent-check { margin: 0 0 var(--space-sm); white-space: normal; }
+.consent-check { height: auto; margin: var(--space-sm) 0; white-space: normal; }
+.consent-check :deep(.el-checkbox__label) { white-space: normal; line-height: 1.6; }
+.resume-review { border-block: 1px solid var(--color-rule); }
+.resume-review > summary { padding: var(--space-sm) 0; cursor: pointer; font-weight: 600; }
 .parse-button { width: 100%; }
 
 .pdf-result-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-sm); }
@@ -484,5 +521,8 @@ function confirmImport() {
   .editor-fields { grid-template-columns: minmax(0, 1fr); }
   .wide-field { grid-column: auto; }
   .pdf-result-heading { flex-direction: column; }
+  .import-steps li { gap: var(--space-2xs); padding-inline: var(--space-xs); font-size: var(--text-xs); }
+  .app-dialog-actions { display: flex; flex-wrap: wrap; }
+  .app-dialog-actions :deep(.el-button--primary) { width: 100%; }
 }
 </style>

@@ -7,8 +7,10 @@ import Editor from '@/views/Editor.vue';
 import { useResumeStore } from '@/stores/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { exportToJSON } from '@/utils/export-json';
+import { downloadMarkdown } from '@/utils/markdown/exportResumeMarkdown';
 
 vi.mock('@/utils/export-json', () => ({ exportToJSON: vi.fn(), importFromJSON: vi.fn() }));
+vi.mock('@/utils/markdown/exportResumeMarkdown', () => ({ resumeToMarkdown: vi.fn(() => 'full resume'), downloadMarkdown: vi.fn() }));
 
 async function mountEditor() {
   const pinia = createPinia();
@@ -77,6 +79,37 @@ describe('editor persistence boundaries', () => {
     await flushPromises();
     expect(exportToJSON).toHaveBeenCalledTimes(1);
     wrapper.unmount();
+  });
+
+  it('blocks full-data backups while personal information is hidden', async () => {
+    const { wrapper } = await mountEditor();
+    wrapper.findAllComponents(ElDropdown)[0]!.vm.$emit('command', 'privacy');
+    await flushPromises();
+    wrapper.findAllComponents(ElDropdown).slice(-1)[0]!.vm.$emit('command', 'json');
+    await flushPromises();
+    expect(exportToJSON).not.toHaveBeenCalled();
+    expect(wrapper.findAll('button').some(button => button.text() === '返回编辑')).toBe(true);
+    expect(wrapper.find('.mobile-tabs').exists()).toBe(false);
+    await wrapper.findAll('button').find(button => button.text() === '返回编辑')!.trigger('click');
+    expect(wrapper.findComponent({ name: 'EditorPanel' }).classes()).toContain('mobile-active');
+    wrapper.unmount();
+  });
+
+  it.each(['json', 'markdown'])('rechecks privacy before exporting %s after a slow save', async (type) => {
+    const { store, wrapper } = await mountEditor();
+    let finish!: () => void;
+    vi.spyOn(store, 'flushSave').mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    const warning = vi.spyOn(ElMessage, 'warning');
+    wrapper.findAllComponents(ElDropdown).slice(-1)[0]!.vm.$emit('command', type);
+    await flushPromises();
+    wrapper.findAllComponents(ElDropdown)[0]!.vm.$emit('command', 'privacy');
+    await flushPromises();
+    finish();
+    await flushPromises();
+    wrapper.unmount();
+    expect(exportToJSON).not.toHaveBeenCalled();
+    expect(downloadMarkdown).not.toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledWith(expect.stringContaining('包含完整个人信息'));
   });
 
   it('flushes on hide and unregisters its listener when unmounted', async () => {

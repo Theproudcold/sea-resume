@@ -49,6 +49,7 @@ describe('GreetingPanel', () => {
     clearAiModelSettings(); window.dispatchEvent(new Event('focus')); await flushPromises();
     await panel.get('[data-testid=greeting-consent]').setValue(true);
     expect(panel.get('[data-testid=greeting-start]').attributes('disabled')).toBeDefined();
+    expect(panel.get('[role=status]').text()).toContain('请先配置 AI 服务和所需密钥');
     expect(requestGreetings).not.toHaveBeenCalled();
   });
   it('shows failures and supports manual retry', async () => {

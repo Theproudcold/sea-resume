@@ -1,10 +1,11 @@
 <template>
   <section class="greeting-panel" aria-label="打招呼语生成">
-    <p class="hint">粘贴招聘要求，生成更有针对性的打招呼语；留空则仅根据当前简历生成。不会修改简历。</p>
+    <p class="hint">生成求职打招呼语，可编辑后复制，不会修改简历。</p>
     <div class="provider">
       <span>{{ settings?.profileName || '未配置模型' }} · {{ settings?.model || '请选择模型' }}</span>
       <el-button text type="primary" @click="emit('configure')">配置模型</el-button>
     </div>
+    <p v-if="!providerReady" class="hint" role="status">请先配置 AI 服务和所需密钥，再开始生成。</p>
     <label for="greeting-jd">招聘要求（选填）</label>
     <textarea id="greeting-jd" v-model="jd" data-testid="greeting-jd" rows="6" maxlength="10000" :disabled="loading" placeholder="粘贴职位描述、岗位职责、任职要求……也可以留空，直接根据简历生成。" />
     <p class="hint">{{ jd.length }} / 10000 · {{ jd.trim() ? '根据简历 + 招聘要求生成' : '仅根据简历生成' }}</p>
@@ -43,7 +44,8 @@ const error = ref('');
 const notice = ref('');
 let controller: AbortController | undefined;
 let generation = 0;
-const canGenerate = computed(() => consent.value && isAiProviderReady(settings.value, keyAvailable.value ? getAiSessionApiKey(settings.value?.profileId) : '') && !loading.value);
+const providerReady = computed(() => isAiProviderReady(settings.value, keyAvailable.value ? getAiSessionApiKey(settings.value?.profileId) : ''));
+const canGenerate = computed(() => consent.value && providerReady.value && !loading.value);
 function cancel() { generation++; controller?.abort(); loading.value = false; }
 function refreshSettings() {
   const next = loadAiModelSettings();

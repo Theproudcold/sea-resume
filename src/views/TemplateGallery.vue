@@ -20,6 +20,10 @@
             :key="template.id"
             :template="template"
             :demo-data="cardPreviewData(template)"
+            :can-apply-to-current="canApplyToCurrent"
+            :loading="usingTemplate && selectedTemplateId === template.id"
+            :disabled="usingTemplate"
+            @select="selectTemplate(template.id)"
             @preview="openPreview(template.id)"
             @rename="renameCustomTemplate(template.id)"
             @remove="removeCustomTemplate(template.id)"
@@ -28,9 +32,11 @@
 
         <el-empty
           v-else
-          description="没有找到符合条件的模板，换个关键词或分类试试。"
+          description="没有找到匹配的模板"
           class="template-gallery__empty"
-        />
+        >
+          <el-button @click="search = ''; activeCategory = 'all'">清除筛选</el-button>
+        </el-empty>
       </div>
     </main>
 
@@ -39,6 +45,7 @@
       :template="selectedTemplate"
       :preview-data="previewData"
       :can-apply-to-current="canApplyToCurrent"
+      :loading="usingTemplate"
       @update:visible="previewVisible = $event"
       @create="createResumeFromTemplate"
       @apply="applyTemplateToCurrent"
@@ -47,9 +54,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useRoute, useRouter } from 'vue-router';
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useResumeStore } from '@/stores/resume';
 import { useTemplateStore } from '@/stores/template';
@@ -75,6 +82,17 @@ const { data } = storeToRefs(resumeStore);
 const { templates } = storeToRefs(templateStore);
 
 const previewVisible = ref(false);
+const usingTemplate = ref(false);
+let disposed = false;
+let replacementConfirmationPending = false;
+onBeforeUnmount(() => { disposed = true; });
+function guardReplacementConfirmation() {
+  if (!replacementConfirmationPending) return true;
+  ElMessage.info('请先确认或取消模板替换，再离开此页面。');
+  return false;
+}
+onBeforeRouteLeave(guardReplacementConfirmation);
+onBeforeRouteUpdate(guardReplacementConfirmation);
 const selectedTemplateId = ref<string>('');
 const search = ref('');
 const activeCategory = ref<TemplateMetadata['category'] | 'all'>('all');
@@ -98,6 +116,9 @@ const cardPreviewData = (template: TemplateMetadata) => {
 const previewData = computed(() => {
   const template = selectedTemplate.value;
   if (!template) return { ...demoResumeData };
+  if (template.source !== 'custom' && activeResumeId.value && data.value.id === activeResumeId.value) {
+    return { ...data.value, templateId: template.id };
+  }
   return cardPreviewData(template);
 });
 
@@ -144,6 +165,7 @@ const syncUsageMap = () => {
 };
 
 const openPreview = (templateId: string) => {
+  if (usingTemplate.value) return;
   selectedTemplateId.value = templateId;
   previewVisible.value = true;
 };
@@ -152,11 +174,19 @@ const closeDialogs = () => {
   previewVisible.value = false;
 };
 
+const selectTemplate = async (templateId: string) => {
+  if (usingTemplate.value) return;
+  selectedTemplateId.value = templateId;
+  if (canApplyToCurrent.value) await applyTemplateToCurrent();
+  else await createResumeFromTemplate();
+};
+
 const createResumeFromTemplate = async () => {
-  if (!selectedTemplate.value) {
+  if (!selectedTemplate.value || usingTemplate.value) {
     return;
   }
 
+  usingTemplate.value = true;
   try {
     const template = selectedTemplate.value;
     const custom = template.source === 'custom' ? templateStore.findCustomTemplate(template.id) : undefined;
@@ -177,21 +207,39 @@ const createResumeFromTemplate = async () => {
     router.push(`/editor/${newId}`);
   } catch (error) {
     ElMessage.error('创建失败: ' + (describeError(error)));
+  } finally {
+    usingTemplate.value = false;
   }
 };
 
 const applyTemplateToCurrent = async () => {
-  if (!selectedTemplate.value || !activeResumeId.value) {
+  if (!selectedTemplate.value || !activeResumeId.value || usingTemplate.value) {
     return;
   }
 
+  const targetResumeId = activeResumeId.value;
+  const template = selectedTemplate.value;
+  const isCurrentTarget = () => !disposed && activeResumeId.value === targetResumeId && data.value.id === targetResumeId;
+  usingTemplate.value = true;
   try {
-    if (data.value.id !== activeResumeId.value) {
-      await resumeStore.loadResume(activeResumeId.value);
+    if (data.value.id !== targetResumeId) {
+      await resumeStore.loadResume(targetResumeId);
     }
-    const template = selectedTemplate.value;
+    if (!isCurrentTarget()) return;
     const custom = template.source === 'custom' ? templateStore.findCustomTemplate(template.id) : undefined;
     if (custom) {
+      replacementConfirmationPending = true;
+      try {
+        await ElMessageBox.confirm(
+          `「${template.name}」包含已保存的简历内容，使用后将替换当前简历的内容、样式及岗位信息。建议选择「用此模板新建」保留原简历。`,
+          '替换当前简历内容？',
+          { confirmButtonText: '确认替换', cancelButtonText: '取消', type: 'warning' },
+        );
+      } finally {
+        replacementConfirmationPending = false;
+      }
+      // Confirmation authorizes this resume only, never whichever one is loaded later.
+      if (!isCurrentTarget()) return;
       resumeStore.applyTemplateSnapshot(resumeFromCustomTemplate(custom));
     } else {
       resumeStore.setTemplate(template.id);
@@ -200,9 +248,11 @@ const applyTemplateToCurrent = async () => {
     syncUsageMap();
     closeDialogs();
     ElMessage.success('模板已应用到当前简历');
-    router.push(`/editor/${activeResumeId.value}`);
+    router.push(`/editor/${targetResumeId}`);
   } catch (error) {
-    ElMessage.error('应用模板失败: ' + (describeError(error)));
+    if (!disposed && error !== 'cancel' && error !== 'close') ElMessage.error('应用模板失败: ' + describeError(error));
+  } finally {
+    usingTemplate.value = false;
   }
 };
 

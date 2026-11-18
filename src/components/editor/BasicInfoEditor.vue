@@ -1,9 +1,10 @@
 <template>
   <div class="basic-info-editor space-y-4">
     <el-form label-position="top">
-      <el-form-item label="头像">
+      <el-form-item label="照片（选填）">
         <el-upload
           class="avatar-uploader"
+          aria-label="上传或更换照片"
           :show-file-list="false"
           :auto-upload="false"
           :on-change="handleAvatarChange"
@@ -25,6 +26,7 @@
         <el-input
           :model-value="localBasic.name"
           placeholder="请输入姓名"
+          autocomplete="name"
           @update:model-value="(name: string) => handleUpdate({ name })"
         />
       </el-form-item>
@@ -45,7 +47,7 @@
                 <span>邮箱</span>
                 <el-popover placement="bottom" :width="200" trigger="click">
                   <template #reference>
-                    <el-button link size="small" :icon="Icons[(localBasic.iconOverrides?.email || 'Message') as keyof typeof Icons]">
+                    <el-button link size="small" aria-label="更换邮箱图标" title="更换图标" :icon="Icons[(localBasic.iconOverrides?.email || 'Message') as keyof typeof Icons]">
                     </el-button>
                   </template>
                   <div class="grid grid-cols-4 gap-2">
@@ -69,6 +71,7 @@
               :model-value="localBasic.email"
               placeholder="your@email.com"
               type="email"
+              autocomplete="email"
               @update:model-value="(email: string) => handleUpdate({ email })"
             />
           </el-form-item>
@@ -80,7 +83,7 @@
                 <span>电话</span>
                 <el-popover placement="bottom" :width="200" trigger="click">
                   <template #reference>
-                    <el-button link size="small" :icon="Icons[(localBasic.iconOverrides?.phone || 'Iphone') as keyof typeof Icons]">
+                    <el-button link size="small" aria-label="更换电话图标" title="更换图标" :icon="Icons[(localBasic.iconOverrides?.phone || 'Iphone') as keyof typeof Icons]">
                     </el-button>
                   </template>
                   <div class="grid grid-cols-4 gap-2">
@@ -103,6 +106,8 @@
             <el-input
               :model-value="localBasic.phone"
               placeholder="手机号码"
+              type="tel"
+              autocomplete="tel"
               @update:model-value="(phone: string) => handleUpdate({ phone })"
             />
           </el-form-item>
@@ -115,7 +120,7 @@
             <span>所在城市</span>
              <el-popover placement="bottom" :width="200" trigger="click">
               <template #reference>
-                <el-button link size="small" :icon="Icons[(localBasic.iconOverrides?.location || 'Location') as keyof typeof Icons]">
+                <el-button link size="small" aria-label="更换所在城市图标" title="更换图标" :icon="Icons[(localBasic.iconOverrides?.location || 'Location') as keyof typeof Icons]">
                 </el-button>
               </template>
               <div class="grid grid-cols-4 gap-2">
@@ -148,12 +153,12 @@
           type="date"
           value-format="YYYY-MM-DD"
           format="YYYY 年 MM 月 DD 日"
-          placeholder="仅本地保存，用于年龄计算"
+          placeholder="选择出生日期"
           clearable
           class="w-full"
           @update:model-value="(birthDate: string | null) => handleUpdate({ birthDate: birthDate || '' })"
         />
-        <p class="privacy-note">生日默认不会显示在简历；只有开启“显示年龄”后才会在预览/打印中显示。</p>
+        <p class="privacy-note">出生日期不显示在简历中；可选择是否显示年龄。</p>
       </el-form-item>
 
       <el-row :gutter="16">
@@ -175,7 +180,7 @@
             <span>个人网站</span>
              <el-popover placement="bottom" :width="200" trigger="click">
               <template #reference>
-                <el-button link size="small" :icon="Icons[(localBasic.iconOverrides?.website || 'Monitor') as keyof typeof Icons]">
+                <el-button link size="small" aria-label="更换个人网站图标" title="更换图标" :icon="Icons[(localBasic.iconOverrides?.website || 'Monitor') as keyof typeof Icons]">
                 </el-button>
               </template>
               <div class="grid grid-cols-4 gap-2">

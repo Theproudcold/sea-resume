@@ -1,4 +1,4 @@
-import type { App, Plugin } from 'vue';
+import type { App } from 'vue';
 import { provideGlobalConfig } from 'element-plus';
 import {
   ElAlert,
@@ -83,7 +83,7 @@ import 'element-plus/theme-chalk/el-upload.css';
 import 'element-plus/theme-chalk/el-overlay.css';
 import 'element-plus/theme-chalk/el-popper.css';
 
-const components = [
+const components = {
   ElAlert,
   ElButton,
   ElCheckbox,
@@ -120,11 +120,11 @@ const components = [
   ElTabs,
   ElTag,
   ElUpload,
-];
+};
 
-/** Register only the components templates actually use, instead of the full library. */
+/** Explicit names also work when a browser build omits a component's name. */
 export function installElementPlus(app: App): void {
-  for (const component of components) app.use(component as Plugin);
+  for (const [name, component] of Object.entries(components)) app.component(name, component);
   app.use(ElLoading);
   provideGlobalConfig({ locale: zhCn }, app, true);
 }

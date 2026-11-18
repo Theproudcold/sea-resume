@@ -47,6 +47,23 @@ describe('interview UI safety and handoff', () => {
     expect(localStorage.getItem('sea-resume_ai-provider-keys')).toBeNull();
     wrapper.unmount();
   });
+  it('revokes parent permission immediately when confirmed consent is unchecked', async () => {
+    saveAiModelSettings({ presetId: 'ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3', authMode: 'none' });
+    const wrapper = mount(InterviewConsent, { ...options, props: { preview: {} } });
+    const checkbox = wrapper.get('[data-testid="interview-consent"]');
+    await checkbox.setValue(true);
+    await byText(wrapper, '确认服务与发送范围').trigger('click');
+    expect(wrapper.emitted('confirmed')).toHaveLength(1);
+    expect(byText(wrapper, '已确认，可继续').attributes('disabled')).toBeDefined();
+    const changes = wrapper.emitted('changed')?.length || 0;
+    await checkbox.setValue(false);
+    expect(wrapper.emitted('changed')).toHaveLength(changes + 1);
+    expect(byText(wrapper, '确认服务与发送范围').attributes('disabled')).toBeDefined();
+    await checkbox.setValue(true);
+    expect(wrapper.emitted('confirmed')).toHaveLength(1); // Checking alone never reauthorizes the parent.
+    expect(byText(wrapper, '确认服务与发送范围').attributes('disabled')).toBeUndefined();
+    wrapper.unmount();
+  });
   it('uses a remembered key without asking again, and stores one when opted in', async () => {
     saveAiModelSettings({ presetId: 'deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' });
     setAiSessionApiKey('remembered-secret', undefined, { remember: true });
@@ -70,7 +87,7 @@ describe('interview UI safety and handoff', () => {
   });
   it('confirms a local no-auth provider without a key and points to settings when none is configured', async () => {
     const empty = mount(InterviewConsent, { ...options, props: { preview: {} } });
-    await byText(empty, '打开设置中心配置模型').trigger('click');
+    await byText(empty, '配置 AI 服务').trigger('click');
     expect(empty.emitted('configure')).toBeTruthy();
     empty.unmount();
 

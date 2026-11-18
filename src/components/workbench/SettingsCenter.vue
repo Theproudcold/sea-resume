@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="设置中心"
+    title="设置"
     width="var(--ui-dialog-width-lg)"
     align-center
     class="app-settings-dialog settings-dialog"
@@ -15,6 +15,7 @@
           type="button"
           class="settings-nav-item"
           :class="{ 'is-active': section === entry.id }"
+          :aria-current="section === entry.id ? 'page' : undefined"
           @click="section = entry.id"
         >
           <strong>{{ entry.title }}</strong><span>{{ entry.hint }}</span>
@@ -24,8 +25,8 @@
       <main class="settings-main">
         <section v-if="section === 'ai'" class="settings-page">
           <header class="settings-page-heading">
-            <h2>统一配置模型服务</h2>
-            <p>只需设置一次，编辑器助手和 PDF 简历解析会共用服务商、模型与本次会话密钥。</p>
+            <h2>AI 服务</h2>
+            <p>用于 AI 助手和 PDF 导入，不影响手动编辑简历。</p>
           </header>
           <AiProviderSettingsPanel />
         </section>
@@ -40,10 +41,10 @@
               当前存储：<strong>{{ storageStore.storageTypeName }}</strong><span v-if="storageStore.currentType === 'file_system' && storageStore.config?.fileSystem?.directoryPath">（{{ storageStore.config.fileSystem.directoryPath }}）</span>
             </p>
             <el-alert v-if="storageStore.initializationWarning" class="settings-alert" type="warning" :closable="false" :title="storageStore.initializationWarning" />
-            <el-alert v-if="storageStore.currentType === 'local_storage'" class="settings-alert" type="warning" :closable="false" show-icon title="简历保存在当前浏览器缓存。清理浏览器数据可能导致丢失，请定期导出 JSON 备份。" />
+            <el-alert v-if="storageStore.currentType === 'local_storage'" class="settings-alert" type="warning" :closable="false" show-icon title="简历保存在当前浏览器缓存。清理浏览器数据可能导致丢失，请定期导出备份。" />
             <p v-else class="settings-help">简历保存在你授权的本地目录；浏览器可能在后续访问时要求重新授权。</p>
             <div class="settings-actions">
-              <el-button :loading="storageStore.isMigrating" @click="emit('choose-directory')">选择本地目录并迁移</el-button>
+              <el-button type="primary" :loading="storageStore.isMigrating" @click="emit('choose-directory')">{{ storageStore.currentType === 'file_system' ? '更换本地文件夹' : '保存到本地文件夹' }}</el-button>
               <el-button
                 v-if="storageStore.hasFileSystemConfig && storageStore.currentType !== 'file_system'"
                 type="primary"
@@ -51,10 +52,10 @@
                 :loading="storageStore.isMigrating"
                 @click="emit('reauthorize-directory')"
               >重新授权本地目录</el-button>
-              <el-button v-if="storageStore.currentType === 'file_system'" :loading="storageStore.isMigrating" @click="emit('switch-to-browser')">迁回浏览器缓存</el-button>
+              <el-button v-if="storageStore.currentType === 'file_system'" :loading="storageStore.isMigrating" @click="emit('switch-to-browser')">改存到浏览器</el-button>
             </div>
             <p class="settings-help">空目录会复制当前简历；已有简历时仅补入缺失项，同 ID 冲突保留目录版本。旧目录升级时保留原文件。</p>
-            <p class="settings-help">想同步到网盘（坚果云、OneDrive、iCloud 云盘等），把上面的目录选成网盘客户端的同步文件夹即可，由客户端负责上传；本站不保存网盘账号。客户端同步有延迟，建议一台设备编辑完成后再切换。</p>
+            <details class="settings-help storage-more"><summary>如何通过网盘同步？</summary><p>选择网盘客户端的同步文件夹，由客户端负责上传；本站不保存网盘账号。同步有延迟，请等一台设备同步完成后再换设备编辑。</p></details>
           </section>
         </section>
 
@@ -65,18 +66,19 @@
           </header>
           <section class="settings-section">
             <h3>单份简历备份</h3>
+            <p v-if="!resumes.length" class="settings-help">还没有简历可导出，可以导入之前保存的备份。</p>
             <div class="settings-actions backup-actions">
-              <el-select v-model="backupResumeId" placeholder="选择简历" class="backup-select">
+              <el-select v-model="backupResumeId" placeholder="选择简历" aria-label="要备份的简历" :disabled="!resumes.length" class="backup-select">
                 <el-option v-for="resume in resumes" :key="resume.id" :label="resume.title" :value="resume.id" />
               </el-select>
-              <el-button :disabled="!backupResumeId" @click="emit('export-backup', backupResumeId)">导出 JSON 备份</el-button>
-              <el-button @click="emit('import-backup')">从 JSON 恢复为副本</el-button>
+              <el-button type="primary" :disabled="!backupResumeId" @click="emit('export-backup', backupResumeId)">导出 JSON 备份</el-button>
+              <el-button @click="emit('import-backup')">导入备份</el-button>
             </div>
           </section>
           <section class="ui-danger-zone">
             <h3 class="ui-danger-zone__title">清空所有简历</h3>
             <p class="ui-danger-zone__description">删除当前存储位置中的全部简历，且无法撤销。</p>
-            <el-button type="danger" plain @click="emit('reset-all')">
+            <el-button type="danger" plain :disabled="!resumes.length" @click="emit('reset-all')">
               <el-icon class="mr-1"><Delete /></el-icon>
               清空全部简历
             </el-button>
@@ -276,6 +278,9 @@ watch([() => props.resumes, () => props.modelValue], ([list, open]) => {
   line-height: var(--ui-line-height);
 }
 
+.storage-more summary { cursor: pointer; color: var(--color-ink-2); }
+.storage-more p { margin-bottom: 0; }
+
 .settings-alert {
   margin: 0;
 }
@@ -332,11 +337,16 @@ watch([() => props.resumes, () => props.modelValue], ([list, open]) => {
   }
 
   .settings-nav-item {
-    flex: 0 0 auto;
-    min-width: 128px;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: var(--space-sm) var(--space-2xs);
+    text-align: center;
     border-bottom: 0;
     border-right: var(--rule-hair) solid var(--color-rule);
   }
+
+  .settings-nav-item span { display: none; }
+  .settings-nav-item strong { font-size: var(--text-xs); }
 
   .settings-main {
     max-height: min(64vh, 600px);
@@ -351,6 +361,7 @@ watch([() => props.resumes, () => props.modelValue], ([list, open]) => {
   .settings-actions :deep(.el-button),
   .backup-select {
     width: 100%;
+    flex-basis: auto;
   }
 }
 

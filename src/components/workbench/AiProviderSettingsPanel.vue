@@ -61,8 +61,8 @@
 
     <section v-else-if="view === 'catalog'" class="provider-flow-view provider-catalog-view">
       <header class="flow-heading">
-        <el-button text @click="view = 'list'">返回供应商</el-button>
-        <div><span class="detail-eyebrow">新增连接</span><h3>添加服务商</h3></div>
+        <el-button text @click="view = 'list'">返回服务商</el-button>
+        <div><h3>添加服务商</h3></div>
       </header>
       <p class="add-dialog-intro">选择模型平台开始配置，也可以选择自定义服务商地址。</p>
       <div class="provider-catalog">
@@ -82,11 +82,11 @@
 
     <section v-else-if="view === 'detail' && selectedProfile" class="provider-flow-view provider-detail-view">
       <header class="flow-heading">
-        <el-button text @click="backToProviderList">返回供应商</el-button>
+        <el-button text @click="backToProviderList">返回服务商</el-button>
         <div class="detail-heading-copy">
           <AiProviderLogo :preset-id="selectedProfile.presetId" />
           <div>
-            <span class="detail-eyebrow">{{ isNewProfile ? '新增连接' : '服务商设置' }}</span>
+            <span class="detail-eyebrow">{{ isNewProfile ? '添加服务商' : '服务商设置' }}</span>
             <h3>{{ selectedProfile.profileName || '新服务商' }}</h3>
           </div>
         </div>
@@ -95,7 +95,7 @@
 
       <el-form label-position="top" class="provider-form">
         <div class="form-grid">
-          <el-form-item label="显示名称">
+          <el-form-item label="显示名称" required :error="selectedProfile.profileName.trim() ? '' : '请填写服务商名称'">
             <el-input v-model="selectedProfile.profileName" maxlength="80" placeholder="例如：公司内网模型" />
           </el-form-item>
           <el-form-item label="服务商类型">
@@ -104,35 +104,10 @@
             </el-select>
           </el-form-item>
         </div>
-        <el-form-item v-if="['custom', 'ollama', 'lmstudio'].includes(selectedProfile.presetId)" label="服务商地址" class="provider-address-field">
+        <el-form-item v-if="['custom', 'ollama', 'lmstudio'].includes(selectedProfile.presetId)" label="服务商地址" required class="provider-address-field">
           <el-input v-model="selectedProfile.baseUrl" placeholder="https://api.example.com/v1" autocomplete="url" />
         </el-form-item>
-        <el-form-item label="模型">
-          <div class="model-picker-row">
-            <el-select
-              v-model="selectedProfile.model"
-              class="model-picker"
-              filterable
-              allow-create
-              default-first-option
-              clearable
-              placeholder="获取列表后选择，或直接输入模型 ID"
-            >
-              <el-option v-for="modelId in selectedProfile.models" :key="modelId" :label="modelId" :value="modelId" />
-            </el-select>
-            <el-button :loading="fetchingModels" :disabled="!selectedProfile.baseUrl.trim()" @click="fetchModels">
-              获取模型列表
-            </el-button>
-          </div>
-          <p class="field-note">从服务商的 <code>/models</code> 接口读取。服务商未开放列表或浏览器跨域时，可手动输入模型 ID。</p>
-        </el-form-item>
-        <el-form-item label="鉴权方式">
-          <el-select v-model="selectedProfile.authMode"><el-option label="Bearer API Key" value="bearer" /><el-option label="无鉴权（仅本机 loopback）" value="none" /></el-select>
-          <p class="field-note">本地服务需允许浏览器跨域（CORS）。本地失败不会回退到云端。</p>
-        </el-form-item>
-        <el-form-item label="JSON 模式"><el-switch v-model="selectedProfile.jsonMode" /><p class="field-note">关闭仅省略 response_format，返回内容仍须通过 JSON 校验。</p></el-form-item>
-        <el-form-item label="请求超时（毫秒）"><el-input-number v-model="selectedProfile.timeoutMs" :min="1000" :max="600000" :step="1000" /></el-form-item>
-        <el-form-item v-if="selectedProfile.authMode !== 'none'" label="API Key">
+        <el-form-item v-if="selectedProfile.authMode !== 'none'" label="API Key（服务商密钥）">
           <el-input
             v-model="apiKeyDraft"
             type="password"
@@ -143,16 +118,46 @@
           <el-checkbox v-model="rememberKeyDraft" class="remember-key-check">记住密钥到本机（刷新后无需重新输入）</el-checkbox>
           <p class="field-note">{{ rememberKeyDraft ? '密钥以明文保存在本机浏览器，仅建议在私人设备上使用；不会写入导出配置或备份。' : '密钥默认只保存在当前页面内存，刷新或关闭页面后需要重新输入。' }}</p>
         </el-form-item>
+        <el-form-item label="模型" required :error="selectedProfile.model.trim() ? '' : '请选择或输入模型名称'">
+          <div class="model-picker-row">
+            <el-select
+              v-model="selectedProfile.model"
+              class="model-picker"
+              filterable
+              allow-create
+              default-first-option
+              clearable
+              placeholder="选择或输入模型名称"
+            >
+              <el-option v-for="modelId in selectedProfile.models" :key="modelId" :label="modelId" :value="modelId" />
+            </el-select>
+            <el-button :loading="fetchingModels" :disabled="!canFetchModels" @click="fetchModels">
+              获取模型列表
+            </el-button>
+          </div>
+          <p class="field-note">可直接输入服务商提供的模型名称，按回车确认。</p>
+        </el-form-item>
+        <details class="advanced-settings">
+          <summary>高级设置</summary>
+          <el-form-item label="身份验证">
+            <el-select v-model="selectedProfile.authMode"><el-option label="API Key（推荐）" value="bearer" /><el-option label="无需密钥（仅本机服务）" value="none" /></el-select>
+            <p class="field-note">本地服务需允许浏览器跨域（CORS）。本地失败不会回退到云端。</p>
+          </el-form-item>
+          <el-form-item label="结构化输出（JSON）"><el-switch v-model="selectedProfile.jsonMode" /><p class="field-note">仅在服务商不支持 JSON 模式时关闭。</p></el-form-item>
+          <el-form-item label="等待时长（秒）"><el-input-number v-model="timeoutSeconds" :min="1" :max="600" :step="10" /></el-form-item>
+        </details>
       </el-form>
 
+      <p v-if="validationMessage" class="validation-message" role="status">{{ validationMessage }}</p>
       <el-alert v-if="modelError" class="model-error" type="warning" :closable="false" show-icon :title="modelError" />
-      <el-alert v-if="!selectedProfile.enabled" class="detail-hint" type="info" :closable="false" title="保存后可在供应商列表中启用此服务商。" />
+      <el-alert v-if="!selectedProfile.enabled" class="detail-hint" type="info" :closable="false" title="保存后可在服务商列表中启用此服务商。" />
 
       <footer class="detail-footer">
         <el-button text type="danger" @click="removeProvider">{{ isNewProfile ? '取消添加' : '删除服务商' }}</el-button>
         <span class="footer-spacer" />
         <el-button
           v-if="selectedProfile.enabled && defaultProviderId !== selectedProfile.profileId"
+          :disabled="!canSave"
           @click="saveSettings(true)"
         >保存并设为默认</el-button>
         <el-button type="primary" :disabled="!canSave" @click="saveSettings()">保存配置</el-button>
@@ -199,6 +204,25 @@ const fetchingModels = ref(false);
 const view = ref<'list' | 'catalog' | 'detail'>('list');
 const isNewProfile = ref(false);
 const configInput = ref<HTMLInputElement>();
+const timeoutSeconds = computed({
+  get: () => (selectedProfile.value?.timeoutMs ?? 90000) / 1000,
+  set: (seconds: number | undefined) => { if (selectedProfile.value) selectedProfile.value.timeoutMs = (seconds ?? 90) * 1000; },
+});
+const validationMessage = computed(() => {
+  const profile = selectedProfile.value;
+  if (!profile) return '';
+  if (!profile.profileName.trim()) return '请填写服务商名称。';
+  if (!profile.baseUrl.trim()) return '请填写服务商地址。';
+  if (!profile.model.trim()) return '请选择或输入模型名称，按回车确认。';
+  if (!isAiProviderReady({ ...profile, enabled: true }, 'configuration-only')) {
+    return profile.authMode === 'none' ? '无需密钥仅适用于本机地址，如 http://localhost:11434/v1。' : '请检查服务商地址，远程服务必须使用 HTTPS。';
+  }
+  return '';
+});
+const canFetchModels = computed(() => !!selectedProfile.value && isAiProviderReady(
+  { ...selectedProfile.value, model: 'model-list', enabled: true },
+  apiKeyDraft.value.trim() || getAiSessionApiKey(selectedProfile.value.profileId),
+));
 const enabledCount = computed(() => profiles.value.filter((profile) => profile.enabled).length);
 const hasSelectedKey = computed(() => {
   selectedHasKeyVersion.value;
@@ -452,6 +476,9 @@ async function importConfigFile(event: Event) {
 </script>
 
 <style scoped>
+.advanced-settings { margin-top: 12px; border-top: 1px solid var(--ui-border); }
+.advanced-settings summary { padding: 14px 0; color: var(--ui-text-secondary); cursor: pointer; }
+.validation-message { margin: 0; color: var(--ui-warning); font-size: var(--ui-font-sm); }
 .provider-manager { display: flex; flex-direction: column; gap: 16px; }
 .provider-flow-view { display: flex; min-height: 0; flex-direction: column; gap: 16px; }
 .flow-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
@@ -518,6 +545,11 @@ async function importConfigFile(event: Event) {
   .form-grid, .provider-catalog { grid-template-columns: 1fr; }
   .model-picker-row { align-items: stretch; flex-direction: column; }
   .model-picker-row :deep(.el-button) { width: 100%; }
+  .detail-footer { flex-wrap: wrap; }
+  .detail-footer :deep(.el-button) { margin-left: 0; }
+  .detail-footer :deep(.el-button--primary) { flex: 1 1 100%; }
+  .provider-detail-view { padding: 12px; }
+  .remember-key-check :deep(.el-checkbox__label) { white-space: normal; }
 }
 @media (max-width: 480px) {
   .provider-list-actions { align-items: flex-start; flex-direction: column; }
