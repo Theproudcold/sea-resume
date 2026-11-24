@@ -20,7 +20,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['src/test/setup.ts'],
-    include: ['src/**/*.{spec,test}.{ts,tsx}', 'build/**/*.{spec,test}.{ts,tsx}'],
+    include: ['src/**/*.{spec,test}.{ts,tsx}', 'build/**/*.{spec,test}.{ts,tsx}', 'tools/**/*.spec.ts'],
     exclude: ['node_modules/**', 'dist/**', '.worktrees/**', '.pnpm-store/**'],
   },
   resolve: {
