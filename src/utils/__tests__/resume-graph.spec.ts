@@ -48,4 +48,42 @@ describe('按分支生成连续路径', () => {
     // 两条路径不能占用同一列。
     expect(new Set(graph.paths.map((p) => p.lane)).size).toBe(graph.paths.length);
   });
+
+  it('joins later versions of one job upward to the earlier version, like a git branch', () => {
+    // 同一岗位的新版同步自旧版：Git 图里它们是一条连续分支，
+    // 旧版向上连到新版，而不是两截各自垂到主干、中间断开。
+    const graph = buildResumeGraph([
+      master('m1', 1, 'T', 1),
+      master('m2', 2, 'T', 2),
+      master('m3', 3, 'T', 4),
+      master('m4', 4, 'T', 8),
+      job('a1', 'm1', 1, { days: 3 }),
+      job('a2', 'm4', 4, { days: 7, rebasedFromId: 'a1' }),
+    ]);
+    const rowOf = (id: string) => graph.rows.find((row) => row.id === id)!;
+    const older = rowOf('a1');
+    const newer = rowOf('a2');
+    expect(older.lane).toBe(newer.lane);
+    const branch = graph.paths.find((path) =>
+      path.points.some((point) => point.row === older.rowIndex && point.lane === older.lane)
+      && path.points.some((point) => point.row === newer.rowIndex && point.lane === newer.lane),
+    );
+    expect(branch, '两个版本不在同一条分支线上').toBeTruthy();
+    const from = Math.min(older.rowIndex, newer.rowIndex);
+    const to = Math.max(older.rowIndex, newer.rowIndex);
+    for (let row = from; row <= to; row += 1) {
+      expect(branch!.points.some((point) => point.row === row && point.lane === older.lane), `第 ${row} 行断开`).toBe(true);
+    }
+    // 旧版仍从分出点弯回主干；新版另有一条向上汇入同步到的那一版。
+    const fork = graph.paths.find((path) =>
+      path.points.some((point) => point.row === older.rowIndex && point.lane === older.lane)
+      && path.points.some((point) => point.row === rowOf('m1').rowIndex && point.lane === rowOf('m1').lane),
+    );
+    const sync = graph.paths.find((path) =>
+      path.points.some((point) => point.row === newer.rowIndex && point.lane === newer.lane)
+      && path.points.some((point) => point.row === rowOf('m4').rowIndex && point.lane === rowOf('m4').lane),
+    );
+    expect(fork).toBeTruthy();
+    expect(sync).toBeTruthy();
+  });
 });

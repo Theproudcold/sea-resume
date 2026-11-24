@@ -229,20 +229,41 @@ export function buildResumeGraph(resumes: ResumeMeta[], options: GraphOptions = 
     }
   }
 
-  // 岗位：链头挂到派生时的那版主干；同步来的版本挂到它同步到的那版主干。
+  // 岗位按 Git 的分支来连，不把每个版本各自垂到主干。
+  //
+  // 有明确同步来源时，后一版的第一父节点是前一版：竖线从旧版向上连到新版。
+  // 各自再垂到主干，会把同一条分支画成两截，中间断开——Git 图里没有这种画法。
+  // 链头才弯进分出时的主干；后一版同步到了新主干，再另画一条汇入线。
+  // 没有同步来源的多条记录是各自独立的派生，不串成一条分支。
   for (const [, group] of jobGroups) {
     const { ordered: chain, guessed } = chainOf(group);
-    chain.forEach((row) => {
+    chain.forEach((row, chainIndex) => {
       const target = row.jobTarget!;
       const index = rowIndexOf.get(row.id)!;
       const anchor = masterIdAt(row.trackId ?? '', target.baseVersion ?? versionOf(row));
-      if (anchor === null || anchor === index) {
+      const previous = !guessed && chainIndex > 0
+        ? rowIndexOf.get(chain[chainIndex - 1]!.id)
+        : undefined;
+
+      if (previous !== undefined) {
+        vertices[index]!.parents.push(previous);
+        links.push({ from: row.id, to: chain[chainIndex - 1]!.id, kind: 'commit' });
+      }
+
+      const attachesToMaster = anchor !== null && anchor !== index;
+      const isChainHead = previous === undefined;
+      const syncedOntoMaster = !isChainHead && Boolean(target.rebasedFromId);
+      if (attachesToMaster && (isChainHead || syncedOntoMaster)) {
+        vertices[index]!.parents.push(anchor);
+        links.push({
+          from: row.id,
+          to: ordered[anchor]!.id,
+          kind: syncedOntoMaster ? 'rebase' : 'fork',
+        });
+      } else if (!attachesToMaster && isChainHead) {
         rows[index]!.orphan = true;
         orphans.push(row.id);
-        return;
       }
-      vertices[index]!.parents.push(anchor);
-      links.push({ from: row.id, to: ordered[anchor]!.id, kind: target.rebasedFromId ? 'rebase' : 'fork' });
     });
     if (guessed) for (const row of chain.slice(1)) uncertain.push(row.id);
   }
@@ -272,57 +293,55 @@ export function buildResumeGraph(resumes: ResumeMeta[], options: GraphOptions = 
     paths.push({ lane, color: LANE_COLORS[lane % LANE_COLORS.length]!, kind: 'main', points });
   }
 
-  // ② 岗位：**同一个岗位的所有版本共用一列**，不同岗位各占一列。
-  //
-  // 之前按「行区间不重叠就复用列」分配，结果 `Acme 前端` 和 `Beta 后端` 这两个
-  // 毫不相干的岗位落在同一列上，视觉上被读成一条连续的轨道——语义是错的。
-  // 列应当表示「哪条分支」，而不是「谁的占位没撞车」。
-  const laneOfJob = new Map<string, number>();
+  // ② 岗位：一条真实的分支（有同步来源串起来的）共用一列；
+  // 没有同步来源的独立派生各占一列，避免同色却互不相连。
+  const laneOfChain = new Map<string, number>();
   let branchLaneCursor = mainLaneCursor;
-
-  const assignLane = (row: ResumeMeta, start: number, end: number): number => {
-    const target = row.jobTarget!;
-    const key = `${row.trackId ?? ''}::${target.company ?? ''}::${target.position ?? ''}`;
-    const existingLane = laneOfJob.get(key);
-    if (existingLane !== undefined) return existingLane;
+  const claimChainLane = (key: string): number => {
+    const existing = laneOfChain.get(key);
+    if (existing !== undefined) return existing;
     const lane = branchLaneCursor;
     branchLaneCursor += 1;
-    laneOfJob.set(key, lane);
-    void start;
-    void end;
+    laneOfChain.set(key, lane);
     return lane;
+  };
+
+  // 先占列再画线。后一版的父节点是更旧的那一版，画线时那一版的列必须已经定下来。
+  for (const [, group] of jobGroups) {
+    const { ordered: chain, guessed } = chainOf(group);
+    for (const row of chain) {
+      const index = rowIndexOf.get(row.id)!;
+      laneOf[index] = claimChainLane(guessed ? row.id : chain[0]!.id);
+    }
+  }
+
+  /** 从起点行走到父节点：中间每一行都留在自己的列上，只在终点换到父节点的列。 */
+  const lineTo = (fromRow: number, toRow: number, fromLane: number): PathPoint[] => {
+    const points: PathPoint[] = [];
+    const step = fromRow < toRow ? 1 : -1;
+    for (let row = fromRow; row !== toRow; row += step) {
+      points.push({ row, lane: fromLane });
+    }
+    points.push({ row: toRow, lane: laneOf[toRow] ?? 0 });
+    return points;
   };
 
   for (const vertex of vertices) {
     if (rows[vertex.row]!.kind !== 'branch') continue;
-    const row = ordered[vertex.row]!;
-    const parent = vertex.parents[0];
-    const start = parent === undefined ? vertex.row : Math.min(vertex.row, parent);
-    const end = parent === undefined ? vertex.row : Math.max(vertex.row, parent);
-    const lane = assignLane(row, start, end);
-    laneOf[vertex.row] = lane;
-
-    if (parent === undefined) {
-      // 孤立岗位：只给自己一个点。
+    const lane = laneOf[vertex.row] ?? 0;
+    if (!vertex.parents.length) {
       paths.push({ lane, color: LANE_COLORS[lane % LANE_COLORS.length]!, kind: 'branch', points: [{ row: vertex.row, lane }] });
       continue;
     }
-
-    // 折点必须**逐行**记录：起点一行、中间每一行、终点一行。
-    //
-    // 参考 vscode-git-graph 的 determinePath：它从起点行开始逐行遍历到根，
-    // 每个经过的行都 addLine 一次。只在两端留折点的话，渲染出来的线只覆盖
-    // 两个端点，中间那段就是空白——这就是「中间断开」的真正原因。
-    //
-    // 中间行保持在自己的列上（不做横移），只有到终点那一行才汇入主干列，
-    // 于是画出来是一条竖直轨道 + 末尾一个弯，而不是一根斜线。
-    const points: PathPoint[] = [];
-    const step = vertex.row < parent ? 1 : -1;
-    for (let r = vertex.row; r !== parent; r += step) {
-      points.push({ row: r, lane });
+    // 第一父节点是分支本身（上一版，或链头分出的主干），后面的父节点是汇入主干的同步线。
+    for (const parent of vertex.parents) {
+      paths.push({
+        lane,
+        color: LANE_COLORS[lane % LANE_COLORS.length]!,
+        kind: 'branch',
+        points: lineTo(vertex.row, parent, lane),
+      });
     }
-    points.push({ row: parent, lane: laneOf[parent] ?? 0 });
-    paths.push({ lane, color: LANE_COLORS[lane % LANE_COLORS.length]!, kind: 'branch', points });
   }
 
   // ---- 4. 行上的 lane 与颜色 ----
