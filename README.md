@@ -87,7 +87,7 @@ Sea Resume 是一款基于 **Vue 3 + TypeScript** 构建的纯前端简历制作
 
 ### 模板库
 
-![模板库：六套内置模板、分类筛选与预览](docs/images/template-gallery.jpg)
+![模板库：11 套内置模板、分类筛选与预览](docs/images/template-gallery.jpg)
 
 ### AI 简历助手
 
