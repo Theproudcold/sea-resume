@@ -13,4 +13,10 @@ describe('editor shortcuts', () => {
     expect(resolveEditorShortcut({ key: '?', metaKey: false, ctrlKey: false, altKey: false, shiftKey: true })).toBe('shortcut-help');
     expect(resolveEditorShortcut({ key: '[', metaKey: true, ctrlKey: false, altKey: false, shiftKey: false })).toBeNull();
   });
+
+  it('ignores browser autofill and IME synthetic keydown events without a key string', () => {
+    expect(resolveEditorShortcut({ key: undefined, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false })).toBeNull();
+    expect(resolveEditorShortcut({ key: '', metaKey: true, ctrlKey: false, altKey: false, shiftKey: false })).toBeNull();
+    expect(resolveEditorShortcut({ key: 's', metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, isComposing: true })).toBeNull();
+  });
 });
