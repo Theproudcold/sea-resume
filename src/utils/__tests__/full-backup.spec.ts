@@ -9,6 +9,7 @@ import {
   FULL_BACKUP_REMINDER_INTERVAL_MS,
   FULL_BACKUP_REMINDER_STORAGE_KEY,
   createFullBackup,
+  dismissFullBackupReminder,
   getFullBackupReminderStatus,
   isFullBackupReminderDue,
   parseFullBackup,
@@ -202,5 +203,9 @@ describe('full backup data layer', () => {
     expect(getFullBackupReminderStatus(storage, now)).toMatchObject({ available: true, due: false });
     expect(getFullBackupReminderStatus(null, now)).toEqual({ available: false, due: false, lastSuccessfulBackupAt: null });
     expect(recordFullBackupSuccess(null, now)).toBe(false);
+    const pending = new MemoryStorage();
+    expect(dismissFullBackupReminder(pending, now)).toBe(true);
+    expect(getFullBackupReminderStatus(pending, now + FULL_BACKUP_REMINDER_INTERVAL_MS - 1).due).toBe(false);
+    expect(getFullBackupReminderStatus(pending, now + FULL_BACKUP_REMINDER_INTERVAL_MS).due).toBe(true);
   });
 });

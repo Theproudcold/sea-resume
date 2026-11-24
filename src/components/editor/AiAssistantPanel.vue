@@ -192,6 +192,7 @@ function display(value: unknown): string {
   return String(value).replace(/<[^>]*>/g, '').slice(0, 500);
 }
 function displayCurrent(operation: ResumeAiOperation): string {
+  if (operation.type === 'remove_entry') return '此条目';
   if (operation.type === 'set_basic') return display(props.resume.basic[operation.field]);
   if (operation.type === 'set_template') return props.resume.templateId;
   if (operation.type === 'set_layout') return props.resume.layout ? `${props.resume.layout.structure} / ${props.resume.layout.paper}` : '内置模板';
@@ -199,12 +200,14 @@ function displayCurrent(operation: ResumeAiOperation): string {
   return display(findItem(operation)?.[operation.field]);
 }
 function displayProposed(operation: ResumeAiOperation): string {
+  if (operation.type === 'remove_entry') return '删除此条目';
   if (operation.type === 'set_template') return operation.templateId;
   if (operation.type === 'set_layout') return operation.layout ? `${operation.layout.structure} / ${operation.layout.paper}` : '恢复内置模板';
   if (operation.type === 'reorder_sections') return operation.sectionOrder.join(' → ');
-  return display(operation.type === 'set_basic' ? operation.value : operation.value);
+  return display(operation.value);
 }
 function describeOperation(operation: ResumeAiOperation): string {
+  if (operation.type === 'remove_entry') return '删除已有条目';
   const labels: Record<string, string> = { name: '姓名', title: '求职意向', email: '邮箱', phone: '电话', location: '所在地', website: '个人链接', summary: '个人简介', company: '公司', position: '职位', description: '描述', highlights: '工作亮点', school: '学校', degree: '学历', major: '专业', gpa: 'GPA', role: '角色', link: '项目链接', techStack: '技术栈', category: '技能分类', items: '技能条目', content: '模块内容' };
   if (operation.type === 'set_template') return '切换模板';
   if (operation.type === 'set_layout') return '调整版式';

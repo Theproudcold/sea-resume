@@ -4,6 +4,7 @@ import { readLayoutRecipe, themeFromRecipe } from '@/utils/layout-template';
 import { markdownToSafeHtml, sanitizeMarkdownUrl } from '@/utils/markdown/markdownSafety';
 
 const templates = new Set(['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent']);
+const entryCollections = new Set(['experiences', 'projects', 'education', 'skills', 'customBlocks']);
 const textFields: Record<string, string[]> = {
   set_basic: ['name', 'title', 'email', 'phone', 'location', 'website', 'summary'],
   update_experience: ['company', 'position', 'startDate', 'endDate', 'description', 'highlights'],
@@ -58,6 +59,13 @@ export function parseResumeAiDraft(input: unknown, options?: { allowEmpty?: bool
     if (type === 'reorder_sections') {
       if (!Array.isArray(operation.sectionOrder) || operation.sectionOrder.length > 30 || operation.sectionOrder.some((id) => typeof id !== 'string')) throw new Error('AI 请求的章节顺序无效。');
       return { type, sectionOrder: operation.sectionOrder as string[] };
+    }
+    if (type === 'remove_entry') {
+      const collection = operation.collection;
+      const id = operation.id;
+      if (typeof collection !== 'string' || !entryCollections.has(collection)) throw new Error('AI 请求了不允许删除的内容。');
+      if (typeof id !== 'string' || !id || id.length > 120) throw new Error('AI 操作缺少有效条目 ID。');
+      return { type, collection: collection as 'experiences' | 'projects' | 'education' | 'skills' | 'customBlocks', id };
     }
     if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(textFields, type)) throw new Error('AI 请求了不允许的操作。');
     const field = operation.field;
@@ -147,6 +155,13 @@ export function applyResumeAiOperations(source: ResumeData, operations: ResumeAi
           throw new Error('AI 只能调整当前已有章节的顺序，不能添加或隐藏章节。');
         }
         resume.sectionOrder = [...operation.sectionOrder];
+        break;
+      }
+      case 'remove_entry': {
+        const list = resume[operation.collection];
+        const index = list.findIndex((entry) => entry.id === operation.id);
+        if (index < 0) throw new Error('AI 要删除的条目不存在。');
+        list.splice(index, 1);
         break;
       }
     }

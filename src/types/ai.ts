@@ -9,7 +9,8 @@ export type ResumeAiOperation =
   | { type: 'update_custom_block'; id: string; field: 'title' | 'content'; value: string }
   | { type: 'set_template'; templateId: 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' | 'ai-agent' }
   | { type: 'reorder_sections'; sectionOrder: string[] }
-  | { type: 'set_layout'; layout: LayoutRecipe | null };
+  | { type: 'set_layout'; layout: LayoutRecipe | null }
+  | { type: 'remove_entry'; collection: 'experiences' | 'projects' | 'education' | 'skills' | 'customBlocks'; id: string };
 
 export interface ResumeAiDraft {
   explanation: string;

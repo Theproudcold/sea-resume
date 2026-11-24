@@ -47,7 +47,7 @@
                 <el-dropdown-menu>
                   <el-dropdown-item command="privacy"><el-icon><Hide /></el-icon>{{ privacyMode ? '显示个人信息' : '隐藏个人信息' }}</el-dropdown-item>
                   <el-dropdown-item command="quality"><el-icon><CircleCheck /></el-icon>检查简历</el-dropdown-item>
-                  <el-dropdown-item command="external-ai" :disabled="privacyMode"><el-icon><Connection /></el-icon>连接外部 AI 工具</el-dropdown-item>
+                  <el-dropdown-item command="external-ai" :disabled="privacyMode"><el-icon><Connection /></el-icon>用文件交给外部 AI</el-dropdown-item>
                   <el-dropdown-item command="shortcuts"><el-icon><Key /></el-icon>快捷键</el-dropdown-item>
                   <el-dropdown-item command="fullscreen"><el-icon><FullScreen /></el-icon>全屏预览</el-dropdown-item>
                   <el-dropdown-item command="save-template" :disabled="privacyMode"><el-icon><Collection /></el-icon>存为模板</el-dropdown-item>

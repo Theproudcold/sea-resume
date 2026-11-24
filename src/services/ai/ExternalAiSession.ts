@@ -84,7 +84,6 @@ export class ExternalAiSession {
     const entry = this.entries.find(entry => entry.proposal.proposalId === proposalId);
     if (entry?.status === 'pending' || entry?.status === 'conflict') entry.status = 'rejected';
   }
-  /** Deliberately NOT exposed by the MCP tool registry. */
   async approve(proposalId: string): Promise<void> {
     const generation = this.assertAuthorized();
     const entry = this.entries.find(entry => entry.proposal.proposalId === proposalId);
