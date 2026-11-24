@@ -1,6 +1,7 @@
 import type { CustomResumeTemplate } from '@/types/custom-template';
 import type { ResumeData, TemplateMetadata } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
+import { readLayoutRecipe } from '@/utils/layout-template';
 import { normalizeResumeData } from '@/utils/resumeData';
 
 export const BUILTIN_LAYOUT_IDS = ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'] as const;
@@ -50,8 +51,11 @@ export function buildCustomTemplateFromResume(
   const description = normalizeTemplateDescription(input.description);
   const snapshot = JSON.parse(JSON.stringify(resume)) as ResumeData;
   delete snapshot.jobTarget;
-  const baseTemplateId = resolveLayoutTemplateId({ id: snapshot.templateId });
-  snapshot.templateId = baseTemplateId;
+  const layout = readLayoutRecipe(snapshot.layout);
+  const baseTemplateId = layout?.seedId ?? resolveLayoutTemplateId({ id: snapshot.templateId });
+  if (layout) snapshot.layout = layout;
+  else delete snapshot.layout;
+  if (!layout) snapshot.templateId = baseTemplateId;
 
   const now = options.now ?? Date.now();
   const template: CustomResumeTemplate = {
@@ -89,9 +93,11 @@ export function customTemplateToMetadata(template: CustomResumeTemplate): Templa
 export function resumeFromCustomTemplate(template: CustomResumeTemplate): ResumeData {
   const normalized = normalizeResumeData(JSON.parse(JSON.stringify(template.snapshot)) as ResumeData);
   delete normalized.jobTarget;
-  normalized.templateId = resolveLayoutTemplateId({
-    id: normalized.templateId,
-    baseTemplateId: template.baseTemplateId,
-  });
+  if (!normalized.layout) {
+    normalized.templateId = resolveLayoutTemplateId({
+      id: normalized.templateId,
+      baseTemplateId: template.baseTemplateId,
+    });
+  }
   return normalized;
 }

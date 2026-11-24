@@ -182,8 +182,12 @@ function text(value: unknown): string {
   return String(value ?? '（空）').replace(/<[^>]*>/g, '').slice(0, 10000);
 }
 function operationLabel(operation: ResumeAiOperation) { return 'field' in operation ? `${operation.type} · ${operation.field}` : operation.type; }
-function proposedValue(operation: ResumeAiOperation) { return 'value' in operation ? text(operation.value) : '—'; }
+function proposedValue(operation: ResumeAiOperation) {
+  if (operation.type === 'set_layout') return operation.layout ? `${operation.layout.structure} / ${operation.layout.paper}` : '恢复内置模板';
+  return 'value' in operation ? text(operation.value) : '—';
+}
 function currentValue(operation: ResumeAiOperation) {
+  if (operation.type === 'set_layout') return store.data.layout ? `${store.data.layout.structure} / ${store.data.layout.paper}` : '内置模板';
   if (operation.type === 'set_basic') return text(store.data.basic[operation.field]);
   if (!('field' in operation)) return '—';
   const collections = { update_experience: store.data.experiences, update_project: store.data.projects, update_education: store.data.education, update_skill: store.data.skills, update_custom_block: store.data.customBlocks };

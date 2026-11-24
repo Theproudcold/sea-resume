@@ -172,4 +172,14 @@ describe('ThemeEditor one-page fit', () => {
     expect(store.data.theme).toEqual(before);
     autoSave.mockResolvedValue();
   });
+
+  it('creates an editable layout from the current built-in template', async () => {
+    const { store, host } = createHarness();
+    store.data.templateId = 'professional';
+    await nextTick();
+    const button = host.findAll('button').find((item) => item.text().includes('基于当前模板自定义'));
+    expect(button).toBeTruthy();
+    await button!.trigger('click');
+    expect(store.data.layout).toMatchObject({ seedId: 'professional', structure: 'sidebar-left' });
+  });
 });

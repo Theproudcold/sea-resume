@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { builtinToRecipe } from '@/utils/layout-template';
 import { createDefaultResumeData, normalizeResumeData } from '@/utils/resumeData';
 
 describe('normalizeResumeData', () => {
@@ -49,5 +50,18 @@ describe('normalizeResumeData', () => {
 
     expect(normalizeResumeData({ ...stored, basic: { ...stored.basic, avatarShape: 'triangle' } }).basic.avatarShape).toBeUndefined();
     expect(normalizeResumeData({ id: 'legacy', basic: { name: '张三' } }).basic.avatarShape).toBeUndefined();
+  });
+
+  it('keeps a valid layout and drops an invalid one without touching the body', () => {
+    const stored = createDefaultResumeData();
+    stored.basic.name = '林夏';
+    stored.layout = builtinToRecipe('professional', stored.theme);
+    expect(normalizeResumeData(stored).layout?.structure).toBe('sidebar-left');
+    expect(normalizeResumeData(stored).basic.name).toBe('林夏');
+
+    const broken = normalizeResumeData({ ...stored, layout: { schemaVersion: 2, css: 'body{}' } });
+    expect(broken.layout).toBeUndefined();
+    expect(broken.basic.name).toBe('林夏');
+    expect(broken.templateId).toBe(stored.templateId);
   });
 });

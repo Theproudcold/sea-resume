@@ -20,14 +20,25 @@ describe('AI provider privacy', () => {
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const payload = JSON.parse(String(init.body)) as { messages: Array<{ content: string }> };
-    const userPayload = JSON.parse(payload.messages[1]?.content || '{}') as { request: string; resume: { basic: Record<string, unknown> }; templateId: string; sectionOrder: string[] };
+    const userPayload = JSON.parse(payload.messages[1]?.content || '{}') as {
+      request: string;
+      resume: { basic: Record<string, unknown> };
+      templateId: string;
+      sectionOrder: string[];
+      layout: unknown;
+      layoutSeed: { structure: string; schemaVersion: number };
+    };
     expect(userPayload.request).toBe('update title');
     expect(userPayload.resume.basic).not.toHaveProperty('birthDate');
     expect(userPayload.resume.basic).not.toHaveProperty('name');
     expect(JSON.stringify(userPayload)).not.toContain('1990-01-02');
     expect(userPayload.templateId).toBe(resume.templateId);
     expect(userPayload.sectionOrder).toEqual(resume.sectionOrder);
+    expect(userPayload.layout).toBeNull();
+    expect(userPayload.layoutSeed).toMatchObject({ schemaVersion: 1, structure: 'single' });
     expect(payload.messages[0]?.content).toContain('operations 为 0 到 40 条');
+    expect(payload.messages[0]?.content).toContain('没提到栏数');
+    expect(payload.messages[0]?.content).toContain('layoutSeed');
     expect(resume.basic.birthDate).toBe('1990-01-02');
   });
   it('returns an empty edit with the model explanation instead of discarding it', async () => {

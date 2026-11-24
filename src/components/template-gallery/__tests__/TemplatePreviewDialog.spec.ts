@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import TemplatePreviewDialog from '@/components/template-gallery/TemplatePreviewDialog.vue';
 import { builtinTemplates } from '@/stores/template';
 
-vi.mock('@/components/preview/template-registry', () => ({ getTemplateComponent: () => undefined }));
+vi.mock('@/components/preview/template-registry', () => ({
+  getTemplateComponent: () => undefined,
+  resolveTemplateView: () => undefined,
+}));
 
 const createWrapper = (canApplyToCurrent: boolean) =>
   mount(TemplatePreviewDialog, {
