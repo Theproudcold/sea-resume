@@ -9,6 +9,24 @@
     @update:model-value="emit('update:visible', $event)"
   >
     <div class="assistant-panel">
+      <el-alert
+        v-if="mcpLinkState === 'connected'"
+        type="success"
+        :closable="false"
+        show-icon
+        title="外部 MCP 已连接"
+      >
+        <p>外部 Agent 已可直接读写简历并实时刷新预览，无需在此配置 API Key。本面板仅用于网页内置 AI 功能。</p>
+      </el-alert>
+      <el-alert
+        v-else-if="mcpLinkState"
+        type="info"
+        :closable="false"
+        show-icon
+        title="外部 MCP 与网页内置 AI 互相独立"
+      >
+        <p>本面板仅调用网页里配置的 AI 服务；外部 Agent 连接后直接通过 MCP 读写简历，无需在此填写 API Key。</p>
+      </el-alert>
       <el-radio-group :model-value="mode" aria-label="AI 工作模式" @update:model-value="changeMode">
         <el-radio-button value="optimize">简历优化</el-radio-button>
         <el-radio-button value="polish">经历润色</el-radio-button>
@@ -90,6 +108,7 @@ import type { ResumePatchOperation } from '@/types/ai';
 import { createExternalProposal, type EditProposal } from '@/services/ai/externalProposal';
 import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import { requestResumeAiDraft } from '@/services/ai/quickEdit';
+import { useMcpBridge } from '@/services/ai/useMcpBridge';
 import ResumeOptimizationPanel from '@/components/ai/ResumeOptimizationPanel.vue';
 import StarPolishPanel from '@/components/ai/StarPolishPanel.vue';
 import GreetingPanel from '@/components/ai/GreetingPanel.vue';
@@ -103,6 +122,7 @@ const emit = defineEmits<{
   configure: [];
   applied: [resumeId: string];
 }>();
+const { linkState: mcpLinkState } = useMcpBridge();
 const modelSettings = ref<AiModelSettings | null>(loadAiModelSettings());
 const sessionKeyAvailable = ref(isAiProviderReady(modelSettings.value));
 const instruction = ref('');

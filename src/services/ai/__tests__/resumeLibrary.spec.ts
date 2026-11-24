@@ -50,4 +50,33 @@ describe('resume library MCP', () => {
     expect(() => assertNoActiveInterview(true)).toThrow('已有面试');
     expect(() => assertNoActiveInterview(false)).not.toThrow();
   });
+
+  it('creates a resume from partial fields for empty-library and knowledge-base workflows, and opens it for preview', async () => {
+    const opened = vi.fn(async () => undefined);
+    const store = new Map<string, ReturnType<typeof createDefaultResumeData>>();
+    const library = createResumeLibrary({
+      list: async () => [],
+      read: async (id) => store.get(id) ?? null,
+      save: async (resume) => { store.set(resume.id, resume); },
+      remove: async (id) => { store.delete(id); },
+      open: opened,
+    });
+    const created = await library.create({
+      title: '精准岗位简历',
+      templateId: 'ai-agent',
+      basic: { name: '张三', title: '前端工程师', website: 'javascript:alert(1)' },
+      experiences: [
+        { company: 'Acme', position: '高级前端', startDate: '2023.01', endDate: '至今', description: '<p>核心贡献</p><script>alert(1)</script>' },
+      ],
+    });
+    expect(created.title).toBe('精准岗位简历');
+    expect(created.templateId).toBe('ai-agent');
+    expect(created.theme.color).toMatch(/^#/);
+    expect(created.basic.website).toBeUndefined();
+    expect(created.experiences[0]?.id).toBeTruthy();
+    expect(created.experiences[0]?.description).not.toContain('<script>');
+    expect(await library.open(created.id)).toEqual({ id: created.id, opened: true });
+    expect(opened).toHaveBeenCalledWith(created.id);
+    await expect(library.open('missing-id')).rejects.toThrow('没有这份简历');
+  });
 });

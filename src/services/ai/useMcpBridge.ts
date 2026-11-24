@@ -33,7 +33,17 @@ function browserCatalog(router: Router): ResumeCatalog {
       await storageManager.saveResume(resume);
       useWorkbenchStore().upsertMeta(metaFromResume(resume));
     },
-    remove: (id) => storageManager.delete(id),
+    async remove(id) {
+      await storageManager.delete(id);
+      useWorkbenchStore().removeMeta(id);
+    },
+    async open(id) {
+      const editor = useResumeStore();
+      if (editor.data.id && editor.data.id !== id && editor.discardedId !== editor.data.id) {
+        await editor.flushSave().catch(() => undefined);
+      }
+      await router.push(`/editor/${id}`);
+    },
     async discardOpen(id) {
       const editor = useResumeStore();
       if (editor.data.id !== id) return;

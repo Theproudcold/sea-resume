@@ -12,6 +12,7 @@ import { useResumeStore } from '@/stores/resume';
 import { resetEditorChromeState, useEditorChrome } from '@/composables/useEditorChrome';
 import { SIDEBAR_WIDTH_DEFAULT } from '@/utils/editorChrome';
 import { storageManager } from '@/services/storage/StorageManager';
+import { useMcpBridge } from '@/services/ai/useMcpBridge';
 
 const exportProbe = vi.hoisted(() => ({ previewVisible: false }));
 
@@ -165,5 +166,17 @@ describe('编辑器布局控制', () => {
     await nextTick();
     expect(isPreviewVisible()).toBe(true);
     wrapper.unmount();
+  });
+
+  it('编辑器顶栏直接反映外部 MCP 连接状态', async () => {
+    const mcp = useMcpBridge();
+    mcp.linkState.value = 'connected';
+    try {
+      const { wrapper } = await mountEditor();
+      expect(wrapper.text()).toContain('外部 AI · 已连接');
+      wrapper.unmount();
+    } finally {
+      mcp.linkState.value = '';
+    }
   });
 });

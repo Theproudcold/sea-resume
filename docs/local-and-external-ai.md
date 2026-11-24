@@ -6,7 +6,7 @@
 
 1. 应用内线上 AI：现有 OpenAI-compatible 多服务商配置。
 2. 应用内本地推理：Ollama / LM Studio 的兼容接口。
-3. 外部 Agent：通过文件交换或可选 MCP relay。MCP 面板为 Codex CLI、Claude Code、Pi、ZCode、DeepSeek Harness，以及 OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI、Crush、Goose 生成接入命令。各 CLI 使用自己的登录和模型配置。
+3. 外部 Agent：通过文件交换或可选 MCP relay。MCP 面板支持 Codex（CLI / VS Code 插件）、Claude Code（CLI / VS Code 插件，用户级 `--scope user`）、通用 MCP（JSON，适用于 Antigravity / Cursor / Windsurf / Claude Desktop / VS Code 插件及任意标准 MCP 客户端），以及 Pi、ZCode、DeepSeek Harness、OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI、Crush、Goose。各客户端使用自己的登录和模型配置，无需在网页「AI 简历助手」里配置 API Key。
 
 外部 CLI 在本机运行不代表模型在本机推理。内容可能被 CLI 发送给其配置的服务商。
 
@@ -56,8 +56,8 @@ LocalStorage 和本地文件夹存储均可使用，因为业务工具在页面�
 
 ### 接入：一句话
 
-1. 在简历主页顶栏点「外部 AI」，再点「启用 MCP 桥接」。关闭对话框或离开主页后连接仍保持，只有点「停止 MCP 桥接」才断开。
-2. 在面板选择客户端。Codex、Claude Code、Pi、OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI 复制一条终端命令，下载 `relay.mjs` 并执行各自的 `mcp add`。ZCode、DeepSeek Harness、Crush、Goose 的命令会下载文件，并把填好绝对路径的配置打印到终端；把这段输出合并进面板标出的文件，已有 `sea-resume` 时只替换这一项。也可以把接入指令粘给该 Agent，由它自己完成。
+1. 在简历主页或编辑器顶栏点「外部 AI」，再点「启用 MCP 桥接」。关闭对话框或切换页面后连接仍保持，只有点「停止 MCP 桥接」才断开。
+2. 在面板选择客户端。Codex、Claude Code（`--scope user`）、Pi、OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI 复制一条终端命令，下载 `relay.mjs` 并执行各自的 `mcp add`。通用 MCP（JSON，适用于 Antigravity / Cursor / Windsurf / Claude Desktop / VS Code 插件等）、ZCode、DeepSeek Harness、Crush、Goose 的命令会下载文件，并把填好绝对路径的配置打印到终端；把这段输出合并进面板标出的文件，已有 `sea-resume` 时只替换这一项。也可以把接入指令粘给该 Agent，由它自己完成。
 3. 按面板里该客户端的说明重新加载 MCP，再让 Agent 使用下列业务工具。Codex 的命令形如：
 
 ```sh
@@ -71,8 +71,9 @@ Windows 使用面板生成的 PowerShell 版本。这些客户端按字面传递
 | `sea_resume_list` | 列出当前存储里的全部简历，返回 id、名称、模板和更新时间 |
 | `sea_resume_get` | 按 id 读取一份完整简历，包括联系方式、头像、隐藏章节、模板和主题 |
 | `sea_resume_set` | 按原 id 整份写回并立即保存。缺主要字段会被拒绝 |
-| `sea_resume_create` | 用一份完整简历新建，id 由网页分配 |
+| `sea_resume_create` | 新建一份简历并立即保存（空库或外部知识库可直接传入核心字段，缺省章节、主题和条目 ID 自动补齐），id 由网页分配 |
 | `sea_resume_delete` | 按 id 删除。若这份简历正在编辑器中打开，编辑器会离开它，且不会再自动写回 |
+| `sea_resume_open` | 按 id 在浏览器中打开该简历的可视化编辑器与实时预览 |
 | `sea_resume_export_pdf` | 生成可复制文字的 PDF，并由浏览器直接下载 |
 | `sea_interview_list` / `get` / `delete` | 列出、读取或删除本机保存的模拟面试 |
 | `sea_interview_start` | 用网页设置里的模型开始一轮模拟面试。这会把简历上下文发给该模型 |
@@ -127,7 +128,7 @@ node tools/ai-relay/start.mjs --host 127.0.0.1 --widget-origin http://localhost:
 
 `build/relayAssets.ts` 在开发／构建时从固定依赖生成 `ai-relay/`：host、embed、widget、上游许可证、单文件 `relay.mjs` 和启动包 ZIP。`build/relayBundle.ts` 用 rolldown 把上游 CLI 与依赖内联成该单文件，由 Vite 输出到静态资源，支持 `VITE_BASE_PATH` 子路径，不动态执行第三方 CDN 代码。构建仍只输出静态资源。
 
-`build/relayWidget.ts` 只在固定的 6.0.3 widget 中插入三处 `postMessage`：握手成功、连接关闭、进入休眠重试。宿主页校验消息来自自己的隐藏 frame 和本站来源后更新面板；停止桥接即移除监听。插入点不匹配时构建失败，不静默退回旧包。协议、重连和工具调用仍由上游实现。
+`build/relayWidget.ts` 只在固定的 6.0.3 widget 中插入四处 `postMessage`：握手成功、来源被拒绝、连接关闭、进入休眠重试。宿主页直接监听隐藏 `host` iframe 的 `contentWindow`，校验消息来自该宿主内 `iframe[data-webmcp-relay]` 且来源等于本站后更新面板；停止桥接即移除监听。插入点不匹配时构建失败，不静默退回旧包。协议、重连和工具调用仍由上游实现。
 
 如部署额外 CSP，需要评估上游 blob iframe、内联 widget 脚本和回环 WebSocket 的许可：例如 frame-src 的本站/blob、connect-src 的本站和所用回环地址；严格策略可能阻止此功能。不要直接为整个站点放开不必要的 script-src。无法安全放行时关闭 MCP、使用文件交换。
 

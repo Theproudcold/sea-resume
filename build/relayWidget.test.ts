@@ -13,8 +13,9 @@ describe('relay widget connection notices', () => {
     const patched = patchRelayWidget(widget, 'widget.js');
     expect(patched).toContain("postMessage({type:`sea-resume.relay`,state:`connected`},e.hostOrigin)");
     expect(patched).toContain("postMessage({type:`sea-resume.relay`,state:`reconnecting`},e.hostOrigin)");
+    expect(patched).toContain("postMessage({type:`sea-resume.relay`,state:`rejected`},e.hostOrigin)");
     expect(patched).not.toContain('sea-resume.relay`,state:`connected`},\'*\'');
-    expect(patched.match(/sea-resume\.relay/g)).toHaveLength(3);
+    expect(patched.match(/sea-resume\.relay/g)).toHaveLength(4);
     expect(patched).toContain('type:`tools/list`');
     expect(patched).toContain('type:`webmcp.reload`');
     expect(() => patchRelayWidget('upstream changed', 'widget.js')).toThrow('6.0.3');
