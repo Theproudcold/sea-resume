@@ -32,7 +32,10 @@ const SECTION_ID_MAX = 80;
 const SIDEBAR_SECTION_LIMIT = 12;
 
 /** 与 custom-template 的内置 id 保持一致。这里单独写是为了避免和内容模板工具互相引用。 */
-const BUILTIN_LAYOUT_SEED_IDS = ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'] as const satisfies readonly LayoutSeedId[];
+const BUILTIN_LAYOUT_SEED_IDS = [
+  'modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent',
+  'classic', 'editorial', 'engineer', 'executive', 'campus',
+] as const satisfies readonly LayoutSeedId[];
 
 export function isLayoutSeedId(value: string): value is LayoutSeedId {
   return (BUILTIN_LAYOUT_SEED_IDS as readonly string[]).includes(value);
@@ -290,6 +293,67 @@ export function builtinToRecipe(id: LayoutSeedId, theme: ThemeConfig): LayoutRec
       contactsPlacement: 'header',
       header: { variant: 'inline', align: 'start', avatar: 'start', fill: 'none' },
       heading: 'underline',
+    };
+  }
+  if (id === 'classic') {
+    return {
+      ...baseRecipe(theme, accent),
+      seedId: id,
+      structure: 'single',
+      sidebarSections: [],
+      summaryPlacement: 'main',
+      contactsPlacement: 'header',
+      header: { variant: 'stacked', align: 'center', avatar: 'none', fill: 'none' },
+      heading: 'underline',
+    };
+  }
+  if (id === 'editorial') {
+    return {
+      ...baseRecipe(theme, accent),
+      seedId: id,
+      structure: 'sidebar-right',
+      sidebarWidth: 34,
+      sidebarSections: ['skills', 'education'],
+      summaryPlacement: 'sidebar',
+      contactsPlacement: 'header',
+      header: { variant: 'inline', align: 'start', avatar: 'end', fill: 'none' },
+      heading: 'accent',
+    };
+  }
+  if (id === 'engineer') {
+    return {
+      ...baseRecipe(theme, accent),
+      seedId: id,
+      structure: 'single',
+      sidebarSections: [],
+      summaryPlacement: 'main',
+      contactsPlacement: 'header',
+      header: { variant: 'inline', align: 'start', avatar: 'end', fill: 'none' },
+      heading: 'accent',
+    };
+  }
+  if (id === 'executive') {
+    return {
+      ...baseRecipe(theme, accent),
+      seedId: id,
+      structure: 'single',
+      sidebarSections: [],
+      summaryPlacement: 'main',
+      contactsPlacement: 'header',
+      header: { variant: 'inline', align: 'start', avatar: 'end', fill: 'none' },
+      heading: 'underline',
+    };
+  }
+  if (id === 'campus') {
+    return {
+      ...baseRecipe(theme, accent),
+      seedId: id,
+      structure: 'single',
+      sidebarSections: [],
+      summaryPlacement: 'main',
+      contactsPlacement: 'header',
+      header: { variant: 'inline', align: 'start', avatar: 'start', fill: 'none' },
+      heading: 'accent',
     };
   }
   return {

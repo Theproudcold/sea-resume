@@ -1,7 +1,18 @@
 /** 版式语汇的第一版。未来版本不猜，直接拒绝。 */
 export const LAYOUT_SCHEMA_VERSION = 1;
 
-export type LayoutSeedId = 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' | 'ai-agent';
+export type LayoutSeedId =
+  | 'modern'
+  | 'professional'
+  | 'creative'
+  | 'minimal'
+  | 'tech'
+  | 'ai-agent'
+  | 'classic'
+  | 'editorial'
+  | 'engineer'
+  | 'executive'
+  | 'campus';
 
 export type LayoutStructure = 'single' | 'sidebar-left' | 'sidebar-right';
 export type HeaderVariant = 'inline' | 'banner' | 'stacked';

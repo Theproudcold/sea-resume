@@ -1,0 +1,486 @@
+<template>
+  <div
+    class="engineer-template"
+    :style="{
+      '--primary-color': data.theme?.color || '#2563eb',
+      '--font-size': (data.theme?.fontSize || 13.5) + 'px',
+      '--line-height': data.theme?.lineHeight || 1.54,
+      '--spacing': (data.theme?.moduleMargins?.bottom ?? 18) + 'px',
+      padding: (data.theme?.pageMargins ?? 26) + 'px',
+      fontSize: 'var(--font-size)',
+      lineHeight: 'var(--line-height)',
+      fontFamily: data.theme?.fontFamily || 'var(--resume-font-family)',
+    }"
+  >
+    <header class="engineer-header" @click="setActiveSection('basic')">
+      <div class="header-left">
+        <div class="name-row">
+          <img
+            v-if="data.basic.avatar"
+            :src="data.basic.avatar"
+            :alt="`${data.basic.name || '简历'}头像`"
+            class="engineer-avatar"
+            :style="{ borderRadius: avatarBorderRadius(data.basic.avatarShape) }"
+          />
+          <div>
+            <div class="name-badge-line">
+              <h1 class="engineer-name">{{ data.basic.name || '您的姓名' }}</h1>
+              <span v-if="data.basic.title" class="role-badge">{{ data.basic.title }}</span>
+            </div>
+            <div v-if="data.basic.summary" class="header-summary rich-text" v-html="data.basic.summary" />
+          </div>
+        </div>
+      </div>
+
+      <div class="header-contacts">
+        <div v-if="data.basic.location" class="contact-item">
+          <ContactIcon v-if="data.theme?.displayIcons !== false" type="location" :icon="data.basic.iconOverrides?.location" />
+          <span>{{ data.basic.location }}</span>
+        </div>
+        <div v-if="data.basic.phone" class="contact-item">
+          <ContactIcon v-if="data.theme?.displayIcons !== false" type="phone" :icon="data.basic.iconOverrides?.phone" />
+          <span>{{ data.basic.phone }}</span>
+        </div>
+        <div v-if="data.basic.email" class="contact-item">
+          <ContactIcon v-if="data.theme?.displayIcons !== false" type="email" :icon="data.basic.iconOverrides?.email" />
+          <a :href="`mailto:${data.basic.email}`" @click.stop>{{ data.basic.email }}</a>
+        </div>
+        <div v-if="data.basic.website" class="contact-item">
+          <ContactIcon v-if="data.theme?.displayIcons !== false" type="website" :icon="data.basic.iconOverrides?.website" />
+          <a :href="data.basic.website" target="_blank" rel="noreferrer" @click.stop>{{ data.basic.website }}</a>
+        </div>
+        <div v-for="contact in visibleCustomContacts" :key="contact.id" class="contact-item">
+          <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" />
+          <span><template v-if="contact.label">{{ contact.label }}：</template>{{ contact.value }}</span>
+        </div>
+        <ResumeSmartFields :data="data" />
+      </div>
+    </header>
+
+    <draggable
+      v-model="sortedSections"
+      class="engineer-sections"
+      :item-key="(section: string) => section"
+      :animation="200"
+      handle=".section-heading"
+      group="engineer-sections"
+    >
+      <template #item="{ element: section }">
+        <section
+          v-if="hasSectionContent(section)"
+          class="engineer-section"
+          @click.stop="setActiveSection(section)"
+        >
+          <h2 class="section-heading">
+            <span class="heading-prefix">##</span>
+            <span>{{ getSectionTitle(section) }}</span>
+            <span v-if="getSectionEnTitle(section)" class="heading-en">/ {{ getSectionEnTitle(section) }}</span>
+          </h2>
+
+          <div v-if="section === 'skills'" class="skills-grid">
+            <div v-for="skill in visibleSkills" :key="skill.id" class="skill-box">
+              <div class="skill-cat">{{ skill.category }}</div>
+              <div class="skill-items">{{ skill.items.join(' · ') }}</div>
+            </div>
+          </div>
+
+          <div v-else-if="section === 'experience'" class="timeline-list">
+            <article v-for="exp in visibleExperiences" :key="exp.id" class="timeline-entry">
+              <div class="entry-head">
+                <div class="entry-left">
+                  <strong class="entry-title">{{ exp.company }}</strong>
+                  <span v-if="exp.position" class="entry-meta">{{ exp.position }}</span>
+                </div>
+                <span class="date-pill">{{ formatDateRange(exp.startDate, exp.endDate) }}</span>
+              </div>
+              <div v-if="exp.description" class="entry-desc rich-text" v-html="exp.description" />
+              <ul v-if="exp.highlights?.length" class="highlight-list">
+                <li v-for="(highlight, idx) in exp.highlights" :key="`${exp.id}-h-${idx}`">{{ highlight }}</li>
+              </ul>
+            </article>
+          </div>
+
+          <div v-else-if="section === 'projects'" class="timeline-list">
+            <article v-for="project in visibleProjects" :key="project.id" class="timeline-entry">
+              <div class="entry-head">
+                <div class="entry-left">
+                  <strong class="entry-title">{{ project.name }}</strong>
+                  <span v-if="project.role" class="entry-meta">{{ project.role }}</span>
+                </div>
+                <span class="date-pill">{{ formatDateRange(project.startDate, project.endDate) }}</span>
+              </div>
+              <div v-if="project.description" class="entry-desc rich-text" v-html="project.description" />
+              <div v-if="project.techStack?.length" class="stack-row">
+                <span v-for="(tech, idx) in project.techStack" :key="`${project.id}-t-${idx}`" class="stack-chip">{{ tech }}</span>
+              </div>
+              <a v-if="project.link" class="entry-link" :href="project.link" target="_blank" rel="noreferrer" @click.stop>{{ project.link }}</a>
+            </article>
+          </div>
+
+          <div v-else-if="section === 'education'" class="edu-list">
+            <article v-for="edu in visibleEducation" :key="edu.id" class="edu-entry">
+              <div class="entry-head">
+                <div class="entry-left">
+                  <strong class="entry-title">{{ edu.school }}</strong>
+                  <span class="entry-meta">
+                    {{ [edu.major, edu.degree, edu.gpa ? `GPA ${edu.gpa}` : ''].filter(Boolean).join(' · ') }}
+                  </span>
+                </div>
+                <span class="date-pill">{{ formatDateRange(edu.startDate, edu.endDate) }}</span>
+              </div>
+            </article>
+          </div>
+
+          <div v-else-if="isCustomBlock(section)" class="timeline-list">
+            <template v-if="Array.isArray(getCustomContent(section))">
+              <article v-for="item in getCustomItems(section)" :key="item.id" class="timeline-entry">
+                <div class="entry-head">
+                  <div class="entry-left">
+                    <strong v-if="item.title" class="entry-title">{{ item.title }}</strong>
+                    <span v-if="item.subtitle" class="entry-meta">{{ item.subtitle }}</span>
+                  </div>
+                  <span v-if="item.date" class="date-pill">{{ item.date }}</span>
+                </div>
+                <div v-if="item.description" class="entry-desc rich-text" v-html="item.description" />
+              </article>
+            </template>
+            <div v-else class="entry-desc rich-text" v-html="getCustomContent(section)" />
+          </div>
+        </section>
+      </template>
+    </draggable>
+  </div>
+</template>
+
+<script setup lang="ts">
+import draggable from 'vuedraggable';
+import ContactIcon from '@/components/common/ContactIcon.vue';
+import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
+import { useResumeTemplate } from '@/composables/useResumeTemplate';
+import type { ResumeData } from '@/types/resume';
+import { avatarBorderRadius } from '@/utils/avatarShape';
+
+const props = defineProps<{ data: ResumeData }>();
+
+const {
+  visibleEducation,
+  visibleExperiences,
+  visibleProjects,
+  visibleSkills,
+  visibleCustomContacts,
+  sortedSections,
+  isCustomBlock,
+  getCustomContent,
+  getCustomItems,
+  hasSectionContent,
+  getSectionTitle,
+  getSectionEnTitle,
+  formatDateRange,
+  setActiveSection,
+} = useResumeTemplate(props, { defaultDateFormat: 'YYYY.MM' });
+</script>
+
+<style scoped>
+.engineer-template {
+  box-sizing: border-box;
+  min-height: var(--a4-height);
+  background: var(--resume-paper);
+  color: var(--resume-ink);
+}
+
+.engineer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--resume-rule);
+  margin-bottom: 18px;
+  cursor: pointer;
+}
+
+.header-left {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.name-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.engineer-avatar {
+  width: 60px;
+  height: 60px;
+  flex: 0 0 60px;
+  object-fit: cover;
+}
+
+.name-badge-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.engineer-name {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--resume-ink-strong);
+  line-height: 1.2;
+}
+
+.role-badge {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 4px;
+  color: var(--primary-color);
+  background: color-mix(in srgb, var(--primary-color) 12%, var(--resume-paper));
+  border: 1px solid color-mix(in srgb, var(--primary-color) 32%, var(--resume-rule));
+}
+
+.header-summary {
+  color: var(--resume-ink-body);
+  font-size: 0.94em;
+  overflow-wrap: anywhere;
+}
+
+.header-contacts {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.84em;
+  color: var(--resume-ink-body);
+  text-align: right;
+}
+
+.contact-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  overflow-wrap: anywhere;
+}
+
+.contact-item :deep(svg) {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: var(--primary-color);
+}
+
+.contact-item a,
+.entry-link {
+  color: inherit;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.contact-item a:hover,
+.entry-link:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+.engineer-sections {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing);
+}
+
+.engineer-section {
+  cursor: pointer;
+  scroll-margin-top: 12px;
+}
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: calc(var(--font-size) + 1px);
+  font-weight: 700;
+  color: var(--resume-ink-title);
+  cursor: grab;
+  break-after: avoid;
+}
+
+.heading-prefix {
+  color: var(--primary-color);
+}
+
+.heading-en {
+  font-size: 0.82em;
+  font-weight: 500;
+  color: var(--resume-ink-soft);
+}
+
+.skills-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.skill-box {
+  background: var(--resume-hover);
+  border: 1px solid var(--resume-rule);
+  border-radius: 5px;
+  padding: 9px 11px;
+  break-inside: avoid;
+}
+
+.skill-cat {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.88em;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 4px;
+}
+
+.skill-items {
+  font-size: 0.92em;
+  color: var(--resume-ink-body);
+  overflow-wrap: anywhere;
+}
+
+.timeline-list {
+  border-left: 1.5px solid color-mix(in srgb, var(--primary-color) 32%, var(--resume-rule));
+  padding-left: 16px;
+  margin-left: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.timeline-entry {
+  position: relative;
+  break-inside: avoid;
+}
+
+.timeline-entry::before {
+  content: "";
+  position: absolute;
+  left: -21px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--resume-paper);
+  border: 2px solid var(--primary-color);
+}
+
+.entry-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 3px;
+}
+
+.entry-left {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.entry-title {
+  font-size: calc(var(--font-size) + 0.5px);
+  color: var(--resume-ink-title);
+}
+
+.entry-meta {
+  margin-left: 8px;
+  font-size: 0.94em;
+  color: var(--resume-ink-soft);
+  font-weight: 500;
+}
+
+.date-pill {
+  flex: 0 0 auto;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.84em;
+  color: var(--resume-ink-body);
+  background: var(--resume-chip);
+  padding: 2px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.entry-desc {
+  color: var(--resume-ink);
+  overflow-wrap: anywhere;
+}
+
+.highlight-list {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
+  color: var(--resume-ink);
+}
+
+.highlight-list li + li {
+  margin-top: 2px;
+}
+
+.stack-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.stack-chip {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--resume-chip);
+  border: 1px solid var(--resume-rule);
+  color: var(--resume-ink-body);
+}
+
+.entry-link {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.84em;
+  color: var(--resume-ink-soft);
+}
+
+.edu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edu-entry {
+  break-inside: avoid;
+}
+
+.rich-text :deep(p) {
+  margin: 0 0 0.35em;
+}
+
+.rich-text :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.rich-text :deep(ul),
+.rich-text :deep(ol) {
+  margin: 0.25em 0;
+  padding-left: 1.2em;
+}
+
+@media print {
+  .engineer-template {
+    min-height: 0;
+    background: #fff;
+  }
+}
+</style>

@@ -52,16 +52,28 @@ function contactRuns(data: ResumeData, color: string): Content[] {
 function createHeader(data: ResumeData, layout: PdfTemplateLayout, avatar?: string): Content {
   const headerText = layout.headerText ?? layout.ink;
   const contacts = contactRuns(data, headerText);
+  const centered = layout.variant === 'classic';
+  const align = centered ? { alignment: 'center' as const } : {};
   const profile: Content[] = [
-    { text: data.basic.name || data.title || '简历', style: 'resumeName', color: headerText },
-    ...(data.basic.title ? [{ text: data.basic.title, style: 'resumeHeadline', color: headerText } as Content] : []),
+    { text: data.basic.name || data.title || '简历', style: 'resumeName', color: headerText, ...align },
+    ...(data.basic.title ? [{ text: data.basic.title, style: 'resumeHeadline', color: headerText, ...align } as Content] : []),
     ...(layout.variant !== 'professional' && contacts.length
-      ? [{ text: contacts, style: 'contactLine', margin: [0, 5, 0, 0] } as Content]
+      ? [{ text: contacts, style: 'contactLine', margin: [0, 5, 0, 0], ...align } as Content]
       : []),
   ];
   // 头像资源始终是 1:1：方形直接嵌入，圆形由调用方预先裁成透明角 PNG。
   const image: Column[] = avatar ? [{ image: avatar, fit: [58, 58], alignment: 'center', margin: [4, 0, 4, 0] }] : [];
-  const columns: Column[] = layout.variant === 'ai-agent'
+  if (centered) {
+    return {
+      stack: [
+        ...(avatar ? [{ image: avatar, fit: [54, 54], alignment: 'center' as const, margin: [0, 0, 0, 6] } as Content] : []),
+        ...profile,
+      ],
+      margin: [0, 0, 0, 13],
+    };
+  }
+  const avatarOnLeft = layout.variant === 'ai-agent' || layout.variant === 'campus';
+  const columns: Column[] = avatarOnLeft
     ? [...image, { width: '*', stack: profile }]
     : [{ width: '*', stack: profile }, ...image];
   return {
@@ -77,13 +89,17 @@ function createHeader(data: ResumeData, layout: PdfTemplateLayout, avatar?: stri
 }
 
 function createSectionHeading(section: PdfResumeSection, layout: PdfTemplateLayout, topMargin: number): Content {
-  const ruled = layout.variant !== 'creative' && layout.variant !== 'tech';
+  const accentOnly = layout.variant === 'creative'
+    || layout.variant === 'tech'
+    || layout.variant === 'editorial'
+    || layout.variant === 'engineer'
+    || layout.variant === 'campus';
   return {
     text: section.title,
     style: 'sectionHeader',
-    color: ruled ? layout.ink : layout.accent,
+    color: accentOnly ? layout.accent : layout.ink,
     margin: [0, topMargin, 0, 5],
-    ...(ruled ? { decoration: 'underline' as const, decorationColor: layout.accent, decorationStyle: 'solid' as const } : {}),
+    ...(!accentOnly ? { decoration: 'underline' as const, decorationColor: layout.accent, decorationStyle: 'solid' as const } : {}),
   };
 }
 
@@ -94,7 +110,7 @@ function renderSections(sections: PdfResumeSection[], layout: PdfTemplateLayout,
   ]);
 }
 
-function createProfessionalColumns(
+function createTwoColumnBody(
   data: ResumeData,
   sections: PdfResumeSection[],
   layout: PdfTemplateLayout,
@@ -106,20 +122,20 @@ function createProfessionalColumns(
   const summary = data.basic.summary
     ? [{ text: '个人简介', style: 'sidebarHeader', color: layout.accent } as Content, ...richTextToPdfContent(data.basic.summary)]
     : [];
-  const contactContent = contactRuns(data, layout.ink);
+  const includeContactsInSidebar = layout.variant === 'professional';
+  const contactContent = includeContactsInSidebar ? contactRuns(data, layout.ink) : [];
   const contacts = contactContent.length
     ? [{ text: '联系方式', style: 'sidebarHeader', color: layout.accent } as Content, { text: contactContent, style: 'sidebarContact', margin: [0, 0, 0, 8] } as Content]
     : [];
-  const left: Content[] = [
+  const sideStack: Content[] = [
     ...summary,
     ...contacts,
     ...renderSections(sidebar, layout, topMargin),
   ];
+  const sideCol: Column = { width: 158, stack: sideStack };
+  const mainCol: Column = { width: '*', stack: renderSections(main, layout, topMargin) };
   return {
-    columns: [
-      { width: 154, stack: left },
-      { width: '*', stack: renderSections(main, layout, topMargin) },
-    ],
+    columns: layout.sidebarSide === 'right' ? [mainCol, sideCol] : [sideCol, mainCol],
     columnGap: 18,
   };
 }
@@ -227,8 +243,8 @@ export function createResumePdfDefinition(data: ResumeData, avatarDataUrl?: stri
   const sectionGap = pxToPt(data.theme.moduleMargins.bottom, layout.compact ? 8 : 12);
   const content: Content[] = [createHeader(data, layout, avatarDataUrl)];
 
-  if (layout.variant === 'professional') {
-    content.push(createProfessionalColumns(data, sections, layout, sectionGap));
+  if (layout.sidebarSections?.length) {
+    content.push(createTwoColumnBody(data, sections, layout, sectionGap));
   } else {
     if (data.basic.summary) content.push(...richTextToPdfContent(data.basic.summary));
     content.push(...renderSections(sections, layout, sectionGap));
