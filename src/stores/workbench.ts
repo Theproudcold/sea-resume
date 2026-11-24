@@ -209,6 +209,27 @@ export const useWorkbenchStore = defineStore('workbench', {
       return next.id;
     },
 
+    /**
+     * 另存同步过主干内容的岗位版本。
+     *
+     * 只前进基线（`baseVersion`），不改轨道与分支版本号：同步不是新一版岗位洞见，
+     * 而是把主干已有内容补进来。原分支保留，便于对比或回退。
+     */
+    async saveRebasedVersion(source: ResumeData, baseVersion: number): Promise<string> {
+      if (!source.jobTarget) throw new Error('只有岗位版本才能同步主干。');
+      const now = new Date().toISOString();
+      const next: ResumeData = {
+        ...JSON.parse(JSON.stringify(source)) as ResumeData,
+        id: generateId(),
+        jobTarget: { ...source.jobTarget, baseVersion },
+        createdAt: now,
+        updatedAt: now,
+      };
+      await storageManager.saveResume(next);
+      this.upsertMeta(metaFromResume(next));
+      return next.id;
+    },
+
     async createJobVersion(sourceId: string, target: Omit<JobTarget, 'sourceResumeId'>): Promise<string> {
       const source = await storageManager.read(sourceId);
       if (!source) throw new Error('源简历不存在。');

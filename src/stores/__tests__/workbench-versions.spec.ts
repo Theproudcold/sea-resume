@@ -100,4 +100,30 @@ describe('workbench job versions', () => {
     const store = useWorkbenchStore();
     await expect(store.createMasterVersion(branch.id)).rejects.toThrow('岗位版本');
   });
+
+  it('saves a rebased branch with an updated base version and keeps the track', async () => {
+    const branch = parseResumeMarkdown('# Alex').resume;
+    branch.trackId = 'track-a';
+    branch.versionNumber = 1;
+    branch.jobTarget = { versionName: 'Acme', company: 'Acme', position: '前端', sourceResumeId: 'm1', baseId: 'm1', baseVersion: 1 };
+    const adapter = storageManager.getCurrentAdapter();
+    vi.spyOn(storageManager, 'save').mockImplementation((data, meta) => adapter.save(data, meta));
+    vi.spyOn(storageManager, 'list').mockImplementation(() => adapter.list());
+    const store = useWorkbenchStore();
+
+    const id = await store.saveRebasedVersion(branch, 5);
+    const saved = normalizeResumeData(await storageManager.read(id));
+    expect(saved.jobTarget).toMatchObject({ company: 'Acme', baseVersion: 5 });
+    // 轨道与分支版本号不变，只有基线前进。
+    expect(saved.trackId).toBe('track-a');
+    expect(saved.versionNumber).toBe(1);
+    // 原分支不受影响。
+    expect(branch.jobTarget?.baseVersion).toBe(1);
+  });
+
+  it('refuses to rebase a master resume that has no job target', async () => {
+    const master = parseResumeMarkdown('# Alex').resume;
+    const store = useWorkbenchStore();
+    await expect(store.saveRebasedVersion(master, 3)).rejects.toThrow('岗位版本');
+  });
 });
