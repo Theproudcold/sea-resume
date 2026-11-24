@@ -7,6 +7,7 @@ import { useWorkbenchStore } from '@/stores/workbench';
 import { aiWorkspaceRepository } from './AiWorkspaceRepository';
 import { getAiSessionApiKey, loadAiModelSettings, toAiProviderConfig } from './AiSettings';
 import { startExternalAiBridge, type RelayLinkState } from './externalAiBridge';
+import { clearExternalTasks } from './externalTaskQueue';
 import { assertNoActiveInterview, createResumeLibrary, type ResumeCatalog } from './resumeLibrary';
 import { createResumePdfBlob, downloadPdfBlob } from '@/utils/export-pdf';
 import type { InterviewSession, InterviewSettings } from '@/types/interview';
@@ -16,8 +17,21 @@ const linkState = ref<RelayLinkState | ''>('');
 const started = ref(false);
 const connecting = ref(false);
 const errorMessage = ref('');
+const dialogRequests = ref(0);
 let stopBridge: (() => void) | undefined;
 let controller: AbortController | undefined;
+
+/** 无路由依赖的只读状态钩子，供设置中心与 AI 面板订阅外部 MCP 状态。 */
+export function useMcpState() {
+  return {
+    linkState,
+    started,
+    connecting,
+    errorMessage,
+    dialogRequests,
+    requestOpenMcpDialog() { dialogRequests.value += 1; },
+  };
+}
 
 function browserCatalog(router: Router): ResumeCatalog {
   return {
@@ -57,6 +71,7 @@ function browserCatalog(router: Router): ResumeCatalog {
     interviews: {
       list: () => aiWorkspaceRepository.list<InterviewSession>('interview'),
       get: (id) => aiWorkspaceRepository.get<InterviewSession>('interview', id),
+      save: (session) => aiWorkspaceRepository.save('interview', session),
       async remove(id) {
         const store = useInterviewStore();
         if (store.session?.id === id) {
@@ -101,9 +116,10 @@ export function useMcpBridge() {
     controller?.abort();
     stopBridge?.();
     stopBridge = undefined;
+    clearExternalTasks();
     started.value = false;
     linkState.value = '';
     connecting.value = false;
   }
-  return { linkState, started, connecting, errorMessage, connect, disconnect };
+  return { linkState, started, connecting, errorMessage, dialogRequests, connect, disconnect };
 }

@@ -2,6 +2,7 @@ import { defineComponent, h } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearAiModelSettings, clearAiSessionApiKey, getAiStoredApiKey, hasAiStoredApiKey, loadAiProviderProfiles, saveAiModelSettings, setAiSessionApiKey } from '@/services/ai/AiSettings';
+import { useMcpState } from '@/services/ai/useMcpBridge';
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
 
@@ -181,6 +182,22 @@ describe('AiProviderSettingsPanel', () => {
     state.timeoutSeconds = 120;
     await wrapper.findAll('button').find(button => button.text() === '保存配置')!.trigger('click');
     expect(loadAiProviderProfiles()[0]!.timeoutMs).toBe(120000);
+  });
+
+  it('shows the external MCP channel as ready without API keys when connected', async () => {
+    const mcp = useMcpState();
+    mcp.linkState.value = 'connected';
+    const beforeRequests = mcp.dialogRequests.value;
+    try {
+      const wrapper = mount(AiProviderSettingsPanel, { global: { stubs } });
+      expect(wrapper.text()).toContain('已就绪 · 免 API Key');
+      expect(wrapper.text()).toContain('无需配置 API Key');
+      await wrapper.findAll('button').find(button => button.text() === '管理 MCP 连接')!.trigger('click');
+      expect(mcp.dialogRequests.value).toBe(beforeRequests + 1);
+      wrapper.unmount();
+    } finally {
+      mcp.linkState.value = '';
+    }
   });
 
 });

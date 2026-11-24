@@ -72,11 +72,16 @@ Windows 使用面板生成的 PowerShell 版本。这些客户端按字面传递
 | `sea_resume_get` | 按 id 读取一份完整简历，包括联系方式、头像、隐藏章节、模板和主题 |
 | `sea_resume_set` | 按原 id 整份写回并立即保存。缺主要字段会被拒绝 |
 | `sea_resume_create` | 新建一份简历并立即保存（空库或外部知识库可直接传入核心字段，缺省章节、主题和条目 ID 自动补齐），id 由网页分配 |
+| `sea_resume_derive_version` | 从主干简历派生岗位定制版本，保留 `trackId` 与 `jobTarget` 谱系关系 |
 | `sea_resume_delete` | 按 id 删除。若这份简历正在编辑器中打开，编辑器会离开它，且不会再自动写回 |
 | `sea_resume_open` | 按 id 在浏览器中打开该简历的可视化编辑器与实时预览 |
+| `sea_resume_quality` | 运行本地简历质量体检（零 API Key），返回完整性与日期问题列表 |
+| `sea_jd_risk_scan` | 运行本地 JD 风险词典扫描（零 API Key），返回命中风险项与反问建议 |
 | `sea_resume_export_pdf` | 生成可复制文字的 PDF，并由浏览器直接下载 |
+| `sea_task_list` / `sea_task_complete` | 读取并回填网页「AI 简历助手 / PDF 导入」在免 API Key 模式下派发的待办任务 |
 | `sea_interview_list` / `get` / `delete` | 列出、读取或删除本机保存的模拟面试 |
-| `sea_interview_start` | 用网页设置里的模型开始一轮模拟面试。这会把简历上下文发给该模型 |
+| `sea_interview_save` | 保存由外部 Agent 主持的模拟面试复盘报告（免网页 API Key），可继续用于面试回补事实 |
+| `sea_interview_start` | 用网页设置里的模型开始一轮模拟面试；未配网页模型时请直接由外部 Agent 主持并用 `sea_interview_save` 保存 |
 
 简历存在浏览器里，本来就是用户自己的数据，所以不再做二次授权或草稿确认。正在编辑的那份由编辑器保存并保留撤销；其他简历直接写入当前存储，并更新主页列表。单份简历最大 1.5 MB，因此 relay 载荷上限是 2 MB。PDF 不放进 MCP 消息，避免超过消息上限。
 

@@ -59,8 +59,9 @@ function loadSavedClient(): RelayClient {
   return 'codex';
 }
 
-const { linkState, started, connecting, errorMessage, connect, disconnect } = useMcpBridge();
+const { linkState, started, connecting, errorMessage, dialogRequests, connect, disconnect } = useMcpBridge();
 const open = ref(false);
+watch(dialogRequests, () => { open.value = true; });
 const statusSuffix = computed(() => {
   if (linkState.value === 'connected') return ' · 已连接';
   if (linkState.value === 'waiting') return ' · 等待';
