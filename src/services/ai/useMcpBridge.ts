@@ -1,10 +1,16 @@
 import { ref } from 'vue';
 import { useRouter, type Router } from 'vue-router';
 import { metaFromResume, storageManager } from '@/services/storage/StorageManager';
+import { useInterviewStore } from '@/stores/interview';
 import { useResumeStore } from '@/stores/resume';
 import { useWorkbenchStore } from '@/stores/workbench';
+import { aiWorkspaceRepository } from './AiWorkspaceRepository';
+import { getAiSessionApiKey, loadAiModelSettings, toAiProviderConfig } from './AiSettings';
 import { startExternalAiBridge, type RelayLinkState } from './externalAiBridge';
-import { createResumeLibrary, type ResumeCatalog } from './resumeLibrary';
+import { assertNoActiveInterview, createResumeLibrary, type ResumeCatalog } from './resumeLibrary';
+import { createResumePdfBlob, downloadPdfBlob } from '@/utils/export-pdf';
+import type { InterviewSession, InterviewSettings } from '@/types/interview';
+import type { ResumeData } from '@/types/resume';
 
 const linkState = ref<RelayLinkState | ''>('');
 const started = ref(false);
@@ -34,6 +40,29 @@ function browserCatalog(router: Router): ResumeCatalog {
       await editor.flushSave().catch(() => undefined);
       editor.discardOpenResume();
       if (router.currentRoute.value.path.startsWith('/editor')) await router.push('/');
+    },
+    async exportPdf(resume: ResumeData) {
+      downloadPdfBlob(await createResumePdfBlob(resume), resume.title || resume.basic.name || 'resume');
+    },
+    interviews: {
+      list: () => aiWorkspaceRepository.list<InterviewSession>('interview'),
+      get: (id) => aiWorkspaceRepository.get<InterviewSession>('interview', id),
+      async remove(id) {
+        const store = useInterviewStore();
+        if (store.session?.id === id) {
+          await store.setPersistence(false);
+          store.reset();
+        }
+        await aiWorkspaceRepository.delete('interview', id);
+      },
+      async start(resume, settings: InterviewSettings) {
+        const store = useInterviewStore();
+        assertNoActiveInterview(store.busy || !!store.session);
+        const configured = loadAiModelSettings();
+        const config = toAiProviderConfig(configured, getAiSessionApiKey(configured?.profileId));
+        await store.start(resume, settings, config, { consent: true, persistence: true });
+        return store.session ? JSON.parse(JSON.stringify(store.session)) as InterviewSession : null;
+      },
     },
   };
 }
