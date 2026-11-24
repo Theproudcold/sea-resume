@@ -114,6 +114,8 @@ describe('workbench job versions', () => {
     const id = await store.saveRebasedVersion(branch, 5);
     const saved = normalizeResumeData(await storageManager.read(id));
     expect(saved.jobTarget).toMatchObject({ company: 'Acme', baseVersion: 5 });
+    // 记录同步来源，否则同一岗位上会出现两条互不相识的记录，图谱无法还原顺序。
+    expect(saved.jobTarget?.rebasedFromId).toBe(branch.id);
     // 轨道与分支版本号不变，只有基线前进。
     expect(saved.trackId).toBe('track-a');
     expect(saved.versionNumber).toBe(1);
@@ -125,5 +127,25 @@ describe('workbench job versions', () => {
     const master = parseResumeMarkdown('# Alex').resume;
     const store = useWorkbenchStore();
     await expect(store.saveRebasedVersion(master, 3)).rejects.toThrow('岗位版本');
+  });
+
+  it('chains repeated syncs through their predecessors', async () => {
+    const first = parseResumeMarkdown('# Alex').resume;
+    first.trackId = 'track-a';
+    first.versionNumber = 1;
+    first.jobTarget = { versionName: 'Acme', company: 'Acme', position: '前端', sourceResumeId: 'm1', baseId: 'm1', baseVersion: 1 };
+    const adapter = storageManager.getCurrentAdapter();
+    vi.spyOn(storageManager, 'save').mockImplementation((data, meta) => adapter.save(data, meta));
+    const store = useWorkbenchStore();
+
+    const secondId = await store.saveRebasedVersion(first, 3);
+    const second = normalizeResumeData(await storageManager.read(secondId));
+    expect(second.jobTarget?.rebasedFromId).toBe(first.id);
+
+    // 从第二版再同步一次，应指向第二版，而不是回到最初那一版。
+    const thirdId = await store.saveRebasedVersion(second, 5);
+    const third = normalizeResumeData(await storageManager.read(thirdId));
+    expect(third.jobTarget?.rebasedFromId).toBe(secondId);
+    expect(third.jobTarget?.baseVersion).toBe(5);
   });
 });

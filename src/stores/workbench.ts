@@ -221,7 +221,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       const next: ResumeData = {
         ...JSON.parse(JSON.stringify(source)) as ResumeData,
         id: generateId(),
-        jobTarget: { ...source.jobTarget, baseVersion },
+        jobTarget: { ...source.jobTarget, baseVersion, rebasedFromId: source.id },
         createdAt: now,
         updatedAt: now,
       };
