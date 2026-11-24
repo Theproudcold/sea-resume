@@ -212,54 +212,13 @@ function pathToD(points: Array<{ row: number; lane: number }>): string {
   return d;
 }
 
-/**
- * 同一列上首尾相接的两条路径之间补一小段竖线。
- *
- * 不同岗位复用同一列时，它们的路径各自从自己的行出发、中间断开（78→130）。
- * 从语义上讲这是对的——它们本来就没有关系；但视觉上会读成「这条线断了」。
- * 补上一段同色短竖线，读作「同一条轨道上先后出现过的两个分支」。
- */
-/**
- * 同一列上「紧邻」的两段分支之间补一小段竖线。
- *
- * 前提是它们中间只隔着一个行高（首尾相接），读作同一条轨道上的先后两段。
- * 跨度更大的不连——中间隔着主干的其他版本，连起来会被误读成一条贯通的分支。
- */
-function connectorFor(points: Array<{ y: number }>, lane: number): string {
-  const sorted = [...points].sort((a, b) => a.y - b.y);
-  let d = '';
-  for (let i = 1; i < sorted.length; i += 1) {
-    const previous = sorted[i - 1]!;
-    const current = sorted[i]!;
-    const gap = current.y - previous.y;
-    // 只连相邻一行内的两段（gap 约等于一个行高）。
-    if (gap > 0 && gap <= ROW_HEIGHT * 1.05) {
-      d += ` M ${lane} ${previous.y} L ${lane} ${current.y}`;
-    }
-  }
-  return d;
-}
-
-const renderedPaths = computed(() => {
-  // 按列收集每条路径的首末 y，用来判断「同列上是否还有别的分支」。
-  const byLane = new Map<number, Array<{ y: number }>>();
-  for (const path of graph.value.paths) {
-    if (path.kind !== 'branch') continue;
-    const ys = path.points.map((point) => rowCenterY(point.row));
-    const lane = path.points[0]!.lane;
-    const list = byLane.get(lane) ?? [];
-    list.push({ y: Math.min(...ys) }, { y: Math.max(...ys) });
-    byLane.set(lane, list);
-  }
-  const connectors = [...byLane.entries()]
-    .map(([lane, rows]) => ({ lane, d: connectorFor(rows, laneX(lane)) }))
-    .filter((item) => item.d);
-
-  return [
-    ...connectors.map((item) => ({ d: item.d, color: LANE_COLORS[item.lane % LANE_COLORS.length]!, kind: 'connector' })),
-    ...graph.value.paths.map((path) => ({ d: pathToD(path.points), color: path.color, kind: path.kind })),
-  ];
-});
+const renderedPaths = computed(() =>
+  graph.value.paths.map((path) => ({
+    d: pathToD(path.points),
+    color: path.color,
+    kind: path.kind,
+  })),
+);
 
 /** 所有节点圆点，用整图坐标。 */
 const dots = computed(() =>
@@ -318,7 +277,6 @@ defineExpose({ graph });
 .rail-path { stroke-width: 2.5; stroke-linecap: round; }
 
 .rail-path.rail-branch { stroke-dasharray: 4 3; }
-.rail-path.rail-connector { opacity: .45; stroke-width: 2; }
 .rail-dot { stroke-width: 3; }
 /* 圆点压在线条上：先用背景色的外圈「断开」线条，让节点读作节点而不是线上的一个点 */
 .rail-dot-halo { fill: var(--color-paper); stroke: none; }
