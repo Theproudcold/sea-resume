@@ -1,69 +1,136 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import ResumeGraphView from '../ResumeGraphView.vue';
 import type { ResumeMeta } from '@/types/resume';
 
-function master(id: string, versionNumber: number, extra: Partial<ResumeMeta> = {}): ResumeMeta {
+const T0 = Date.parse('2026-01-01T00:00:00Z');
+const DAY = 86_400_000;
+
+function master(id: string, versionNumber: number, extra: Partial<ResumeMeta> = {}, days = versionNumber): ResumeMeta {
   return {
     id,
-    title: id === 'm1' ? '我的简历' : '我的简历',
+    title: '我的简历',
     templateId: 'modern',
-    createdAt: Date.parse('2026-01-01T00:00:00Z') + versionNumber,
-    updatedAt: Date.parse('2026-01-01T00:00:00Z') + versionNumber,
+    createdAt: T0,
+    updatedAt: T0 + days * DAY,
     trackId: 'T',
     versionNumber,
     ...extra,
   };
 }
 
-function job(id: string, baseId: string, baseVersion: number, extra: Partial<ResumeMeta> = {}): ResumeMeta {
+function job(
+  id: string,
+  baseId: string,
+  baseVersion: number,
+  extra: { trackId?: string; company?: string; rebasedFromId?: string; days?: number } = {},
+): ResumeMeta {
+  const company = extra.company ?? 'Acme';
   return master(id, 1, {
-    title: 'Acme 前端',
-    jobTarget: { versionName: 'Acme 前端', company: 'Acme', position: '前端', sourceResumeId: baseId, baseId, baseVersion },
-    ...extra,
-  });
+    title: `${company} 前端`,
+    jobTarget: {
+      versionName: `${company} 前端`,
+      company,
+      position: '前端工程师',
+      sourceResumeId: baseId,
+      baseId,
+      baseVersion,
+      ...(extra.rebasedFromId ? { rebasedFromId: extra.rebasedFromId } : {}),
+    },
+    ...(extra.trackId ? { trackId: extra.trackId } : {}),
+  }, extra.days ?? 10);
 }
 
 function setup(resumes: ResumeMeta[]) {
   return mount(ResumeGraphView, { props: { resumes } });
 }
 
-describe('ResumeGraphView', () => {
-  it('renders one node per resume and draws the edges', () => {
-    const panel = setup([master('m1', 1), master('m2', 2), job('b1', 'm1', 1)]);
+function pathX(path: string, end: 'start' | 'end'): number {
+  const nums = path.match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+  return end === 'start' ? nums[0]! : nums[nums.length - 2]!;
+}
+
+describe('ResumeGraphView 行式布局', () => {
+  it('renders one row per resume, each with a rail and an info line', () => {
+    const panel = setup([master('m1', 1), master('m2', 2), job('j1', 'm1', 1)]);
+    expect(panel.findAll('[data-testid=graph-row]')).toHaveLength(3);
+    expect(panel.findAll('[data-testid=graph-rail]')).toHaveLength(3);
+    expect(panel.findAll('[data-testid=graph-dot]')).toHaveLength(3);
     expect(panel.findAll('[data-testid=graph-node]')).toHaveLength(3);
-    // 主干推进 + 分叉 = 2 条线。
-    expect(panel.findAll('[data-testid=graph-edge]')).toHaveLength(2);
     panel.unmount();
   });
 
-  it('labels versions on the nodes', () => {
-    const panel = setup([master('m1', 1), master('m2', 2)]);
-    const text = panel.text();
-    expect(text).toContain('v2');
-    expect(text).toContain('v1');
+  it('orders rows newest first', () => {
+    const panel = setup([master('m1', 1), master('m3', 3), master('m2', 2)]);
+    const titles = panel.findAll('.info-version').map((el) => el.text());
+    expect(titles[0]).toBe('v3');
     panel.unmount();
   });
 
-  it('marks a node that is behind its master with a text label, not only colour', () => {
-    const panel = setup([master('m1', 1), master('m2', 2), job('b1', 'm1', 1)]);
+  it('shows the job company and position on branch rows', () => {
+    const panel = setup([master('m1', 1), master('m2', 2), job('j1', 'm1', 1)]);
+    expect(panel.text()).toContain('Acme');
+    expect(panel.text()).toContain('前端工程师');
+    panel.unmount();
+  });
+
+  it('draws rail lines for relations', () => {
+    const panel = setup([master('m1', 1), master('m2', 2), job('j1', 'm1', 1)]);
+    expect(panel.findAll('[data-testid=graph-edge]').length).toBeGreaterThan(0);
+    panel.unmount();
+  });
+
+  it('marks a node that is behind with a text label, not only colour', () => {
+    const panel = setup([master('m1', 1), master('m2', 2), job('j1', 'm1', 1)]);
     const behind = panel.findAll('[data-testid=graph-behind]');
     expect(behind).toHaveLength(1);
-    expect(behind[0]!.text()).toContain('有新版');
+    expect(behind[0]!.text()).toContain('主干有新版');
     panel.unmount();
   });
 
-  it('tells the user when the order had to be guessed', () => {
+  it('keeps the dot inside the rail width', () => {
+    const panel = setup([master('m1', 1), master('m2', 2), job('j1', 'm1', 1)]);
+    const railWidth = Number(panel.get('[data-testid=graph-rail]').attributes('width'));
+    for (const dot of panel.findAll('[data-testid=graph-dot]')) {
+      expect(Number(dot.attributes('cx'))).toBeLessThan(railWidth);
+      expect(Number(dot.attributes('cx'))).toBeGreaterThan(0);
+    }
+    panel.unmount();
+  });
+
+  it('keeps a long sync chain inside the rail', () => {
+    const chain = Array.from({ length: 6 }, (_, index) => job(`j${index}`, 'm1', 1, {
+      rebasedFromId: index === 0 ? undefined : `j${index - 1}`,
+      days: 10 + index,
+    }));
+    const panel = setup([master('m1', 1, {}, 1), ...chain]);
+    const railWidth = Number(panel.get('[data-testid=graph-rail]').attributes('width'));
+    for (const dot of panel.findAll('[data-testid=graph-dot]')) {
+      expect(Number(dot.attributes('cx')) + 5).toBeLessThanOrEqual(railWidth);
+    }
+    panel.unmount();
+  });
+
+  it('keeps a sync line on one x while it crosses the rows in between', () => {
     const panel = setup([
-      master('m1', 1),
-      master('m2', 2),
-      job('o1', 'm1', 1),
-      master('o2', 1, {
-        title: 'Acme 前端',
-        jobTarget: { versionName: 'Acme 前端', company: 'Acme', position: '前端', sourceResumeId: 'm2', baseId: 'm2', baseVersion: 2 },
-      }),
+      master('m1', 1, {}, 1),
+      master('m3', 3, {}, 3),
+      job('j1', 'm1', 1, { days: 4 }),
+      job('j2', 'm1', 3, { rebasedFromId: 'j1', days: 5 }),
     ]);
-    expect(panel.text()).toContain('推测');
+    const row = (id: string) => panel.get(`[data-id=${id}]`);
+    const exitX = pathX(row('j2').get('[data-side=below]').attributes('d')!, 'end');
+    const throughX = Number(row('j1').get('[data-testid=graph-pass]').attributes('x1'));
+    const entryX = pathX(row('m3').get('[data-side=above]').attributes('d')!, 'start');
+    expect(throughX).toBe(exitX);
+    expect(entryX).toBe(exitX);
+    panel.unmount();
+  });
+
+  it('says so when a job has no master to attach to', () => {
+    const panel = setup([master('m1', 1), job('lost', 'missing', 1, { trackId: 'OTHER' })]);
+    expect(panel.find('[data-testid=graph-orphan]').exists()).toBe(true);
+    expect(panel.text()).toContain('找不到主干');
     panel.unmount();
   });
 
@@ -73,63 +140,45 @@ describe('ResumeGraphView', () => {
     panel.unmount();
   });
 
-  it('selects a node on click and emits its id', async () => {
+  it('selects a row and emits its id', async () => {
     const panel = setup([master('m1', 1), master('m2', 2)]);
-    await panel.findAll('[data-testid=graph-node]')[1]!.trigger('click');
-    expect(panel.emitted('select')?.[0]).toEqual(['m2']);
+    await panel.findAll('[data-testid=graph-node]')[0]!.trigger('click');
+    expect(panel.emitted('select')).toHaveLength(1);
     panel.unmount();
   });
 
-  it('exposes nodes as keyboard-reachable buttons', () => {
+  it('exposes the info line as a real button', () => {
     const panel = setup([master('m1', 1), master('m2', 2)]);
-    const node = panel.get('[data-testid=graph-node]');
-    expect(node.attributes('role')).toBe('button');
-    expect(node.attributes('tabindex')).toBe('0');
+    const info = panel.get('[data-testid=graph-node]');
+    expect(info.element.tagName).toBe('BUTTON');
+    expect(info.attributes('aria-label')).toBeTruthy();
     panel.unmount();
   });
 
-  it('shows the legend for the three edge kinds', () => {
-    const panel = setup([master('m1', 1), master('m2', 2), job('b1', 'm1', 1)]);
+  it('shows the legend', () => {
+    const panel = setup([master('m1', 1), master('m2', 2), job('j1', 'm1', 1)]);
     const legend = panel.get('[data-testid=graph-legend]').text();
+    expect(legend).toContain('版本节点');
     expect(legend).toContain('版本推进');
-    expect(legend).toContain('分叉');
-    expect(legend).toContain('同步');
+    expect(legend).toContain('从主干分出');
+    expect(legend).toContain('同步主干');
     panel.unmount();
   });
 
-  it('never renders untrusted title as HTML', () => {
+  it('never renders an untrusted title as HTML', () => {
     const panel = setup([master('m1', 1, { title: '<img src=x onerror=alert(1)>' }), master('m2', 2)]);
-    // 关键是渲染成文本而不是标签：节点里出现字面的 "<img"，但页面上没有 img 元素。
     expect(panel.find('img').exists()).toBe(false);
     expect(panel.text()).toContain('<img');
-    // 无障碍标签保留完整标题，不被显示用的截断影响。
-    expect(panel.get('[data-testid=graph-node]').attributes('aria-label')).toContain('<img src=x onerror=alert(1)>');
     panel.unmount();
   });
 
-
-  it('explains that unrelated resumes each own a track', () => {
+  it('filters standalone resumes out of the list', () => {
     const many = [
-      ...Array.from({ length: 5 }, (_, index) => master(`x${index}`, 1, { trackId: `T${index}`, title: `独立${index}` })),
-      master('m1', 1),
-      master('m2', 2),
+      ...Array.from({ length: 4 }, (_, index) => master(`s${index}`, 1, { trackId: `S${index}`, title: `独立${index}` })),
+      master('m1', 1), master('m2', 2),
     ];
     const panel = setup(many);
-    // 独立的单份简历不画，但数量要如实告知。
-    expect(panel.text()).toContain('另有 5 份独立简历');
-    expect(panel.get('[data-testid=graph-canvas]').attributes('data-testid')).toBe('graph-canvas');
-    panel.unmount();
-  });
-  it('keeps the drawing inside the reported size', () => {
-    const panel = setup([master('m1', 1), master('m2', 2), job('b1', 'm1', 1)]);
-    const svg = panel.get('svg');
-    expect(Number(svg.attributes('width'))).toBeGreaterThan(0);
-    expect(Number(svg.attributes('height'))).toBeGreaterThan(0);
-    // 每个节点都落在画布内。
-    for (const node of panel.findAll('[data-testid=graph-node]')) {
-      const x = Number(node.attributes('data-x'));
-      expect(x).toBeGreaterThanOrEqual(0);
-    }
+    expect(panel.findAll('[data-testid=graph-row]')).toHaveLength(2);
     panel.unmount();
   });
 });

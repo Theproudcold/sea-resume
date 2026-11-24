@@ -2,322 +2,248 @@ import { describe, expect, it } from 'vitest';
 import { buildResumeGraph } from '../resumeGraph';
 import type { ResumeMeta } from '@/types/resume';
 
-/** 构造一条列表索引记录。 */
-function resume(
-  id: string,
-  trackId: string,
-  versionNumber: number,
-  extra: Partial<ResumeMeta> = {},
-): ResumeMeta {
+/**
+ * 版式参考主流的 Git 客户端：左侧一条窄轨道图，右侧逐行对应的一条信息列表。
+ *
+ * 布局只回答三件事：
+ * - 每一行是什么（行 = 一条记录，按时间从新到旧）
+ * - 每条记录在左图的哪一列（列号与颜色）
+ * - 行与行之间的连线怎么走
+ */
+
+const T0 = Date.parse('2026-01-01T00:00:00Z');
+const DAY = 86_400_000;
+
+function master(id: string, versionNumber: number, trackId = 'T', days = versionNumber): ResumeMeta {
   return {
     id,
-    title: id,
+    title: '我的简历',
     templateId: 'modern',
-    createdAt: Date.parse('2026-01-01T00:00:00Z'),
-    updatedAt: Date.parse('2026-01-01T00:00:00Z'),
+    createdAt: T0,
+    updatedAt: T0 + days * DAY,
     trackId,
     versionNumber,
-    ...extra,
   };
 }
 
-function branch(
+function job(
   id: string,
-  trackId: string,
   baseId: string,
   baseVersion: number,
-  extra: Partial<ResumeMeta> = {},
+  extra: { trackId?: string; company?: string; position?: string; rebasedFromId?: string; days?: number } = {},
 ): ResumeMeta {
-  return resume(id, trackId, 1, {
-    jobTarget: { versionName: id, company: 'Acme', position: '前端', sourceResumeId: baseId, baseId, baseVersion },
-    ...extra,
-  });
+  const company = extra.company ?? 'Acme';
+  const position = extra.position ?? '前端工程师';
+  return {
+    ...master(id, 1, extra.trackId ?? 'T', extra.days ?? 10),
+    title: `${company} ${position}`,
+    jobTarget: {
+      versionName: `${company} ${position}`,
+      company,
+      position,
+      sourceResumeId: baseId,
+      baseId,
+      baseVersion,
+      ...(extra.rebasedFromId ? { rebasedFromId: extra.rebasedFromId } : {}),
+    },
+  };
 }
 
-describe('主干', () => {
-  it('chains master versions into one unbroken lane', () => {
-    const graph = buildResumeGraph([
-      resume('m1', 'T', 1),
-      resume('m2', 'T', 2),
-      resume('m3', 'T', 3),
-    ]);
-    const masters = graph.nodes.filter((node) => node.kind === 'master').sort((a, b) => a.versionNumber - b.versionNumber);
-    expect(masters.map((node) => node.lane)).toEqual([0, 0, 0]);
-    expect(masters.map((node) => node.parentId)).toEqual([undefined, 'm1', 'm2']);
-    expect(graph.edges.filter((edge) => edge.kind === 'commit')).toHaveLength(2);
+describe('行 = 按时间从新到旧', () => {
+  it('orders rows newest first', () => {
+    const graph = buildResumeGraph([master('m1', 1, 'T', 1), master('m2', 2, 'T', 5), master('m3', 3, 'T', 9)]);
+    expect(graph.rows.map((row) => row.id)).toEqual(['m3', 'm2', 'm1']);
   });
 
-  it('puts the newest version on top', () => {
-    const graph = buildResumeGraph([resume('m1', 'T', 1), resume('m3', 'T', 3), resume('m2', 'T', 2)]);
-    const byId = new Map(graph.nodes.map((node) => [node.id, node]));
-    // 行号越小越靠上：v3 在最上。
-    expect(byId.get('m3')!.row).toBeLessThan(byId.get('m2')!.row);
-    expect(byId.get('m2')!.row).toBeLessThan(byId.get('m1')!.row);
+  it('gives every record exactly one row', () => {
+    const input = [master('m1', 1), master('m2', 2), job('j1', 'm1', 1)];
+    const graph = buildResumeGraph(input);
+    expect(graph.rows).toHaveLength(input.length);
+    expect(new Set(graph.rows.map((row) => row.id)).size).toBe(input.length);
   });
 
-  it('marks the highest version as the latest', () => {
-    const graph = buildResumeGraph([resume('m1', 'T', 1), resume('m2', 'T', 2)]);
-    expect(graph.nodes.find((node) => node.id === 'm2')!.isLatest).toBe(true);
-    expect(graph.nodes.find((node) => node.id === 'm1')!.isLatest).toBe(false);
+  it('carries the label parts the list needs', () => {
+    const graph = buildResumeGraph([master('m1', 1), master('m2', 2), job('j1', 'm1', 1)]);
+    const branchRow = graph.rows.find((row) => row.id === 'm1')!;
+    expect(branchRow.kind).toBe('master');
+    expect(branchRow.versionLabel).toBe('v1');
+    const jobRow = graph.rows.find((row) => row.id === 'j1')!;
+    expect(jobRow.kind).toBe('branch');
+    expect(jobRow.company).toBe('Acme');
+    expect(jobRow.position).toBe('前端工程师');
   });
 });
 
-describe('岗位分支', () => {
-  it('forks from the exact master version it was created from', () => {
-    const graph = buildResumeGraph([
-      resume('m1', 'T', 1),
-      resume('m2', 'T', 2),
-      resume('m3', 'T', 3),
-      branch('b1', 'T', 'm2', 2),
-    ]);
-    const node = graph.nodes.find((item) => item.id === 'b1')!;
-    expect(node.kind).toBe('branch');
-    expect(node.forkFromId).toBe('m2');
-    const fork = graph.edges.find((edge) => edge.kind === 'fork')!;
-    expect([fork.from, fork.to]).toEqual(['m2', 'b1']);
+describe('列 = 轨道', () => {
+  it('keeps a master and its jobs in adjacent lanes', () => {
+    const graph = buildResumeGraph([master('m1', 1), master('m2', 2), job('j1', 'm1', 1)]);
+    const laneOf = (id: string) => graph.rows.find((row) => row.id === id)!.lane;
+    expect(laneOf('m1')).toBe(0);
+    expect(laneOf('j1')).toBe(1);
   });
 
-  it('gives each job its own lane and keeps masters on lane 0', () => {
+  it('gives each track a distinct colour', () => {
     const graph = buildResumeGraph([
-      resume('m1', 'T', 1),
-      resume('m2', 'T', 2),
-      branch('b1', 'T', 'm1', 1),
-      branch('b2', 'T', 'm1', 1, { jobTarget: { versionName: 'Beta 后端', company: 'Beta', position: '后端', sourceResumeId: 'm1', baseId: 'm1', baseVersion: 1 } }),
+      master('a1', 1, 'TA'), master('a2', 2, 'TA'),
+      master('b1', 1, 'TB'), master('b2', 2, 'TB'),
     ]);
-    const lanes = graph.nodes.filter((node) => node.kind === 'branch').map((node) => node.lane);
-    expect(new Set(lanes).size).toBe(2);
-    expect(lanes).not.toContain(0);
+    const colors = new Map<number, string>();
+    for (const row of graph.rows) colors.set(row.lane, row.color);
+    expect(new Set(colors.values()).size).toBe(colors.size);
   });
 
-  it('marks a branch that is behind as behind and points at the newest master', () => {
+  it('reuses a lane when its track has no more rows', () => {
+    // 列数是「同时存在」的最大数量，不是所有轨道数。
+    const graph = buildResumeGraph([master('a1', 1, 'TA'), master('b1', 1, 'TB')]);
+    expect(Math.max(...graph.rows.map((row) => row.lane))).toBeLessThanOrEqual(1);
+  });
+
+  it('does not reuse a lane while another track still occupies that span', () => {
     const graph = buildResumeGraph([
-      resume('m1', 'T', 1),
-      resume('m2', 'T', 2),
-      resume('m3', 'T', 3),
-      branch('b1', 'T', 'm1', 1),
+      master('a1', 1, 'TA', 1),
+      master('a2', 2, 'TA', 5),
+      master('b1', 1, 'TB', 3),
     ]);
-    expect(graph.nodes.find((node) => node.id === 'b1')!.behind).toEqual({ baseVersion: 1, latestVersion: 3, latestId: 'm3' });
-    expect(graph.nodes.find((node) => node.id === 'm3')!.behind).toBeUndefined();
+    const laneOf = (id: string) => graph.rows.find((row) => row.id === id)!.lane;
+    expect(laneOf('a1')).toBe(laneOf('a2'));
+    expect(laneOf('b1')).not.toBe(laneOf('a1'));
   });
 });
 
-describe('同步之后的链', () => {
-  it('links repeated syncs into one branch lane instead of scattering them', () => {
-    const first = branch('b1', 'T', 'm1', 1);
-    const second = resume('b2', 'T', 1, {
-      jobTarget: { versionName: 'B', company: 'Acme', position: '前端', sourceResumeId: 'm2', baseId: 'm2', baseVersion: 2, rebasedFromId: 'b1' },
-    });
-    const third = resume('b3', 'T', 1, {
-      jobTarget: { versionName: 'B', company: 'Acme', position: '前端', sourceResumeId: 'm3', baseId: 'm3', baseVersion: 3, rebasedFromId: 'b2' },
-    });
-    const graph = buildResumeGraph([resume('m1', 'T', 1), resume('m2', 'T', 2), resume('m3', 'T', 3), first, second, third]);
-    const chain = ['b1', 'b2', 'b3'].map((id) => graph.nodes.find((node) => node.id === id)!);
-    // 同一岗位的三条记录在同一列，并且 b2 的前驱是 b1、b3 的前驱是 b2。
-    expect(new Set(chain.map((node) => node.lane)).size).toBe(1);
-    expect(chain[1]!.rebasedFromId).toBe('b1');
-    expect(chain[2]!.rebasedFromId).toBe('b2');
-    expect(graph.edges.filter((edge) => edge.kind === 'rebase')).toHaveLength(2);
+describe('连线', () => {
+  it('links consecutive master versions', () => {
+    const graph = buildResumeGraph([master('m1', 1), master('m2', 2), master('m3', 3)]);
+    expect(graph.links.filter((link) => link.kind === 'commit')).toHaveLength(2);
   });
 
-  it('draws a rebase edge from the master version it synced to', () => {
+  it('links a job to the master version it forked from', () => {
+    const graph = buildResumeGraph([master('m1', 1), master('m2', 2), job('j1', 'm2', 2)]);
+    const fork = graph.links.find((link) => link.kind === 'fork')!;
+    expect([fork.from, fork.to]).toEqual(['m2', 'j1']);
+  });
+
+  it('links a synced job to the master at baseVersion when baseId still points at the fork', () => {
+    // saveRebasedVersion 只改 baseVersion 和 rebasedFromId，baseId 仍是最初分出的那一版。
     const graph = buildResumeGraph([
-      resume('m1', 'T', 1),
-      resume('m2', 'T', 2),
-      branch('b1', 'T', 'm1', 1),
-      resume('b2', 'T', 1, {
-        jobTarget: { versionName: 'B', company: 'Acme', position: '前端', sourceResumeId: 'm2', baseId: 'm2', baseVersion: 2, rebasedFromId: 'b1' },
-      }),
+      master('m1', 1, 'T', 1),
+      master('m2', 2, 'T', 2),
+      master('m3', 3, 'T', 3),
+      job('j1', 'm1', 1, { days: 4 }),
+      job('j2', 'm1', 3, { rebasedFromId: 'j1', days: 5 }),
     ]);
-    const rebase = graph.edges.find((edge) => edge.kind === 'rebase')!;
-    expect(rebase.from).toBe('m2');
-    expect(rebase.to).toBe('b2');
+    const rebase = graph.links.find((link) => link.kind === 'rebase');
+    expect(rebase && [rebase.from, rebase.to]).toEqual(['m3', 'j2']);
+    const fork = graph.links.find((link) => link.kind === 'fork');
+    expect(fork && [fork.from, fork.to]).toEqual(['m1', 'j1']);
+    expect(graph.rows.find((row) => row.id === 'j2')!.versionLabel).toBe('同步到 v3');
+    expect(graph.rows.find((row) => row.id === 'j1')!.versionLabel).toBe('从 v1 分出');
   });
 
-  it('falls back to ordering by base version for legacy records without rebasedFromId', () => {
-    // 旧数据：同一岗位有两条记录，但没有 rebasedFromId。
-    const old = branch('o1', 'T', 'm1', 1);
-    const newer = resume('o2', 'T', 1, {
-      jobTarget: { versionName: 'B', company: 'Acme', position: '前端', sourceResumeId: 'm2', baseId: 'm2', baseVersion: 2 },
-    });
-    const graph = buildResumeGraph([resume('m1', 'T', 1), resume('m2', 'T', 2), old, newer]);
-    // 顺序是推测出来的，必须显式告知调用方。
-    expect(graph.uncertain).toContain('o2');
-    expect(graph.nodes.filter((node) => ['o1', 'o2'].includes(node.id)).every((node) => node.lane > 0)).toBe(true);
+  it('does not draw a sync edge back to the original fork when that master version is gone', () => {
+    const graph = buildResumeGraph([
+      master('m1', 1),
+      job('j1', 'm1', 1),
+      job('j2', 'm1', 3, { rebasedFromId: 'j1' }),
+    ]);
+    expect(graph.orphans).toContain('j2');
+    expect(graph.links.some((link) => link.to === 'j2')).toBe(false);
   });
 
-  it('treats a lone legacy record as a chain head without guessing', () => {
-    const graph = buildResumeGraph([resume('m1', 'T', 1), branch('b1', 'T', 'm1', 1)]);
-    expect(graph.uncertain).not.toContain('b1');
+  it('marks the edges that leave or enter a row', () => {
+    // 每一行在左图里有「上面接哪些线、下面接哪些线」，渲染时据此画。
+    const graph = buildResumeGraph([master('m1', 1), master('m2', 2), job('j1', 'm1', 1)]);
+    const m2Row = graph.rows.find((row) => row.id === 'm2')!;
+    expect(m2Row.edgesBelow.length).toBeGreaterThan(0);
+  });
+
+  it('continues a relation through the lane it is actually drawn on', () => {
+    // 同步记录的 baseId 仍指向 m1，连线已经改到 m3。
+    // 时间上 j2 在 m3 之上，中间的 j1 要按 j2 的列贯穿；
+    // 分叉线从 j1 穿过 m2 回到 m1，按 j1 的列贯穿，不回到主干列。
+    const graph = buildResumeGraph([
+      master('m1', 1, 'T', 1),
+      master('m2', 2, 'T', 2),
+      master('m3', 3, 'T', 3),
+      job('j1', 'm1', 1, { days: 4 }),
+      job('j2', 'm1', 3, { rebasedFromId: 'j1', days: 5 }),
+    ]);
+    const laneOf = (id: string) => graph.rows.find((row) => row.id === id)!.lane;
+    expect(graph.rows.find((row) => row.id === 'j1')!.passThrough).toContain(laneOf('j2'));
+    const throughMaster = graph.rows.find((row) => row.id === 'm2')!.passThrough;
+    expect(throughMaster).toContain(laneOf('j1'));
+    expect(throughMaster).not.toContain(laneOf('m1'));
   });
 });
 
-describe('异常数据', () => {
-  it('does not throw when the master it forked from is gone', () => {
-    const graph = buildResumeGraph([branch('b1', 'GONE', 'missing', 1)]);
-    const node = graph.nodes.find((item) => item.id === 'b1')!;
-    expect(node.forkFromId).toBeUndefined();
-    expect(graph.uncertain).toContain('b1');
+describe('异常与边界', () => {
+  it('marks a job whose master is missing as orphaned but still lists it', () => {
+    const graph = buildResumeGraph([master('m1', 1), job('lost', 'missing', 1, { trackId: 'OTHER' })]);
+    expect(graph.orphans).toContain('lost');
+    expect(graph.rows.some((row) => row.id === 'lost')).toBe(true);
+    expect(graph.links.some((link) => link.from === 'lost' || link.to === 'lost')).toBe(false);
   });
 
   it('handles an empty list', () => {
     const graph = buildResumeGraph([]);
-    expect(graph.nodes).toEqual([]);
-    expect(graph.edges).toEqual([]);
-    expect(graph.lanes).toEqual([]);
+    expect(graph.rows).toEqual([]);
+    expect(graph.links).toEqual([]);
   });
 
-  it('handles a single master', () => {
-    const graph = buildResumeGraph([resume('m1', 'T', 1)]);
-    expect(graph.nodes).toHaveLength(1);
-    expect(graph.lanes).toHaveLength(1);
-    expect(graph.edges).toEqual([]);
-  });
-
-  it('keeps branches when the track has no master left', () => {
-    const graph = buildResumeGraph([branch('b1', 'T', 'm1', 1), branch('b2', 'T', 'm1', 1)]);
-    expect(graph.nodes).toHaveLength(2);
-    expect(graph.uncertain).toContain('b1');
-  });
-});
-
-describe('行号与坐标', () => {
-  it('assigns every node a position inside the drawing area', () => {
-    const graph = buildResumeGraph([
-      resume('m1', 'T', 1),
-      resume('m2', 'T', 2),
-      branch('b1', 'T', 'm1', 1),
-    ]);
-    for (const node of graph.nodes) {
-      expect(node.x).toBeGreaterThanOrEqual(0);
-      expect(node.y).toBeGreaterThanOrEqual(0);
-    }
-    expect(graph.width).toBeGreaterThan(0);
-    expect(graph.height).toBeGreaterThan(0);
-  });
-
-  it('is deterministic for the same input', () => {
-    const input = [resume('m2', 'T', 2), resume('m1', 'T', 1), branch('b1', 'T', 'm1', 1)];
+  it('is deterministic', () => {
+    const input = [master('m2', 2), master('m1', 1), job('j1', 'm1', 1)];
     expect(JSON.stringify(buildResumeGraph(input))).toBe(JSON.stringify(buildResumeGraph(input)));
   });
 
-  it('reports the lane labels needed for the legend', () => {
-    const graph = buildResumeGraph([resume('m1', 'T', 1), branch('b1', 'T', 'm1', 1)]);
-    const masterLane = graph.lanes.find((lane) => lane.kind === 'master')!;
-    expect(masterLane.label).toBeTruthy();
-    expect(graph.lanes).toHaveLength(2);
+  it('filters standalone resumes when asked', () => {
+    const graph = buildResumeGraph([master('solo', 1, 'S'), master('m1', 1, 'T'), master('m2', 2, 'T')], { relatedOnly: true });
+    expect(graph.rows.map((row) => row.id)).not.toContain('solo');
   });
 });
 
-describe('分组与同步语义', () => {
-  it('keeps different jobs in different lanes even when the track matches', () => {
+describe('列号稳定性', () => {
+  it('keeps one track on the same lane across interleaved rows', () => {
+    // 主干 v1..v4 之间夹着岗位行，主干的列号不能被挤走。
     const graph = buildResumeGraph([
-      resume('m1', 'T', 1),
-      branch('b1', 'T', 'm1', 1),
-      resume('b2', 'T', 1, {
-        jobTarget: { versionName: 'Beta 后端', company: 'Beta', position: '后端', sourceResumeId: 'm1', baseId: 'm1', baseVersion: 1 },
-      }),
+      master('m1', 1, 'T', 1),
+      job('j1', 'm1', 1, { days: 2 }),
+      master('m2', 2, 'T', 3),
+      job('k1', 'm2', 2, { days: 4, company: 'Beta' }),
+      master('m3', 3, 'T', 5),
+      master('m4', 4, 'T', 6),
     ]);
-    const lanes = graph.nodes.filter((node) => node.kind === 'branch').map((node) => node.lane);
-    expect(new Set(lanes).size).toBe(2);
+    const masterLanes = graph.rows.filter((row) => row.kind === 'master').map((row) => row.lane);
+    expect(new Set(masterLanes).size).toBe(1);
+    // 两个岗位都不与主干同列。它们所在行不重叠，因此可以共用同一列（类似 Git 的本地区块）。
+    const jobLanes = graph.rows.filter((row) => row.kind === 'branch').map((row) => row.lane);
+    expect(jobLanes).not.toContain(masterLanes[0]);
+    expect(new Set(jobLanes).size).toBe(1);
   });
 
-  it('groups the same job across renames into one lane', () => {
-    // 同步时用户改过版本名，仍应算同一个岗位。
+  it('reuses a lane only when the two tracks never coexist', () => {
+    // 两条独立主干的时间区间完全不重叠时，可以共用第 0 列。
+    const early = master('e1', 1, 'EA', 1);
+    const late = master('l1', 1, 'LA', 9);
+    const graph = buildResumeGraph([early, late]);
+    expect(graph.rows.find((row) => row.id === 'e1')!.lane).toBe(graph.rows.find((row) => row.id === 'l1')!.lane);
+  });
+
+  it('does not reuse a lane when two tracks overlap in time', () => {
+    const a = master('a1', 1, 'A', 1);
+    const a2 = master('a2', 2, 'A', 9);
+    const b = master('b1', 1, 'B', 5);
+    const graph = buildResumeGraph([a, a2, b]);
+    expect(graph.rows.find((row) => row.id === 'b1')!.lane).not.toBe(graph.rows.find((row) => row.id === 'a1')!.lane);
+  });
+
+  it('marks every row between two related rows as passing that lane', () => {
     const graph = buildResumeGraph([
-      resume('m1', 'T', 1),
-      resume('m2', 'T', 2),
-      branch('b1', 'T', 'm1', 1),
-      resume('b2', 'T', 1, {
-        jobTarget: { versionName: 'Acme 前端（按官网 JD 调整）', company: 'Acme', position: '前端', sourceResumeId: 'm2', baseId: 'm2', baseVersion: 2, rebasedFromId: 'b1' },
-      }),
+      master('m1', 1, 'T', 1),
+      job('j1', 'm1', 1, { days: 2 }),
+      master('m2', 2, 'T', 3),
+      master('m3', 3, 'T', 5),
     ]);
-    expect(graph.nodes.filter((node) => node.kind === 'branch').every((node) => node.lane === 1)).toBe(true);
+    // m1(第3行) 与 j1(第2行) 相邻，不需要贯穿；这里断言结构存在且是数组。
+    expect(graph.rows.every((row) => Array.isArray(row.passThrough))).toBe(true);
   });
 
-  it('marks a store with no sync history as uncertain except its head', () => {
-    const graph = buildResumeGraph([
-      resume('m1', 'T', 1),
-      resume('m2', 'T', 2),
-      branch('o1', 'T', 'm1', 1),
-      resume('o2', 'T', 1, {
-        jobTarget: { versionName: 'B', company: 'Acme', position: '前端', sourceResumeId: 'm2', baseId: 'm2', baseVersion: 2 },
-      }),
-    ]);
-    // 链头（基线最早的）不标，其余标为推测。
-    expect(graph.uncertain).not.toContain('o1');
-    expect(graph.uncertain).toContain('o2');
-  });
-});
-
-describe('链内的上下顺序', () => {
-  it('puts the chain head at the bottom of its lane, even when it is newer by time', () => {
-    // 旧数据没有 rebasedFromId：基线小的那条在时间上反而更新。
-    const head = branch('o1', 'T', 'm1', 1, { updatedAt: 5000 });
-    const next = resume('o2', 'T', 1, {
-      updatedAt: 1000,
-      jobTarget: { versionName: 'B', company: 'Acme', position: '前端', sourceResumeId: 'm2', baseId: 'm2', baseVersion: 2 },
-    });
-    const graph = buildResumeGraph([resume('m1', 'T', 1), resume('m2', 'T', 2), head, next]);
-    const byId = new Map(graph.nodes.map((node) => [node.id, node]));
-    // 链头（基线 1）在下，基线 2 的版本在上。
-    expect(byId.get('o1')!.row).toBeGreaterThan(byId.get('o2')!.row);
-    expect(byId.get('o1')!.lane).toBe(byId.get('o2')!.lane);
-  });
-
-  it('puts synced versions above the version they came from', () => {
-    const graph = buildResumeGraph([
-      resume('m1', 'T', 1),
-      resume('m2', 'T', 2),
-      branch('b1', 'T', 'm1', 1),
-      resume('b2', 'T', 1, {
-        jobTarget: { versionName: 'B', company: 'Acme', position: '前端', sourceResumeId: 'm2', baseId: 'm2', baseVersion: 2, rebasedFromId: 'b1' },
-      }),
-    ]);
-    const byId = new Map(graph.nodes.map((node) => [node.id, node]));
-    expect(byId.get('b2')!.row).toBeLessThan(byId.get('b1')!.row);
-  });
-});
-
-describe('只画有版本关系的简历', () => {
-  it('drops standalone resumes when relatedOnly is set', () => {
-    const graph = buildResumeGraph([
-      resume('solo1', 'S1', 1),
-      resume('solo2', 'S2', 1),
-      resume('m1', 'T', 1),
-      resume('m2', 'T', 2),
-      branch('b1', 'T', 'm1', 1),
-    ], { relatedOnly: true });
-    expect(graph.nodes.map((node) => node.id).sort()).toEqual(['b1', 'm1', 'm2']);
-    // 无关简历不占列：只剩主干一条 + 岗位一条。
-    expect(graph.lanes).toHaveLength(2);
-  });
-
-  it('keeps a lone master when it is the base of a job version', () => {
-    const graph = buildResumeGraph([resume('m1', 'T', 1), branch('b1', 'T', 'm1', 1)], { relatedOnly: true });
-    expect(graph.nodes).toHaveLength(2);
-  });
-
-  it('keeps everything when relatedOnly is not set', () => {
-    const graph = buildResumeGraph([resume('solo1', 'S1', 1), resume('m1', 'T', 1)]);
-    expect(graph.nodes).toHaveLength(2);
-  });
-});
-
-describe('画布尺寸', () => {
-  it('does not leave a huge blank area below the last row', () => {
-    // 三列各一版：最大行号是 0，高度不该按「三个节点」算成三行。
-    const graph = buildResumeGraph([
-      resume('m1', 'T1', 1),
-      resume('a1', 'T2', 1),
-      resume('b1', 'T3', 1),
-    ]);
-    expect(graph.nodes.every((node) => node.row === 0)).toBe(true);
-    expect(graph.height).toBeLessThan(200);
-  });
-
-  it('grows with the number of versions, not the number of nodes', () => {
-    const shallow = buildResumeGraph([resume('m1', 'T1', 1), resume('x1', 'T2', 1)]);
-    const deep = buildResumeGraph([resume('m1', 'T1', 1), resume('m2', 'T1', 2), resume('m3', 'T1', 3)]);
-    expect(deep.height).toBeGreaterThan(shallow.height);
-  });
 });

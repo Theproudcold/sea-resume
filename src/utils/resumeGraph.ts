@@ -1,112 +1,113 @@
 /**
- * 简历版本图谱的布局计算。
+ * 简历版本图谱的布局。
  *
- * 纯函数：输入列表索引，输出每个节点的位置和节点之间的连线，组件只负责画。
- * 这样布局可以完全单测，不需要浏览器。
+ * 版式参考主流 Git 客户端：**左侧一条窄轨道图，右侧一条逐行对应的列表**。
+ * 列表承担「这是什么版本」，窄图只承担「它和谁有关」。
  *
- * 约定：
- * - 列（lane）= 轨道。主干占第 0 列，每个岗位占一列，按出现顺序从左到右。
- * - 行（row）= 时间。新的在上，与 Git 的阅读习惯一致。
- * - 连线分三种：主干或分支内部的推进（commit）、分支从主干分出（fork）、
- *   同步后内容回到分支（rebase）。
+ * 布局只回答三件事，渲染交给组件：
+ * - rows：每一行是一条记录，按时间从新到旧
+ * - 每行的 lane（列号）与 color：窄图里画在哪个位置、什么颜色
+ * - links：行与行之间的关系（推进 / 分叉 / 同步），渲染时折成左图里的线段
+ *
+ * 纯函数，可完全单测。
  */
 import type { ResumeMeta } from '@/types/resume';
 
-export type GraphEdgeKind = 'commit' | 'fork' | 'rebase';
+export type GraphLinkKind = 'commit' | 'fork' | 'rebase';
 
-export interface GraphNode {
+/** 轨道配色。同一轨道在整张图里颜色一致，便于列表左侧色点与窄图对应。 */
+export const LANE_COLORS = [
+  'var(--color-accent)',
+  'oklch(62% 0.12 150)',
+  'oklch(66% 0.14 45)',
+  'oklch(58% 0.14 310)',
+  'oklch(60% 0.12 200)',
+  'oklch(64% 0.12 90)',
+];
+
+/** 相邻两行之间的连线，折成「从上一行的第 fromLane 列，走到下一行的第 toLane 列」。 */
+export interface RowEdgeRef {
+  kind: GraphLinkKind;
+  /** 另一端在列表里的行号。 */
+  peerRow: number;
+  fromLane: number;
+  toLane: number;
+}
+
+export interface GraphRow {
   id: string;
   title: string;
   kind: 'master' | 'branch';
   trackId: string;
   versionNumber: number;
+  versionLabel: string;
   lane: number;
-  row: number;
-  x: number;
-  y: number;
-  /** 主干内的前驱版本。 */
-  parentId?: string;
-  /** 分支从哪个主干版本分出。 */
-  forkFromId?: string;
-  /** 分支内的前驱：同步来源。 */
-  rebasedFromId?: string;
+  color: string;
+  /** 该行上方（更近的一行）与它相连的线。 */
+  edgesAbove: RowEdgeRef[];
+  /** 该行下方（更远的一行）与它相连的线。 */
+  edgesBelow: RowEdgeRef[];
   company?: string;
   position?: string;
-  /** 落后于主干时的目标版本。 */
   behind?: { baseVersion: number; latestVersion: number; latestId: string };
-  /** 所在轨道的最高版本。 */
-  isLatest: boolean;
+  orphan?: boolean;
+  /**
+   * 贯穿本行的列：这些列在这一行既不是起点也不是终点，但关系线要穿过去。
+   * 没有它，跨越多行的连线会在中间断开，左图看起来是一段一段的。
+   */
+  passThrough: number[];
 }
 
-export interface GraphEdge {
+export interface GraphLink {
   from: string;
   to: string;
-  kind: GraphEdgeKind;
-}
-
-export interface GraphLane {
-  lane: number;
-  trackId: string;
-  label: string;
-  kind: 'master' | 'branch';
+  kind: GraphLinkKind;
 }
 
 export interface ResumeGraph {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  lanes: GraphLane[];
-  /** 顺序靠推测得到的节点：缺同步来源、锚点丢失等。UI 需要如实提示。 */
+  rows: GraphRow[];
+  links: GraphLink[];
+  /** 行号 → 该行的 lane，便于渲染时按列取色。 */
+  laneCount: number;
   uncertain: string[];
-  width: number;
-  height: number;
+  orphans: string[];
 }
 
-/** 每个泳道占的横向宽度。 */
-export const LANE_WIDTH = 120;
-/** 每个版本占的纵向高度。 */
-export const ROW_HEIGHT = 76;
-/** 顶部与左侧留白，避免连线贴边。 */
-const PADDING_X = 16;
-const PADDING_Y = 24;
+export interface GraphOptions {
+  currentId?: string;
+  relatedOnly?: boolean;
+}
 
 function versionOf(row: ResumeMeta): number {
   const value = row.versionNumber;
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : 1;
 }
 
-function timeOf(row: ResumeMeta): number {
-  return typeof row.updatedAt === 'number' && Number.isFinite(row.updatedAt) ? row.updatedAt : row.createdAt;
-}
-
 function isBranch(row: ResumeMeta): boolean {
   return Boolean(row.jobTarget);
 }
 
-/**
- * 同一岗位的标识。
- *
- * 不能用 versionName：用户给每个岗位版本起的名字往往不同（同步后还可能改名），
- * 按名字分组会把同一岗位拆成几列。这里用「岗位 + 公司 + 所在轨道」，
- * 岗位名留空时退回标题。
- */
-const groupKeyCache = new Map<string, string>();
-
-/** 按节点 id 找回它所属的分组键。 */
-function branchGroupKeyById(id: string): string | undefined {
-  return groupKeyCache.get(id);
+function timeOf(row: ResumeMeta): number {
+  const value = row.updatedAt;
+  return typeof value === 'number' && Number.isFinite(value) ? value : row.createdAt;
 }
 
-function branchGroupKey(row: ResumeMeta): string {
-  const target = row.jobTarget;
-  if (!target) return row.id;
-  const role = [target.company ?? '', target.position ?? ''].join('|');
-  return `${row.trackId ?? ''}::${role || row.title}`;
+/** 同一岗位的标识：轨道 + 公司 + 职位；不看 versionName（同步时用户常改名）。 */
+function jobKey(row: ResumeMeta): string {
+  const target = row.jobTarget!;
+  return `${row.trackId ?? ''}::${target.company ?? ''}::${target.position ?? ''}`;
 }
 
-/**
- * 筛出有版本关系的简历：同一 trackId 下有多条，或者存在岗位版本。
- * 单份独立简历不参与图谱，由调用方另行告知数量。
- */
+/** 同轨道上版本号正好是 baseVersion 的那一版主干。找不到就不连线，不回退到 baseId。 */
+function masterIdAt(
+  trackId: string | undefined,
+  baseVersion: number | undefined,
+  masterTracks: ReadonlyMap<string, readonly ResumeMeta[]>,
+): string | undefined {
+  if (!trackId || typeof baseVersion !== 'number') return undefined;
+  return masterTracks.get(trackId)?.find((row) => versionOf(row) === baseVersion)?.id;
+}
+
 function filterRelated(rows: ResumeMeta[]): ResumeMeta[] {
   const byTrack = new Map<string, ResumeMeta[]>();
   for (const row of rows) {
@@ -115,254 +116,210 @@ function filterRelated(rows: ResumeMeta[]): ResumeMeta[] {
     if (bucket) bucket.push(row);
     else byTrack.set(trackId, [row]);
   }
-  return rows.filter((row) => {
-    const trackId = row.trackId ?? row.id;
-    return row.jobTarget !== undefined || (byTrack.get(trackId)?.length ?? 0) > 1;
-  });
+  return rows.filter((row) => isBranch(row) || (byTrack.get(row.trackId ?? row.id)?.length ?? 0) > 1);
 }
 
-interface CollectResult {
-  masters: ResumeMeta[];
-  branchGroups: Map<string, ResumeMeta[]>;
-  uncertain: string[];
-}
-
-/**
- * 按轨道与岗位分组。
- *
- * 主干按 versionNumber 排序；分支优先按 `rebasedFromId` 串链，缺这个字段的旧数据
- * 退化为按 `baseVersion` 升序 + 时间排序，并记为「不确定」。
- */
-function collect(resumes: ResumeMeta[]): CollectResult {
-  const masters: ResumeMeta[] = [];
-  const branchGroups = new Map<string, ResumeMeta[]>();
-  const uncertain: string[] = [];
-
-  for (const row of resumes) {
-    if (!isBranch(row)) {
-      masters.push(row);
-      continue;
-    }
-    const key = branchGroupKey(row);
-    groupKeyCache.set(row.id, key);
-    const list = branchGroups.get(key);
-    if (list) list.push(row);
-    else branchGroups.set(key, [row]);
+/** 把同一岗位的记录串成链：链头是没被同步过的那个，之后按 rebasedFromId 依次接上。 */
+function chainOf(group: ResumeMeta[]): { ordered: ResumeMeta[]; guessed: boolean } {
+  const byId = new Map(group.map((row) => [row.id, row]));
+  const successor = new Map<string, string>();
+  for (const row of group) {
+    const from = row.jobTarget?.rebasedFromId;
+    if (from && byId.has(from) && from !== row.id) successor.set(from, row.id);
   }
-
-  masters.sort((a, b) => versionOf(a) - versionOf(b) || timeOf(a) - timeOf(b));
-
-  for (const [key, group] of branchGroups) {
-    const byId = new Map(group.map((row) => [row.id, row]));
-    // 每个节点指向它在同一岗位里的前驱。
-    const predecessorOf = new Map<string, string>();
-    for (const row of group) {
-      const from = row.jobTarget?.rebasedFromId;
-      if (from && byId.has(from) && from !== row.id) predecessorOf.set(row.id, from);
+  const ordered: ResumeMeta[] = [];
+  const seen = new Set<string>();
+  const heads = group
+    .filter((row) => !group.some((other) => other !== row && successor.get(other.id) === row.id))
+    .sort((a, b) => (a.jobTarget?.baseVersion ?? 0) - (b.jobTarget?.baseVersion ?? 0));
+  for (const head of heads) {
+    let cursor: ResumeMeta | undefined = head;
+    while (cursor && !seen.has(cursor.id)) {
+      seen.add(cursor.id);
+      ordered.push(cursor);
+      const nextId = successor.get(cursor.id);
+      cursor = nextId ? byId.get(nextId) : undefined;
     }
-    // 拓扑：没有前驱的是链头，顺着 rebasedFromId 依次排下去。
-    const ordered: ResumeMeta[] = [];
-    const visited = new Set<string>();
-    const heads = group
-      .filter((row) => !predecessorOf.has(row.id))
-      .sort((a, b) => (a.jobTarget?.baseVersion ?? 0) - (b.jobTarget?.baseVersion ?? 0) || timeOf(a) - timeOf(b));
-    for (const head of heads) {
-      let cursor: ResumeMeta | undefined = head;
-      while (cursor && !visited.has(cursor.id)) {
-        visited.add(cursor.id);
-        ordered.push(cursor);
-        const nextId = group.find((row) => predecessorOf.get(row.id) === cursor!.id)?.id;
-        cursor = nextId ? byId.get(nextId) : undefined;
-      }
-    }
-    // 环或断链兜底：按基线排到末尾，并标为不确定。
-    const rest = group.filter((row) => !visited.has(row.id)).sort((a, b) =>
-      (a.jobTarget?.baseVersion ?? 0) - (b.jobTarget?.baseVersion ?? 0) || timeOf(a) - timeOf(b));
-    for (const row of rest) {
-      uncertain.push(row.id);
-      ordered.push(row);
-    }
-    if (!predecessorOf.size && group.length > 1) {
-      // 全组都没有同步来源：它们之间谁先谁后只能按基线推测。
-      for (const row of ordered.slice(1)) if (!uncertain.includes(row.id)) uncertain.push(row.id);
-    }
-    branchGroups.set(key, ordered);
   }
-
-  return { masters, branchGroups, uncertain };
-}
-
-export interface GraphOptions {
-  currentId?: string;
-  /**
-   * 只保留有版本关系的简历（同一轨道有多版，或有岗位版本派生）。
-   *
-   * 工作台里有很多互不相关的单份简历，把它们各占一列会让图谱变成一大片空白；
-   * 只画有关系的那部分，图才有意义。单份简历的轨道数会单独报告给 UI。
-   */
-  relatedOnly?: boolean;
+  const rest = group.filter((row) => !seen.has(row.id))
+    .sort((a, b) => (a.jobTarget?.baseVersion ?? 0) - (b.jobTarget?.baseVersion ?? 0));
+  for (const row of rest) ordered.push(row);
+  return { ordered, guessed: ordered.length > 1 && !successor.size };
 }
 
 export function buildResumeGraph(resumes: ResumeMeta[], options: GraphOptions = {}): ResumeGraph {
   const raw = Array.isArray(resumes) ? resumes.filter(Boolean) : [];
   const list = options.relatedOnly ? filterRelated(raw) : raw;
   void options.currentId;
-  const { masters, branchGroups, uncertain } = collect(list);
 
-  const nodeById = new Map<string, ResumeMeta>(list.map((row) => [row.id, row]));
+  const links: GraphLink[] = [];
+  const orphans: string[] = [];
+  const uncertain: string[] = [];
 
-  // 轨道 ID → lane。主干按轨道分列，岗位各占一列。
-  const lanes: GraphLane[] = [];
-  const laneOfTrack = new Map<string, number>();
+  // ---- 1. 行顺序：时间从新到旧 ----
+  const ordered = [...list].sort((a, b) => timeOf(b) - timeOf(a) || a.id.localeCompare(b.id));
+  const rowIndexOf = new Map(ordered.map((row, index) => [row.id, index]));
+
+  // ---- 2. 列分配：每条轨道占一列，按「区间是否重叠」复用 ----
+  //
+  // 行号越小越新。一条轨道占用 [newest, oldest] 这一段行；
+  // 只有两个区间完全不重叠时才能共用一列，否则同一列上会出现两条并行的线。
+  const laneRanges = new Map<number, Array<{ start: number; end: number }>>();
+  const laneOf = new Map<string, number>();
+  const overlaps = (lane: number, start: number, end: number): boolean =>
+    (laneRanges.get(lane) ?? []).some((range) => start <= range.end && end >= range.start);
+  const claimLane = (id: string, start: number, end: number, preferred: number): number => {
+    let lane = Math.max(0, preferred);
+    while (overlaps(lane, start, end)) lane += 1;
+    const ranges = laneRanges.get(lane) ?? [];
+    ranges.push({ start, end });
+    laneRanges.set(lane, ranges);
+    laneOf.set(id, lane);
+    return lane;
+  };
+
+  // 主干按轨道分组：同一轨道的所有版本共用一个列号。
   const masterTracks = new Map<string, ResumeMeta[]>();
-  for (const row of masters) {
+  for (const row of ordered) {
+    if (isBranch(row)) continue;
     const trackId = row.trackId ?? row.id;
     const bucket = masterTracks.get(trackId);
     if (bucket) bucket.push(row);
     else masterTracks.set(trackId, [row]);
   }
-  // 每份独立的主干占一列；但它们互不相关，横向铺开会让图变得很长。
-  // 这里保持一列一份，由组件负责横向滚动与初始定位，避免为了「好看」把无关简历硬塞进一列。
+  const masterLane = new Map<string, number>();
   for (const [trackId, rows] of masterTracks) {
-    laneOfTrack.set(trackId, lanes.length);
-    lanes.push({ lane: lanes.length, trackId, label: rows[rows.length - 1]?.title || '主干简历', kind: 'master' });
+    // 占用该轨道从最新一行到最旧一行的整段，而不是只占最新一行。
+    // 只占最新一行时，另一条主干会铺进它下面还在用的列。
+    const indexes = rows.map((row) => rowIndexOf.get(row.id)!);
+    const newest = Math.min(...indexes);
+    const oldest = Math.max(...indexes);
+    const lane = claimLane(`track:${trackId}`, newest, oldest, 0);
+    masterLane.set(trackId, lane);
   }
 
-  const nodes: GraphNode[] = [];
-  const edges: GraphEdge[] = [];
-
-  // 主干节点：同一轨道内相邻版本连成直线。
-  const masterHeads = new Map<string, ResumeMeta>();
-  for (const [trackId, rows] of masterTracks) {
-    const lane = laneOfTrack.get(trackId)!;
-    rows.forEach((row, index) => {
-      const previous = index > 0 ? rows[index - 1] : undefined;
-      nodes.push({
-        id: row.id,
-        title: row.title,
-        kind: 'master',
-        trackId,
-        versionNumber: versionOf(row),
-        lane,
-        row: 0,
-        x: 0,
-        y: 0,
-        ...(previous ? { parentId: previous.id } : {}),
-        isLatest: index === rows.length - 1,
-      });
-      if (previous) edges.push({ from: previous.id, to: row.id, kind: 'commit' });
-    });
-    masterHeads.set(trackId, rows[rows.length - 1]!);
-  }
-
-  // 分支节点：每个岗位一列，按链的顺序排列。
-  for (const [, rows] of branchGroups) {
-    if (!rows.length) continue;
-    const lane = lanes.length;
-    const label = [rows[0]!.jobTarget?.company, rows[0]!.jobTarget?.position].filter(Boolean).join(' · ')
-      || rows[0]!.jobTarget?.versionName || rows[0]!.title;
-    lanes.push({ lane, trackId: rows[0]!.trackId ?? '', label, kind: 'branch' });
-    rows.forEach((row, index) => {
-      const previous = index > 0 ? rows[index - 1] : undefined;
-      const anchorId = row.jobTarget?.rebasedFromId
-        ? (index > 0 ? rows[index - 1]!.id : undefined)
-        : (row.jobTarget?.baseId ?? undefined);
-      nodes.push({
-        id: row.id,
-        title: row.title,
-        kind: 'branch',
-        trackId: row.trackId ?? '',
-        versionNumber: versionOf(row),
-        lane,
-        row: 0,
-        x: 0,
-        y: 0,
-        ...(previous ? { rebasedFromId: previous.id } : {}),
-        ...(anchorId && nodeById.has(anchorId) ? { forkFromId: anchorId } : {}),
-        ...(row.jobTarget?.company ? { company: row.jobTarget.company } : {}),
-        ...(row.jobTarget?.position ? { position: row.jobTarget.position } : {}),
-        isLatest: index === rows.length - 1,
-      });
-    });
-  }
-
-  // 连线：链头从主干分叉（fork），后续同步从它同步到的那版主干回到分支（rebase）。
-  // rebase 的起点是主干节点而不是上一个分支节点，视觉上才是「内容来自这条主线」。
-  for (const node of nodes) {
-    if (node.kind !== 'branch') continue;
-    const anchorId = nodeById.get(node.id)?.jobTarget?.baseId;
-    const anchor = anchorId ? nodeById.get(anchorId) : undefined;
-    if (node.rebasedFromId) {
-      // 同步来的版本：从它同步到的那版主干拉一条虚弧线。
-      const from = anchor && !isBranch(anchor) ? anchor.id : undefined;
-      if (from) edges.push({ from, to: node.id, kind: 'rebase' });
-      else if (!uncertain.includes(node.id)) uncertain.push(node.id);
-      continue;
-    }
-    if (node.forkFromId && nodeById.has(node.forkFromId)) {
-      edges.push({ from: node.forkFromId, to: node.id, kind: 'fork' });
-    } else if (!uncertain.includes(node.id)) {
-      uncertain.push(node.id);
-    }
-  }
-
-  // 落后判定：与 masterBehindStatus 口径一致，只比较同轨道的主干。
-  const masterByTrack = new Map<string, ResumeMeta[]>();
-  for (const row of masters) {
-    const trackId = row.trackId ?? row.id;
-    const bucket = masterByTrack.get(trackId);
+  // 岗位按链路分组，逐条占列：链头放在锚点主干右侧的下一列。
+  const jobGroups = new Map<string, ResumeMeta[]>();
+  for (const row of ordered) {
+    if (!isBranch(row)) continue;
+    const key = jobKey(row);
+    const bucket = jobGroups.get(key);
     if (bucket) bucket.push(row);
-    else masterByTrack.set(trackId, [row]);
-  }
-  for (const node of nodes) {
-    if (node.kind !== 'branch') continue;
-    const mastersOfTrack = masterByTrack.get(node.trackId);
-    const latest = mastersOfTrack && mastersOfTrack.length ? mastersOfTrack[mastersOfTrack.length - 1] : undefined;
-    const baseVersion = nodeById.get(node.id)?.jobTarget?.baseVersion;
-    if (!latest || !baseVersion) continue;
-    const latestVersion = versionOf(latest);
-    if (latestVersion > baseVersion) node.behind = { baseVersion, latestVersion, latestId: latest.id };
+    else jobGroups.set(key, [row]);
   }
 
-  // 行号：按「版本序」对齐，而不是按时间。
-  //
-  // 主干 v1 在最下、v2 往上一行……岗位版本同理：链头在最下，每同步一次升一行。
-  // 这样主干永远是一条竖直的线，各列的分叉点在同一水平线上，符合 Git 的阅读习惯。
-  // 早期实现按全局时间排序，结果主干被拉成阶梯、分叉点四散，图看不出层级。
-  // 先算出每列的最大版本，再反转成行号：版本越大行号越小（越靠上）。
-  const maxVersionByLane = new Map<number, number>();
-  const versionInLane = new Map<string, number>();
-  for (const node of nodes) {
-    let version = node.versionNumber;
-    if (node.kind === 'branch') {
-      const group = branchGroups.get(branchGroupKeyById(node.id) ?? '');
-      const index = group ? group.findIndex((row) => row.id === node.id) : 0;
-      version = (index < 0 ? 0 : index) + 1;
+  const orphanSet = new Set<string>();
+  const rowObjects = new Map<string, GraphRow>();
+  for (const row of ordered) {
+    const target = row.jobTarget;
+    const kind: GraphRow['kind'] = target ? 'branch' : 'master';
+    const graphRow: GraphRow = {
+      id: row.id,
+      title: row.title,
+      kind,
+      trackId: row.trackId ?? '',
+      versionNumber: versionOf(row),
+      versionLabel: kind === 'master' ? `v${versionOf(row)}` : '',
+      lane: masterLane.get(row.trackId ?? '') ?? 0,
+      color: LANE_COLORS[0]!,
+      edgesAbove: [],
+      edgesBelow: [],
+      passThrough: [],
+      ...(target?.company ? { company: target.company } : {}),
+      ...(target?.position ? { position: target.position } : {}),
+    };
+    rowObjects.set(row.id, graphRow);
+  }
+
+  for (const [, group] of jobGroups) {
+    const { ordered: chain, guessed } = chainOf(group);
+    chain.forEach((row, chainIndex) => {
+      const target = row.jobTarget!;
+      // 同步不改 baseId：它始终是最初分出的那一版。
+      // 这一版对应的主干由 baseVersion 在同轨道上找。
+      const anchorId = masterIdAt(row.trackId, target.baseVersion, masterTracks);
+      const anchorRow = anchorId ? rowObjects.get(anchorId) : undefined;
+      const anchorLane = anchorRow ? anchorRow.lane : (masterLane.get(row.trackId ?? '') ?? 0);
+      const index = rowIndexOf.get(row.id)!;
+      // 首版紧挨锚点主干；同岗位的后续版本逐层向右，避免覆盖。
+      // 岗位只在它自己那一行出现，所以区间就是 [index, index]。
+      const lane = claimLane(row.id, index, index, anchorLane + 1 + (chainIndex > 0 ? chainIndex : 0));
+      const graphRow = rowObjects.get(row.id)!;
+      graphRow.lane = lane;
+      graphRow.versionLabel = chainIndex === 0
+        ? `从 v${target.baseVersion ?? versionOf(row)} 分出`
+        : `同步到 v${target.baseVersion ?? versionOf(row)}`;
+
+      if (!anchorRow) {
+        graphRow.orphan = true;
+        orphanSet.add(row.id);
+        orphans.push(row.id);
+        return;
+      }
+      links.push({ from: anchorId!, to: row.id, kind: chainIndex === 0 ? 'fork' : 'rebase' });
+    });
+    if (guessed) for (const row of chain.slice(1)) uncertain.push(row.id);
+  }
+
+  // 主干内的推进连线。
+  for (const [, rows] of masterTracks) {
+    const byVersion = [...rows].sort((a, b) => versionOf(a) - versionOf(b));
+    for (let i = 1; i < byVersion.length; i += 1) {
+      links.push({ from: byVersion[i - 1]!.id, to: byVersion[i]!.id, kind: 'commit' });
     }
-    versionInLane.set(node.id, version);
-    maxVersionByLane.set(node.lane, Math.max(maxVersionByLane.get(node.lane) ?? 0, version));
-  }
-  for (const node of nodes) {
-    const version = versionInLane.get(node.id) ?? 1;
-    node.row = (maxVersionByLane.get(node.lane) ?? 1) - version;
   }
 
-  // 同一行可能被不同列占用，这是允许的；只有同列同行的冲突才需要错开。
-  // 同列内按版本序排就不会重复，这里留一处防御：出现重复时顺序下移。
-  const occupied = new Set<string>();
-  for (const node of nodes) {
-    let slot = node.row;
-    while (occupied.has(`${node.lane}:${slot}`)) slot += 1;
-    occupied.add(`${node.lane}:${slot}`);
-    node.row = slot;
-    node.x = PADDING_X + node.lane * LANE_WIDTH + LANE_WIDTH / 2;
-    node.y = PADDING_Y + node.row * ROW_HEIGHT + ROW_HEIGHT / 2;
+  // ---- 3. 行间连线：把每条 link 折算到上下两行 ----
+  for (const link of links) {
+    const fromIndex = rowIndexOf.get(link.from);
+    const toIndex = rowIndexOf.get(link.to);
+    const fromRow = rowObjects.get(link.from);
+    const toRow = rowObjects.get(link.to);
+    if (fromIndex === undefined || toIndex === undefined || !fromRow || !toRow) continue;
+    const upperIndex = Math.min(fromIndex, toIndex);
+    const lowerIndex = Math.max(fromIndex, toIndex);
+    const upperRow = upperIndex === fromIndex ? fromRow : toRow;
+    const lowerRow = lowerIndex === fromIndex ? fromRow : toRow;
+    const upperLane = upperRow.lane;
+    const lowerLane = lowerRow.lane;
+    rowObjects.get(ordered[upperIndex]!.id)!.edgesBelow.push({ kind: link.kind, peerRow: lowerIndex, fromLane: upperLane, toLane: lowerLane });
+    rowObjects.get(ordered[lowerIndex]!.id)!.edgesAbove.push({ kind: link.kind, peerRow: upperIndex, fromLane: upperLane, toLane: lowerLane });
   }
 
-  const width = PADDING_X * 2 + Math.max(lanes.length, 1) * LANE_WIDTH;
-  // 高度按最大行号算，而不是节点总数：各列是并排的，按总数算会在下方留一大片空白。
-  const maxRow = nodes.reduce((max, node) => Math.max(max, node.row), 0);
-  const height = PADDING_Y * 2 + (nodes.length ? maxRow + 1 : 1) * ROW_HEIGHT;
+  // ---- 3.5 贯穿线：跨多行的关系要在中间行的对应列上画一段竖线 ----
+  // 列取连线两端里更靠上的那一端。同步线的起点是 baseVersion 对应的主干，
+  // 它往往在列表下方，不能用 link.from 的列。
+  for (const link of links) {
+    const fromIndex = rowIndexOf.get(link.from);
+    const toIndex = rowIndexOf.get(link.to);
+    if (fromIndex === undefined || toIndex === undefined) continue;
+    const upper = Math.min(fromIndex, toIndex);
+    const lower = Math.max(fromIndex, toIndex);
+    const drawnLane = rowObjects.get(ordered[upper]!.id)?.lane;
+    if (drawnLane === undefined) continue;
+    for (let index = upper + 1; index < lower; index += 1) {
+      const between = rowObjects.get(ordered[index]!.id);
+      if (!between || between.passThrough.includes(drawnLane)) continue;
+      between.passThrough.push(drawnLane);
+    }
+  }
 
-  return { nodes, edges, lanes, uncertain, width, height };
+  // ---- 4. 颜色与落后判定 ----
+  const laneCount = Math.max(1, ...[...laneOf.values(), ...[...masterLane.values()]].map((lane) => lane + 1));
+  for (const graphRow of rowObjects.values()) graphRow.color = LANE_COLORS[graphRow.lane % LANE_COLORS.length]!;
+
+  for (const graphRow of rowObjects.values()) {
+    if (graphRow.kind !== 'branch') continue;
+    const target = list.find((row) => row.id === graphRow.id)?.jobTarget;
+    if (!target?.baseVersion) continue;
+    const trackMasters = masterTracks.get(graphRow.trackId);
+    if (!trackMasters?.length) continue;
+    const latest = trackMasters.reduce((max, row) => (versionOf(row) > versionOf(max) ? row : max), trackMasters[0]!);
+    if (versionOf(latest) > target.baseVersion) {
+      graphRow.behind = { baseVersion: target.baseVersion, latestVersion: versionOf(latest), latestId: latest.id };
+    }
+  }
+
+  const rows = ordered.map((row) => rowObjects.get(row.id)!);
+  return { rows, links, laneCount, uncertain, orphans };
 }
