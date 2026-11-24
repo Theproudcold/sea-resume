@@ -10,7 +10,17 @@
       有 {{ graph.uncertain.length }} 个版本的先后顺序是推测的：它们是同一个岗位的旧版本，没有记录同步来源。
     </p>
 
-    <div v-if="graph.nodes.length" class="graph-canvas">
+    <div v-if="graph.nodes.length" class="graph-lane-heads" :style="{ width: `${graph.width}px` }" aria-hidden="true">
+      <span
+        v-for="lane in graph.lanes"
+        :key="lane.lane"
+        class="lane-head"
+        :class="`lane-${lane.kind}`"
+        :style="{ left: `${lane.lane * LANE_WIDTH}px`, width: `${LANE_WIDTH}px` }"
+      >{{ lane.label }}</span>
+    </div>
+
+    <div v-if="graph.nodes.length" ref="canvasRef" class="graph-canvas" data-testid="graph-canvas">
       <svg
         :width="graph.width"
         :height="graph.height"
@@ -54,6 +64,10 @@
       </svg>
     </div>
 
+    <p v-if="standaloneCount > 0" class="graph-hint">
+      另有 {{ standaloneCount }} 份独立简历没有版本关系，未画在图上。
+    </p>
+
     <ul v-if="graph.nodes.length" class="graph-legend" data-testid="graph-legend">
       <li><span class="swatch edge-commit" aria-hidden="true" />版本推进</li>
       <li><span class="swatch edge-fork" aria-hidden="true" />岗位分叉</li>
@@ -63,9 +77,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import type { ResumeMeta } from '@/types/resume';
-import { buildResumeGraph, type GraphEdge, type GraphNode } from '@/utils/resumeGraph';
+import { buildResumeGraph, LANE_WIDTH, type GraphEdge, type GraphNode } from '@/utils/resumeGraph';
 
 const NODE_WIDTH = 104;
 const NODE_HEIGHT = 62;
@@ -78,8 +92,12 @@ const props = defineProps<{
 const emit = defineEmits<{ select: [id: string] }>();
 
 const selectedId = ref('');
+const canvasRef = ref<HTMLElement | null>(null);
 
-const graph = computed(() => buildResumeGraph(props.resumes, { currentId: props.currentId }));
+const graph = computed(() => buildResumeGraph(props.resumes, { currentId: props.currentId, relatedOnly: true }));
+
+/** 有多少份简历是独立的、不参与图谱。 */
+const standaloneCount = computed(() => props.resumes.length - graph.value.nodes.length);
 
 /** 连线路径：主干垂直直连，分叉用折线，同步用二次贝塞尔。 */
 const renderedEdges = computed(() => {
@@ -119,13 +137,39 @@ function choose(id: string) {
   emit('select', id);
 }
 
-defineExpose({ graph });
+/**
+ * 把视图滚到「最近更新的那份简历」所在的轨道。
+ *
+ * 互不相关的简历各自成轨，横向排列会很长；默认停在最左边会看到一堆陌生简历。
+ * 只滚一次，用户之后自己拖。
+ */
+async function focusLatestLane() {
+  await nextTick();
+  const canvas = canvasRef.value;
+  if (!canvas || !graph.value.nodes.length) return;
+  const latest = [...graph.value.nodes].sort((a, b) => {
+    const ta = Number(props.resumes.find((row) => row.id === a.id)?.updatedAt ?? 0);
+    const tb = Number(props.resumes.find((row) => row.id === b.id)?.updatedAt ?? 0);
+    return tb - ta;
+  })[0];
+  if (!latest) return;
+  const target = latest.x - canvas.clientWidth / 2;
+  canvas.scrollLeft = Math.max(0, target);
+}
+
+onMounted(focusLatestLane);
+watch(() => props.resumes, focusLatestLane, { deep: false });
+
+defineExpose({ graph, focusLatestLane });
 </script>
 
 <style scoped>
 .resume-graph { display: grid; gap: var(--space-sm); }
 .graph-hint, .graph-empty, .graph-warning { margin: 0; font-size: var(--font-xs); color: var(--color-muted); }
 .graph-warning { color: var(--color-ink-2); }
+.graph-lane-heads { position: relative; height: 18px; margin-left: 1px; overflow: hidden; }
+.lane-head { position: absolute; top: 0; padding: 0 8px; font-size: var(--font-xs); color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lane-head.lane-master { color: var(--color-ink-2); font-weight: 600; }
 .graph-canvas { overflow: auto; border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-s); background: var(--color-paper); }
 svg { display: block; }
 

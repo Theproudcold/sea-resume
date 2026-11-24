@@ -81,7 +81,7 @@ describe('ResumeGraphView', () => {
   });
 
   it('exposes nodes as keyboard-reachable buttons', () => {
-    const panel = setup([master('m1', 1)]);
+    const panel = setup([master('m1', 1), master('m2', 2)]);
     const node = panel.get('[data-testid=graph-node]');
     expect(node.attributes('role')).toBe('button');
     expect(node.attributes('tabindex')).toBe('0');
@@ -98,7 +98,7 @@ describe('ResumeGraphView', () => {
   });
 
   it('never renders untrusted title as HTML', () => {
-    const panel = setup([master('m1', 1, { title: '<img src=x onerror=alert(1)>' })]);
+    const panel = setup([master('m1', 1, { title: '<img src=x onerror=alert(1)>' }), master('m2', 2)]);
     // 关键是渲染成文本而不是标签：节点里出现字面的 "<img"，但页面上没有 img 元素。
     expect(panel.find('img').exists()).toBe(false);
     expect(panel.text()).toContain('<img');
@@ -107,6 +107,19 @@ describe('ResumeGraphView', () => {
     panel.unmount();
   });
 
+
+  it('explains that unrelated resumes each own a track', () => {
+    const many = [
+      ...Array.from({ length: 5 }, (_, index) => master(`x${index}`, 1, { trackId: `T${index}`, title: `独立${index}` })),
+      master('m1', 1),
+      master('m2', 2),
+    ];
+    const panel = setup(many);
+    // 独立的单份简历不画，但数量要如实告知。
+    expect(panel.text()).toContain('另有 5 份独立简历');
+    expect(panel.get('[data-testid=graph-canvas]').attributes('data-testid')).toBe('graph-canvas');
+    panel.unmount();
+  });
   it('keeps the drawing inside the reported size', () => {
     const panel = setup([master('m1', 1), master('m2', 2), job('b1', 'm1', 1)]);
     const svg = panel.get('svg');

@@ -248,3 +248,57 @@ describe('分组与同步语义', () => {
     expect(graph.uncertain).toContain('o2');
   });
 });
+
+describe('链内的上下顺序', () => {
+  it('puts the chain head at the bottom of its lane, even when it is newer by time', () => {
+    // 旧数据没有 rebasedFromId：基线小的那条在时间上反而更新。
+    const head = branch('o1', 'T', 'm1', 1, { updatedAt: 5000 });
+    const next = resume('o2', 'T', 1, {
+      updatedAt: 1000,
+      jobTarget: { versionName: 'B', company: 'Acme', position: '前端', sourceResumeId: 'm2', baseId: 'm2', baseVersion: 2 },
+    });
+    const graph = buildResumeGraph([resume('m1', 'T', 1), resume('m2', 'T', 2), head, next]);
+    const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+    // 链头（基线 1）在下，基线 2 的版本在上。
+    expect(byId.get('o1')!.row).toBeGreaterThan(byId.get('o2')!.row);
+    expect(byId.get('o1')!.lane).toBe(byId.get('o2')!.lane);
+  });
+
+  it('puts synced versions above the version they came from', () => {
+    const graph = buildResumeGraph([
+      resume('m1', 'T', 1),
+      resume('m2', 'T', 2),
+      branch('b1', 'T', 'm1', 1),
+      resume('b2', 'T', 1, {
+        jobTarget: { versionName: 'B', company: 'Acme', position: '前端', sourceResumeId: 'm2', baseId: 'm2', baseVersion: 2, rebasedFromId: 'b1' },
+      }),
+    ]);
+    const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+    expect(byId.get('b2')!.row).toBeLessThan(byId.get('b1')!.row);
+  });
+});
+
+describe('只画有版本关系的简历', () => {
+  it('drops standalone resumes when relatedOnly is set', () => {
+    const graph = buildResumeGraph([
+      resume('solo1', 'S1', 1),
+      resume('solo2', 'S2', 1),
+      resume('m1', 'T', 1),
+      resume('m2', 'T', 2),
+      branch('b1', 'T', 'm1', 1),
+    ], { relatedOnly: true });
+    expect(graph.nodes.map((node) => node.id).sort()).toEqual(['b1', 'm1', 'm2']);
+    // 无关简历不占列：只剩主干一条 + 岗位一条。
+    expect(graph.lanes).toHaveLength(2);
+  });
+
+  it('keeps a lone master when it is the base of a job version', () => {
+    const graph = buildResumeGraph([resume('m1', 'T', 1), branch('b1', 'T', 'm1', 1)], { relatedOnly: true });
+    expect(graph.nodes).toHaveLength(2);
+  });
+
+  it('keeps everything when relatedOnly is not set', () => {
+    const graph = buildResumeGraph([resume('solo1', 'S1', 1), resume('m1', 'T', 1)]);
+    expect(graph.nodes).toHaveLength(2);
+  });
+});

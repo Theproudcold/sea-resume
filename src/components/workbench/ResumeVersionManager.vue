@@ -170,6 +170,9 @@
           </el-empty>
         </section>
       </el-tab-pane>
+      <el-tab-pane name="graph" label="版本图谱">
+        <ResumeGraphView :resumes="resumes" @select="handleGraphSelect" />
+      </el-tab-pane>
       <el-tab-pane name="history" label="岗位版本历史">
         <p class="history-intro">这里汇总保存过的岗位版本及其来源。岗位版本是独立副本，原简历不会被覆盖。</p>
         <el-alert v-if="historyError" type="error" :closable="false" :title="historyError" />
@@ -245,6 +248,7 @@ import { storageManager } from '@/services/storage/StorageManager';
 import { applyResumeDifferences, compareResumeVersions, masterBehindStatus, trackIdOf, versionNumberOf, type MasterBehindStatus, type ResumeDifference, type ResumeDifferenceType } from '@/utils/resumeVersions';
 import { applyMasterAdditions, collectMasterAdditions, type MasterAddition } from '@/utils/resumeRebase';
 import { describeError } from '@/utils/globalErrorReporting';
+import ResumeGraphView from './ResumeGraphView.vue';
 
 interface JobVersionHistoryEntry {
   resume: ResumeMeta;
@@ -610,6 +614,15 @@ async function loadJobVersionHistory() {
   } finally {
     if (generation === historyLoadGeneration) historyLoading.value = false;
   }
+}
+
+/** 图谱点选一个版本：填入比较页签的版本 B，方便直接看差异。 */
+function handleGraphSelect(id: string) {
+  if (!props.resumes.some((resume) => resume.id === id)) return;
+  afterId.value = id;
+  const candidate = props.resumes.find((resume) => resume.id !== id);
+  if (!beforeId.value && candidate) beforeId.value = candidate.id;
+  activeTab.value = 'compare';
 }
 
 async function openVersionComparison(entry: JobVersionHistoryEntry) {
