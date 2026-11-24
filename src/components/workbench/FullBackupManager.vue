@@ -15,6 +15,7 @@
         <el-alert type="info" :closable="false" title="备份包含当前存储位置的全部简历及岗位版本。文件只在本地生成，不会上传。" />
         <div class="backup-export">
           <p>请将备份文件保存在安全位置。文件包含简历中的个人信息，不包含 AI 密钥。</p>
+          <el-checkbox v-model="includeHistory" :disabled="busy">包含版本历史（每份最近 50 条）</el-checkbox>
           <el-button type="primary" :loading="exporting" :disabled="busy" @click="exportAll">下载全部简历备份</el-button>
         </div>
       </el-tab-pane>
@@ -84,6 +85,7 @@ const backup = ref<FullBackupEnvelope | null>(null);
 const restorePlan = ref<FullBackupRestorePlan | null>(null);
 const restoredIndexes = ref<Set<number>>(new Set());
 const errorMessage = ref('');
+const includeHistory = ref(true);
 const busy = computed(() => exporting.value || reading.value || restoring.value);
 const hasPreviewItems = computed(() => (preview.value?.items.length ?? 0) > 0);
 
@@ -118,9 +120,10 @@ async function exportAll() {
   errorMessage.value = '';
   try {
     const resumes = await readAllResumes();
-    const json = serializeFullBackup(resumes, await readAllHistories(resumes));
+    const histories = includeHistory.value ? await readAllHistories(resumes) : [];
+    const json = serializeFullBackup(resumes, histories);
     if (json.length > MAX_JSON_IMPORT_FILE_SIZE) {
-      throw new Error('备份超过 20 MB 的导入上限。请减少简历数量，或关闭版本历史后再导出。');
+      throw new Error('备份超过 20 MB 的导入上限。请减少简历数量，或取消勾选版本历史后重试。');
     }
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);

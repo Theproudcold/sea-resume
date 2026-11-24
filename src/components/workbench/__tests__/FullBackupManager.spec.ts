@@ -38,6 +38,7 @@ const stubs = {
   'el-table-column': { template: '<div />' },
   'el-tag': { template: '<span><slot /></span>' },
   'el-empty': { template: '<div>{{ description }}</div>', props: ['description'] },
+  'el-checkbox': { template: '<label><slot /></label>' },
 };
 
 function createWrapper() {
