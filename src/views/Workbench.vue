@@ -107,6 +107,7 @@
               @interview="router.push({ path: '/interview/new', query: { resumeId: resume.id } })"
               @rename="handleRename(resume)"
               @duplicate="handleDuplicate(resume.id)"
+              @new-version="handleNewVersion(resume.id)"
               @delete="handleDelete(resume)"
             />
           </div>
@@ -365,6 +366,17 @@ const handleDuplicate = async (id: string) => {
     router.push(`/editor/${newId}`);
   } catch (error) {
     ElMessage.error('复制失败: ' + (describeError(error)));
+  }
+};
+
+/** 把主干另存为下一版本；岗位分支没有这个入口。 */
+const handleNewVersion = async (id: string) => {
+  try {
+    const newId = await workbenchStore.createMasterVersion(id);
+    ElMessage.success('已存为新版本；原有版本未更改。');
+    router.push(`/editor/${newId}`);
+  } catch (error) {
+    ElMessage.error('存为新版本失败: ' + (describeError(error)));
   }
 };
 

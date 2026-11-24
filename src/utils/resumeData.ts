@@ -71,6 +71,11 @@ export function createDefaultResumeData(): ResumeData {
  * 旧数据就能继续渲染，而不需要的字段保持原样。
  * 新代码从 parseResume(source, 'read') 进入。
  */
+/** 版本号只接受从 1 开始的正整数。 */
+function isPositiveVersion(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
+}
+
 export function normalizeResumeData(source: unknown): ResumeData {
   const defaults = createDefaultResumeData();
   if (!isRecord(source)) return defaults;
@@ -130,5 +135,8 @@ export function normalizeResumeData(source: unknown): ResumeData {
     updatedAt: asString(input.updatedAt, defaults.updatedAt),
     ...(layout ? { layout } : {}),
   };
+  // 轨道字段只在缺失或非法时补齐，不改写已有值：缺省时本条简历自己就是一条主干。
+  resume.trackId = asString(input.trackId, '').trim() || resume.id;
+  resume.versionNumber = isPositiveVersion(input.versionNumber) ? input.versionNumber : 1;
   return withAlignedCustomBlockOrder(resume);
 }

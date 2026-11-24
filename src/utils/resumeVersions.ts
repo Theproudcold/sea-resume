@@ -6,6 +6,51 @@ export interface JobTarget {
   company: string;
   position: string;
   sourceResumeId: string;
+  /** 派生时所用主干版本的简历 ID。 */
+  baseId?: string;
+  /** 派生时所用主干版本的版本号。 */
+  baseVersion?: number;
+}
+
+/** 主干轨道 ID：没有轨道字段的简历自己就是一条主干。 */
+export function trackIdOf(row: { id: string; trackId?: string }): string {
+  const explicit = typeof row.trackId === 'string' ? row.trackId.trim() : '';
+  return explicit || row.id;
+}
+
+/** 版本号：缺省视为 1。 */
+export function versionNumberOf(row: { versionNumber?: number }): number {
+  const value = row.versionNumber;
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : 1;
+}
+
+export interface MasterBehindStatus {
+  /** 主干存在比分支基线更新的版本。 */
+  behind: boolean;
+  /** 分支派生时所用的主干版本号；旧数据或非分支为 null。 */
+  baseVersion: number | null;
+  /** 该轨道上最新的主干版本号；找不到主干为 null。 */
+  latestVersion: number | null;
+}
+
+/**
+ * 判断一个岗位版本是否落后于它的主干。
+ *
+ * 只看同一 `trackId` 上、没有 `jobTarget` 的简历（即主干本身）：分支自己的版本号
+ * 再大也不能算作「更新的主干」。主干被删除、分支缺少 `baseVersion`（旧数据）
+ * 或轨道上只有一版时都返回不落后，避免对旧数据打扰。
+ */
+export function masterBehindStatus(
+  branch: { id: string; trackId?: string; versionNumber?: number; jobTarget?: JobTarget },
+  list: ReadonlyArray<{ id: string; trackId?: string; versionNumber?: number; jobTarget?: JobTarget }>,
+): MasterBehindStatus {
+  if (!branch?.jobTarget?.baseVersion) return { behind: false, baseVersion: null, latestVersion: null };
+  const trackId = trackIdOf(branch);
+  const applied = list.filter((row) => !row.jobTarget && trackIdOf(row) === trackId);
+  if (!applied.length) return { behind: false, baseVersion: branch.jobTarget.baseVersion, latestVersion: null };
+  const latestVersion = applied.reduce((max, row) => Math.max(max, versionNumberOf(row)), 0);
+  const baseVersion = branch.jobTarget.baseVersion;
+  return { behind: latestVersion > baseVersion, baseVersion, latestVersion };
 }
 
 export type ResumeDifferenceType = 'added' | 'removed' | 'modified' | 'formatted';
@@ -62,15 +107,21 @@ export function createJobResumeVersion(
 ): ResumeData {
   const copy = JSON.parse(JSON.stringify(source)) as ResumeData;
   const now = new Date().toISOString();
+  const versionName = target.versionName.trim() || `${source.title} - ${target.position.trim() || '岗位版本'}`;
   return {
     ...copy,
     id,
-    title: target.versionName.trim() || `${source.title} - ${target.position.trim() || '岗位版本'}`,
+    title: versionName,
+    // 分支沿用来源主干的轨道，但版本号在自己的分支里从 1 开始计数。
+    trackId: trackIdOf(source),
+    versionNumber: 1,
     jobTarget: {
-      versionName: target.versionName.trim() || `${source.title} - ${target.position.trim() || '岗位版本'}`,
+      versionName,
       company: target.company.trim(),
       position: target.position.trim(),
       sourceResumeId: source.id,
+      baseId: source.id,
+      baseVersion: versionNumberOf(source),
     },
     createdAt: now,
     updatedAt: now,

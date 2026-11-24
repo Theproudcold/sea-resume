@@ -22,6 +22,8 @@ export function metaFromResume(data: ResumeData): ResumeMeta {
     createdAt: Date.parse(data.createdAt),
     updatedAt: Date.parse(data.updatedAt),
     ...(data.jobTarget ? { jobTarget: { ...data.jobTarget } } : {}),
+    ...(data.trackId ? { trackId: data.trackId } : {}),
+    ...(typeof data.versionNumber === 'number' ? { versionNumber: data.versionNumber } : {}),
   };
 }
 
