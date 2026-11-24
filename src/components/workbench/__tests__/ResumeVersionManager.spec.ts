@@ -169,6 +169,48 @@ describe('ResumeVersionManager comparison', () => {
     expect(readResume).toHaveBeenCalledWith('base');
   });
 
+  it('marks a job version that fell behind its master track', async () => {
+    const indexed: ResumeMeta[] = [
+      { id: 'base', title: '基础简历', templateId: 'modern', createdAt: 1, updatedAt: 1, trackId: 'track-a', versionNumber: 3 },
+      {
+        id: 'branch',
+        title: 'Acme 前端',
+        templateId: 'modern',
+        createdAt: 1,
+        updatedAt: 2,
+        trackId: 'track-a',
+        versionNumber: 1,
+        jobTarget: { versionName: 'Acme 前端', company: 'Acme', position: '前端', sourceResumeId: 'base', baseId: 'base', baseVersion: 1 },
+      },
+    ];
+    const wrapper = mount(ResumeVersionManager, { props: { modelValue: true, resumes: indexed }, global: { stubs } });
+    await wrapper.find('.open-history').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid=version-behind]').text()).toContain('主干已有新版');
+    // 这是提示而不是动作：D 功能才提供同步。
+    expect(wrapper.find('[data-testid=version-behind] input, [data-testid=version-behind] button').exists()).toBe(false);
+  });
+
+  it('does not mark a branch that already matches the latest master version', async () => {
+    const indexed: ResumeMeta[] = [
+      { id: 'base', title: '基础简历', templateId: 'modern', createdAt: 1, updatedAt: 1, trackId: 'track-a', versionNumber: 3 },
+      {
+        id: 'branch',
+        title: 'Acme 前端',
+        templateId: 'modern',
+        createdAt: 1,
+        updatedAt: 2,
+        trackId: 'track-a',
+        versionNumber: 1,
+        jobTarget: { versionName: 'Acme 前端', company: 'Acme', position: '前端', sourceResumeId: 'base', baseId: 'base', baseVersion: 3 },
+      },
+    ];
+    const wrapper = mount(ResumeVersionManager, { props: { modelValue: true, resumes: indexed }, global: { stubs } });
+    await wrapper.find('.open-history').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid=version-behind]').exists()).toBe(false);
+  });
+
   function selectionCount(wrapper: ReturnType<typeof mountManager>) {
     const match = wrapper.text().match(/已选 (\d+) \/ (\d+) 项/);
     return match ? { selected: Number(match[1]), total: Number(match[2]) } : null;
