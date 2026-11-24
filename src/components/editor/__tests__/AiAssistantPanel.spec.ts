@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import ElementPlus, { ElRadioGroup } from 'element-plus';
 import AiAssistantPanel from '../AiAssistantPanel.vue';
@@ -34,6 +36,14 @@ describe('AI assistant quick editing UX', () => {
     await panel.get('#quick-edit-instruction').setValue('精简个人简介');
     expect(panel.get('.request-button').attributes('disabled')).toBeDefined();
     expect(requestResumeAiDraft).not.toHaveBeenCalled();
+  });
+
+  it('让模式切换条贴住内容宽度，不再被面板拉成通栏', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/editor/AiAssistantPanel.vue'), 'utf8');
+    const modeBar = /\.assistant-panel > :deep\(\.el-radio-group\)\s*\{[^}]*\}/.exec(source)?.[0] ?? '';
+
+    expect(modeBar).toContain('align-self: flex-start;');
+    expect(modeBar).toContain('margin-bottom: var(--ui-space-1);');
   });
 
   it('lets users cancel generation and discards late results', async () => {
