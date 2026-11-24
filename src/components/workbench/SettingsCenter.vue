@@ -90,7 +90,7 @@
             <h2>关于 Sea Resume</h2>
             <p>简洁、灵活的简历制作工具。</p>
           </header>
-          <div class="about-card"><strong>Sea Resume</strong><span>版本 1.0.0</span></div>
+          <div class="about-card"><strong>Sea Resume</strong><span>版本 {{ appVersion }}</span></div>
         </section>
       </main>
     </div>
@@ -131,6 +131,8 @@ const emit = defineEmits<{
 }>();
 
 const storageStore = useStorageStore();
+// 构建时由 vite 从 package.json 注入；测试环境下用占位值。
+const appVersion = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '开发版';
 const section = ref<SettingsSection>(props.initialSection);
 const backupResumeId = ref('');
 
