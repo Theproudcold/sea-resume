@@ -41,6 +41,15 @@ const MIN_PAGE_FILL = 8;
  * 仍会削掉上一行字尾。
  */
 const RENDERER_INK_SLACK_RATIO = 0.3;
+/**
+ * 相邻两行之间必须留出的可切空间，否则整段文字会并成一条内容带。
+ *
+ * 行盒如果长到行距，相邻两行的行盒就会首尾相接，`mergeContentBands` 把整段并成一条带；
+ * 此后没有可用的内部切点，分页只能退到段首（第一页几乎空白）或按页高硬切（文字被切在行内）。
+ * 所以行盒总高封顶为「行距 - MIN_CUT_GAP」。13px 正文、1.6 倍行高时行距 20.8px，
+ * 行盒封顶 18.8px，每两行之间仍有 2px 可以下刀。
+ */
+const MIN_CUT_GAP = 2;
 /** 装饰盒（边框、底色）超过半页就当成整页背景：必须允许被切，否则整份简历无法分页。 */
 const MAX_DECORATION_HEIGHT_RATIO = 0.5;
 const CSS_PX_PER_INCH = 96;
@@ -161,19 +170,30 @@ function toBand(rect: { top: number; bottom: number; width: number; height: numb
   return { top: rect.top - origin, bottom: rect.bottom - origin };
 }
 
-/** 把文本行盒补成整行：上下各加半个行距，得到浏览器真正用来换行的行盒。 */
+/**
+ * 把文本行盒补成整行：补足行距，再在下方留出渲染余量，得到浏览器真正用来换行的行盒。
+ *
+ * 关键约束：行盒高度必须小于行距，否则相邻行盒首尾相接，被 `mergeContentBands`
+ * 并成一条长带。整段并成一条带之后没有可用的内部切点，分页只能退到段首（第一页
+ * 几乎空白）或按页高硬切（文字被切在行内）。所以行盒总高封顶为「行距 - MIN_CUT_GAP」：
+ * 先满足下方的渲染余量，剩余高度再补上方半个行距，正常行距下仍按行盒避让。
+ */
 function toLineBand(
   rect: { top: number; bottom: number; width: number; height: number },
   metrics: TextMetricsPx,
   origin: number,
 ): ContentBand | null {
   const { lineHeight, fontSlack } = metrics;
-  const halfLeading = lineHeight && lineHeight > rect.height ? (lineHeight - rect.height) / 2 : 0;
+  const naturalLeading = lineHeight && lineHeight > rect.height ? (lineHeight - rect.height) / 2 : 0;
+  // 行盒可用的总高度；行距未知（退化路径）时退回「上下各半个行距」。
+  const maxHeight = lineHeight ? Math.max(rect.height, lineHeight - MIN_CUT_GAP) : rect.height + 2 * naturalLeading;
+  // 先保住正常行盒上方的一半行距，再把剩下的高度给下方的渲染余量。
+  const above = Math.min(naturalLeading, Math.max(0, maxHeight - rect.height));
+  const below = Math.min(fontSlack, Math.max(0, maxHeight - rect.height - above));
   // DOMRect 的字段在原型上，展开会得到空对象，必须逐个取值。
-  // 下边缘额外留出渲染器余量：只有它会把字形画低。
   return toBand({
-    top: rect.top - halfLeading,
-    bottom: rect.bottom + halfLeading + fontSlack,
+    top: rect.top - above,
+    bottom: rect.bottom + below,
     width: rect.width,
     height: rect.height,
   }, origin);
