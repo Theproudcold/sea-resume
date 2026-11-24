@@ -41,6 +41,10 @@
               <el-icon><ChatDotRound /></el-icon>
               模拟面试
             </el-dropdown-item>
+            <el-dropdown-item command="history">
+              <el-icon><Clock /></el-icon>
+              版本历史
+            </el-dropdown-item>
             <el-dropdown-item command="rename">
               <el-icon><EditPen /></el-icon>
               重命名
@@ -66,7 +70,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { MoreFilled, EditPen, CopyDocument, Delete, ChatDotRound, Plus } from '@element-plus/icons-vue';
+import { MoreFilled, EditPen, CopyDocument, Delete, ChatDotRound, Clock, Plus } from '@element-plus/icons-vue';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import ResumeCoverPreview from './ResumeCoverPreview.vue';
@@ -84,6 +88,7 @@ const emit = defineEmits<{
   edit: [];
   interview: [];
   rename: [];
+  history: [];
   duplicate: [];
   newVersion: [];
   delete: [];
@@ -150,6 +155,9 @@ const handleCommand = (command: string) => {
       break;
     case 'rename':
       emit('rename');
+      break;
+    case 'history':
+      emit('history');
       break;
     case 'duplicate':
       emit('duplicate');

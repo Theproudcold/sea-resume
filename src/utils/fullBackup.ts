@@ -1,4 +1,5 @@
 import type { ResumeData } from '@/types/resume';
+import type { ResumeHistoryArchive } from '@/types/history';
 import { generateId } from '@/utils/helpers';
 import { MAX_JSON_IMPORT_FILE_SIZE } from '@/utils/importLimits';
 
@@ -15,6 +16,8 @@ export interface FullBackupEnvelope {
   format: typeof FULL_BACKUP_FORMAT;
   version: typeof FULL_BACKUP_VERSION;
   resumes: ResumeData[];
+  /** 可选：版本历史归档。旧版本程序会忽略该字段，仍能导入简历正文。 */
+  histories?: ResumeHistoryArchive[];
 }
 
 export interface FullBackupPreviewItem {
@@ -245,6 +248,66 @@ function validateResumeArray(value: unknown, maxCount = MAX_BACKUP_RESUMES): ass
   value.forEach((resume, index) => validateResumeData(resume, index));
 }
 
+function validateHistoryArchive(value: unknown, index: number): asserts value is ResumeHistoryArchive {
+  const path = `histories[${index}]`;
+  const archive = requireRecord(value, path);
+  if (archive.format !== 'sea-resume-history' || archive.version !== 1) {
+    throw new Error(`Full backup field "${path}" is not a supported history archive.`);
+  }
+  requireString(archive.resumeId, `${path}.resumeId`);
+  if (archive.head !== null) requireString(archive.head, `${path}.head`);
+  if (!Array.isArray(archive.commits) || archive.commits.length > 200) {
+    throw new Error(`Full backup field "${path}.commits" must contain at most 200 commits.`);
+  }
+  archive.commits.forEach((entry, commitIndex) => {
+    const commitPath = `${path}.commits[${commitIndex}]`;
+    const commit = requireRecord(entry, commitPath);
+    for (const field of ['hash', 'contentHash', 'message', 'author', 'createdAt', 'kind']) {
+      requireString(commit[field], `${commitPath}.${field}`);
+    }
+    if (typeof commit.message !== 'string' || commit.message.length > 120) {
+      throw new Error(`Full backup field "${commitPath}.message" exceeds the size limit.`);
+    }
+    if (commit.parentHash !== null) requireString(commit.parentHash, `${commitPath}.parentHash`);
+    requireStringArray(commit.tags, `${commitPath}.tags`);
+    const stats = requireRecord(commit.stats, `${commitPath}.stats`);
+    for (const field of ['additions', 'deletions']) {
+      if (typeof stats[field] !== 'number' || !Number.isFinite(stats[field])) {
+        throw new Error(`Full backup field "${commitPath}.stats.${field}" must be finite.`);
+      }
+    }
+    requireStringArray(stats.sections, `${commitPath}.stats.sections`);
+    requireRecord(commit.snapshot, `${commitPath}.snapshot`);
+    if (typeof commit.bytes !== 'number' || !Number.isFinite(commit.bytes)) {
+      throw new Error(`Full backup field "${commitPath}.bytes" must be finite.`);
+    }
+  });
+  if (!Array.isArray(archive.avatars) || archive.avatars.length > 500) {
+    throw new Error(`Full backup field "${path}.avatars" must be an array.`);
+  }
+  archive.avatars.forEach((entry, avatarIndex) => {
+    const avatarPath = `${path}.avatars[${avatarIndex}]`;
+    const avatar = requireRecord(entry, avatarPath);
+    requireString(avatar.hash, `${avatarPath}.hash`);
+    requireString(avatar.dataUrl, `${avatarPath}.dataUrl`, MAX_BACKUP_AVATAR_LENGTH);
+  });
+  const tags = requireRecord(archive.tags, `${path}.tags`);
+  Object.entries(tags).forEach(([tag, hash]) => {
+    requireString(tag, `${path}.tags.${tag}`, 64);
+    requireString(hash, `${path}.tags.${tag}`, 128);
+  });
+}
+
+function validateHistories(value: unknown): ResumeHistoryArchive[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > MAX_BACKUP_RESUMES) {
+    throw new Error(`Full backup histories must contain at most ${MAX_BACKUP_RESUMES} items.`);
+  }
+  assertJsonSafe(value);
+  value.forEach((archive, index) => validateHistoryArchive(archive, index));
+  return value;
+}
+
 /** Validate the complete versioned envelope without filling in missing fields. */
 export function validateFullBackupEnvelope(value: unknown): FullBackupEnvelope {
   if (!isRecord(value)) throw new Error('Full backup must be a JSON object.');
@@ -252,14 +315,29 @@ export function validateFullBackupEnvelope(value: unknown): FullBackupEnvelope {
   if (value.version !== FULL_BACKUP_VERSION) throw new Error(`Unsupported full backup version: ${String(value.version)}.`);
   const resumes = value.resumes;
   validateResumeArray(resumes);
-  return { format: FULL_BACKUP_FORMAT, version: FULL_BACKUP_VERSION, resumes: resumes.map(sanitizeResumeDataContent) };
+  const histories = validateHistories(value.histories);
+  return {
+    format: FULL_BACKUP_FORMAT,
+    version: FULL_BACKUP_VERSION,
+    resumes: resumes.map(sanitizeResumeDataContent),
+    ...(histories.length ? { histories } : {}),
+  };
 }
 
 /** Build a versioned envelope after validating every resume as complete data. */
-export function createFullBackup(resumes: readonly ResumeData[]): FullBackupEnvelope {
+export function createFullBackup(
+  resumes: readonly ResumeData[],
+  histories: readonly ResumeHistoryArchive[] = [],
+): FullBackupEnvelope {
   const validatedResumes = [...resumes];
   validateResumeArray(validatedResumes);
-  return { format: FULL_BACKUP_FORMAT, version: FULL_BACKUP_VERSION, resumes: validatedResumes.map(sanitizeResumeDataContent) };
+  const validatedHistories = validateHistories(histories);
+  return {
+    format: FULL_BACKUP_FORMAT,
+    version: FULL_BACKUP_VERSION,
+    resumes: validatedResumes.map(sanitizeResumeDataContent),
+    ...(validatedHistories.length ? { histories: validatedHistories } : {}),
+  };
 }
 
 const canonicalize = (value: unknown): unknown => {
@@ -273,8 +351,11 @@ const canonicalize = (value: unknown): unknown => {
 };
 
 /** Serialize with recursively sorted object keys; array order is retained. */
-export function serializeFullBackup(resumes: readonly ResumeData[]): string {
-  return JSON.stringify(canonicalize(createFullBackup(resumes)));
+export function serializeFullBackup(
+  resumes: readonly ResumeData[],
+  histories: readonly ResumeHistoryArchive[] = [],
+): string {
+  return JSON.stringify(canonicalize(createFullBackup(resumes, histories)));
 }
 
 /** Parse and validate before returning anything to a restore caller. */
