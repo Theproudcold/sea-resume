@@ -341,4 +341,9 @@ export class FileSystemAdapter implements IStorageAdapter {
   getDirectoryName(): string {
     return this.directoryHandle?.name || '未选择';
   }
+
+  /** 版本历史镜像需要复用用户已授权的目录；不通过 IStorageAdapter 接口暴露。 */
+  getDirectoryHandle(): FileSystemDirectoryHandle | null {
+    return this.directoryHandle;
+  }
 }
