@@ -10,7 +10,7 @@
  */
 import type { Experience, Project, ResumeData } from '@/types/resume';
 
-export type MasterAdditionKind = 'highlight' | 'experience' | 'project';
+export type MasterAdditionKind = 'highlight' | 'description' | 'experience' | 'project';
 
 export interface MasterAdditionBase {
   /** 主干里这条内容所属的条目 ID。 */
@@ -24,6 +24,12 @@ export interface HighlightAddition extends MasterAdditionBase {
   text: string;
 }
 
+/** 富文本描述里新增的句子。编辑器把成果写在这里，highlights 通常是空的。 */
+export interface DescriptionAddition extends MasterAdditionBase {
+  kind: 'description';
+  text: string;
+}
+
 export interface ExperienceAddition extends MasterAdditionBase {
   kind: 'experience';
   block: Experience;
@@ -34,7 +40,7 @@ export interface ProjectAddition extends MasterAdditionBase {
   block: Project;
 }
 
-export type MasterAddition = HighlightAddition | ExperienceAddition | ProjectAddition;
+export type MasterAddition = HighlightAddition | DescriptionAddition | ExperienceAddition | ProjectAddition;
 
 export interface RebasePlacement {
   /** 被放入的内容摘要，用于展示。 */
@@ -55,6 +61,14 @@ export interface RebaseResult {
   unplaced: MasterAddition[];
 }
 
+/** 追加进富文本前转义，避免正文里的尖括号被当成标签。 */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -72,6 +86,23 @@ function normalizeBullet(text: string): string {
 
 function bulletsOf(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+/**
+ * 把富文本拆成可比较的句子。
+ *
+ * 编辑器产出的是 `<p>…</p>` 这种段落，用户在一个段落里可能写多句。
+ * 这里按 HTML 结束标签与中文句末标点切开，去掉标签后比较，
+ * 这样「主干多写了一句话」也能被识别出来。
+ */
+function sentencesOf(html: unknown): string[] {
+  const text = String(html ?? '')
+    .replace(/<\/p>|<br\s*\/?>|<\/li>|<\/div>/giu, '\n')
+    .replace(/<[^>]*>/g, ' ');
+  return text
+    .split(/\n|(?<=[。！？!?；;])/u)
+    .map((line) => line.replace(/&nbsp;/gu, ' ').replace(/\s+/gu, ' ').trim())
+    .filter(Boolean);
 }
 
 function sameBlock(a: unknown, b: unknown): boolean {
@@ -100,6 +131,15 @@ export function collectMasterAdditions(base: ResumeData, latest: ResumeData, bra
         additions.push({ kind: 'experience', sourceItemId: latestItem.id, block: clone(latestItem), conflict: false });
       }
       continue;
+    }
+
+    const baseSentences = new Set(sentencesOf(baseItem.description).map(normalizeBullet));
+    const branchSentences = new Set(sentencesOf(branchItem?.description).map(normalizeBullet));
+    const descriptionConflict = Boolean(branchItem) && !sameBlock(baseItem.description, branchItem!.description);
+    for (const sentence of sentencesOf(latestItem.description)) {
+      const key = normalizeBullet(sentence);
+      if (!key || baseSentences.has(key) || branchSentences.has(key)) continue;
+      additions.push({ kind: 'description', sourceItemId: latestItem.id, text: sentence, conflict: descriptionConflict });
     }
 
     const baseBullets = new Set(bulletsOf(baseItem.highlights).map(normalizeBullet));
@@ -167,6 +207,27 @@ export function applyMasterAdditions(branch: ResumeData, additions: MasterAdditi
 
     const text = addition.text;
     if (!normalizeBullet(text)) continue;
+
+    if (addition.kind === 'description') {
+      const target = resume.experiences.find((item) => item.id === addition.sourceItemId) ?? resume.experiences[0];
+      if (!target) {
+        unplaced.push(addition);
+        continue;
+      }
+      const existing = new Set(sentencesOf(target.description).map(normalizeBullet));
+      if (existing.has(normalizeBullet(text))) continue;
+      const current = String(target.description ?? '').trim();
+      // 追加成一个新段落；原有富文本保持不动，岗位定制的写法不受影响。
+      const sentence = escapeHtml(text);
+      target.description = current ? `${current}<p>${sentence}</p>` : `<p>${sentence}</p>`;
+      placements.push({
+        kind: 'description',
+        text,
+        targetItemId: target.id,
+        reason: `主干新增的描述，已追加到「${target.company}」`,
+      });
+      continue;
+    }
 
     let target = resume.experiences.find((item) => item.id === addition.sourceItemId);
     let fallback = false;

@@ -159,3 +159,58 @@ describe('把新增条目并入岗位版本', () => {
     expect(result.resume.title).toBe('Acme 前端定制版');
   });
 });
+
+describe('真实编辑器产出的数据形态', () => {
+  // 编辑器把用户的成果写在 description 富文本里，highlights 始终为空。
+  // 早先只比对 highlights，导致真实使用下同步永远显示 0 项。
+  function realExperience(id: string, company: string, description: string): Experience {
+    return { id, company, position: '前端工程师', startDate: '2022-01', endDate: 'present', description, highlights: [] };
+  }
+
+  it('detects a new sentence added to a rich-text description', () => {
+    const base = blank();
+    base.experiences = [realExperience('e1', '星海科技', '<p>负责交易结算台的前端架构与迭代。</p>')];
+    const latest = JSON.parse(JSON.stringify(base)) as ResumeData;
+    latest.experiences[0]!.description =
+      '<p>负责交易结算台的前端架构与迭代。 主导结算首屏优化，首屏耗时从 2 秒降到 1.2 秒。</p>';
+    const additions = collectMasterAdditions(base, latest, base);
+    expect(additions).toHaveLength(1);
+    expect(additions[0]).toMatchObject({ kind: 'description', sourceItemId: 'e1', conflict: false });
+    expect((additions[0] as { text: string }).text).toContain('主导结算首屏优化');
+  });
+
+  it('ignores a description that has not changed', () => {
+    const base = blank();
+    base.experiences = [realExperience('e1', '星海科技', '<p>负责交易结算台的前端架构与迭代。</p>')];
+    expect(collectMasterAdditions(base, JSON.parse(JSON.stringify(base)) as ResumeData, base)).toHaveLength(0);
+  });
+
+  it('appends the new sentence to the branch description without losing its own wording', () => {
+    const base = blank();
+    base.experiences = [realExperience('e1', '星海科技', '<p>负责交易结算台的前端架构与迭代。</p>')];
+    const latest = JSON.parse(JSON.stringify(base)) as ResumeData;
+    latest.experiences[0]!.description = '<p>负责交易结算台的前端架构与迭代。 主导结算首屏优化。</p>';
+    const branch = JSON.parse(JSON.stringify(base)) as ResumeData;
+    branch.experiences[0]!.description = '<p>为 Acme 定制的结算台前端架构。</p>';
+    const additions = collectMasterAdditions(base, latest, branch);
+    expect(additions[0]).toMatchObject({ conflict: true });
+
+    const result = applyMasterAdditions(branch, additions);
+    // 岗位定制的原句保留，主干预新增的句子追加在后面。
+    expect(result.resume.experiences[0]!.description).toContain('为 Acme 定制的结算台前端架构');
+    expect(result.resume.experiences[0]!.description).toContain('主导结算首屏优化');
+    expect(result.resume.customBlocks ?? []).toHaveLength(0);
+  });
+
+  it('strips html when deciding whether a sentence already exists', () => {
+    const base = blank();
+    base.experiences = [realExperience('e1', '星海科技', '<p>已经存在的成果</p>')];
+    const latest = JSON.parse(JSON.stringify(base)) as ResumeData;
+    latest.experiences[0]!.description = '<p>已经存在的成果</p><p>新增的成果</p>';
+    const branch = JSON.parse(JSON.stringify(base)) as ResumeData;
+    branch.experiences[0]!.description = '已经存在的成果';
+    const additions = collectMasterAdditions(base, latest, branch);
+    expect(additions).toHaveLength(1);
+    expect((additions[0] as { text: string }).text).toBe('新增的成果');
+  });
+});
