@@ -324,51 +324,45 @@ export function buildResumeGraph(resumes: ResumeMeta[], options: GraphOptions = 
     if (latestVersion > baseVersion) node.behind = { baseVersion, latestVersion, latestId: latest.id };
   }
 
-  // 行号：同一列内按链的顺序排（链头在下、新的在上），不同列之间用时间对齐。
-  const chainIndex = new Map<string, number>();
+  // 行号：按「版本序」对齐，而不是按时间。
+  //
+  // 主干 v1 在最下、v2 往上一行……岗位版本同理：链头在最下，每同步一次升一行。
+  // 这样主干永远是一条竖直的线，各列的分叉点在同一水平线上，符合 Git 的阅读习惯。
+  // 早期实现按全局时间排序，结果主干被拉成阶梯、分叉点四散，图看不出层级。
+  // 先算出每列的最大版本，再反转成行号：版本越大行号越小（越靠上）。
+  const maxVersionByLane = new Map<number, number>();
+  const versionInLane = new Map<string, number>();
   for (const node of nodes) {
-    if (node.kind !== 'branch') continue;
-    const group = branchGroups.get(branchGroupKeyById(node.id) ?? '');
-    const index = group ? group.findIndex((row) => row.id === node.id) : 0;
-    chainIndex.set(node.id, index < 0 ? 0 : index);
-  }
-  const timed = [...nodes].sort((a, b) => {
-    // 同一岗位内部先按链顺序定上下（链头在下），时间只在链之间做对齐参考。
-    if (a.kind === 'branch' && b.kind === 'branch' && a.lane === b.lane) {
-      return (chainIndex.get(b.id) ?? 0) - (chainIndex.get(a.id) ?? 0);
+    let version = node.versionNumber;
+    if (node.kind === 'branch') {
+      const group = branchGroups.get(branchGroupKeyById(node.id) ?? '');
+      const index = group ? group.findIndex((row) => row.id === node.id) : 0;
+      version = (index < 0 ? 0 : index) + 1;
     }
-    const ta = timeOf(nodeById.get(a.id)!);
-    const tb = timeOf(nodeById.get(b.id)!);
-    if (ta !== tb) return tb - ta;
-    if (a.kind !== b.kind) return a.kind === 'master' ? -1 : 1;
-    return b.versionNumber - a.versionNumber;
-  });
-  // 分支链内再校正一次：链头必须排在同一个岗位其它版本的下方。
-  const laneRows = new Map<number, GraphNode[]>();
-  for (const node of timed) {
-    const list = laneRows.get(node.lane);
-    if (list) list.push(node);
-    else laneRows.set(node.lane, [node]);
+    versionInLane.set(node.id, version);
+    maxVersionByLane.set(node.lane, Math.max(maxVersionByLane.get(node.lane) ?? 0, version));
   }
-  for (const [lane, list] of laneRows) {
-    const branches = list.filter((node) => node.kind === 'branch');
-    if (branches.length < 2) continue;
-    // 该列的可用行号（保持相对位置），按链顺序从下往上重排分支节点。
-    const slots = list.map((node) => node.row).sort((a, b) => b - a);
-    const chainOrder = [...branches].sort((a, b) => (chainIndex.get(a.id) ?? 0) - (chainIndex.get(b.id) ?? 0));
-    chainOrder.forEach((node, index) => {
-      node.row = slots[Math.min(index, slots.length - 1)]!;
-    });
-    void lane;
+  for (const node of nodes) {
+    const version = versionInLane.get(node.id) ?? 1;
+    node.row = (maxVersionByLane.get(node.lane) ?? 1) - version;
   }
-  timed.forEach((node, index) => {
-    node.row = index;
+
+  // 同一行可能被不同列占用，这是允许的；只有同列同行的冲突才需要错开。
+  // 同列内按版本序排就不会重复，这里留一处防御：出现重复时顺序下移。
+  const occupied = new Set<string>();
+  for (const node of nodes) {
+    let slot = node.row;
+    while (occupied.has(`${node.lane}:${slot}`)) slot += 1;
+    occupied.add(`${node.lane}:${slot}`);
+    node.row = slot;
     node.x = PADDING_X + node.lane * LANE_WIDTH + LANE_WIDTH / 2;
     node.y = PADDING_Y + node.row * ROW_HEIGHT + ROW_HEIGHT / 2;
-  });
+  }
 
   const width = PADDING_X * 2 + Math.max(lanes.length, 1) * LANE_WIDTH;
-  const height = PADDING_Y * 2 + Math.max(nodes.length, 1) * ROW_HEIGHT;
+  // 高度按最大行号算，而不是节点总数：各列是并排的，按总数算会在下方留一大片空白。
+  const maxRow = nodes.reduce((max, node) => Math.max(max, node.row), 0);
+  const height = PADDING_Y * 2 + (nodes.length ? maxRow + 1 : 1) * ROW_HEIGHT;
 
   return { nodes, edges, lanes, uncertain, width, height };
 }
