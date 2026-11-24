@@ -189,6 +189,7 @@
             </div>
             <div class="history-entry-actions">
               <small>更新于 {{ formatUpdatedAt(entry.resume.updatedAt) || '未知时间' }}</small>
+              <el-button v-if="entry.behind" size="small" type="primary" :loading="rebaseLoadingId === entry.resume.id" data-testid="rebase-start" @click="startRebase(entry)">同步主干</el-button>
               <el-button size="small" :disabled="!entry.sourceTitle" @click="openVersionComparison(entry)">比较源版本</el-button>
             </div>
           </article>
@@ -196,6 +197,42 @@
       </el-tab-pane>
     </el-tabs>
     <template #footer><el-button @click="emit('update:modelValue', false)">关闭</el-button></template>
+  </el-dialog>
+
+  <el-dialog
+    :model-value="!!rebasePlan"
+    title="同步主干内容"
+    width="620px"
+    append-to-body
+    data-testid="rebase-dialog"
+    @update:model-value="(value: boolean) => { if (!value) closeRebase(); }"
+  >
+    <template v-if="rebasePlan">
+      <p class="history-intro">
+        主干 «{{ rebasePlan.masterTitle }}»（v{{ rebasePlan.latestVersion }}）有 {{ rebasePlan.additions.length }} 项内容是本岗位版本没有的。
+        勾选后会另存为一个新版本，原岗位版本保持不变；已按岗位定制的写法不会被覆盖。
+      </p>
+      <el-alert v-if="rebasePlan.unplaced.length" type="info" :closable="false" :title="`${rebasePlan.unplaced.length} 项内容找不到合适落点，将跳过`" />
+      <ul v-if="rebasePlan.additions.length" class="rebase-list">
+        <li v-for="(addition, index) in rebasePlan.additions" :key="`${addition.kind}-${index}`">
+          <label class="rebase-choice">
+            <input v-model="rebaseSelected" type="checkbox" :value="index" data-testid="rebase-choice" />
+            <span>
+              <strong>{{ rebasePreview(addition) }}</strong>
+              <small>{{ addition.kind === 'highlight' ? '要点' : addition.kind === 'experience' ? '整段经历' : '整段项目' }}{{ addition.conflict ? ' · 该条目在你这里是改过的，请确认' : '' }}</small>
+            </span>
+          </label>
+        </li>
+      </ul>
+      <el-empty v-else description="主干没有可并入的新内容。" :image-size="72" />
+      <p v-if="rebasePlan.error" class="rebase-error" role="alert">{{ rebasePlan.error }}</p>
+    </template>
+    <template #footer>
+      <el-button @click="closeRebase">取消</el-button>
+      <el-button type="primary" :loading="rebaseSaving" :disabled="!rebaseSelected.length || !!rebasePlan?.error" data-testid="rebase-apply" @click="applyRebase">
+        另存 {{ rebaseSelected.length }} 项为新版本
+      </el-button>
+    </template>
   </el-dialog>
 </template>
 
@@ -205,7 +242,8 @@ import { ElMessage } from 'element-plus';
 import type { ResumeMeta, ResumeData, ResumeJobTarget } from '@/types/resume';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { storageManager } from '@/services/storage/StorageManager';
-import { applyResumeDifferences, compareResumeVersions, masterBehindStatus, type MasterBehindStatus, type ResumeDifference, type ResumeDifferenceType } from '@/utils/resumeVersions';
+import { applyResumeDifferences, compareResumeVersions, masterBehindStatus, trackIdOf, versionNumberOf, type MasterBehindStatus, type ResumeDifference, type ResumeDifferenceType } from '@/utils/resumeVersions';
+import { applyMasterAdditions, collectMasterAdditions, type MasterAddition } from '@/utils/resumeRebase';
 import { describeError } from '@/utils/globalErrorReporting';
 
 interface JobVersionHistoryEntry {
@@ -257,6 +295,19 @@ let historyLoadGeneration = 0;
 /** 比较结果对应的版本与更新时间；简历被改动后用它判断快照是否过期。 */
 const comparisonStamp = ref('');
 let compareGeneration = 0;
+interface RebasePlan {
+  branch: ResumeData;
+  masterTitle: string;
+  latestVersion: number;
+  additions: MasterAddition[];
+  unplaced: MasterAddition[];
+  error: string;
+}
+const rebasePlan = ref<RebasePlan | null>(null);
+const rebaseSelected = ref<number[]>([]);
+const rebaseSaving = ref(false);
+const rebaseLoadingId = ref('');
+
 /** 索引里没有岗位版本的旧简历，读一次正文后在这里留档。 */
 const legacyJobTargets = new Map<string, ResumeJobTarget | null>();
 
@@ -569,6 +620,95 @@ async function openVersionComparison(entry: JobVersionHistoryEntry) {
   await nextTick();
   await compare();
 }
+
+function closeRebase() {
+  rebasePlan.value = null;
+  rebaseSelected.value = [];
+}
+
+function rebasePreview(addition: MasterAddition): string {
+  if (addition.kind === 'experience') return `${addition.block.company || '新经历'} · ${addition.block.position || ''}`;
+  if (addition.kind === 'project') return addition.block.name || '新项目';
+  return addition.text;
+}
+
+/**
+ * 准备同步：读分支、分支派生时的主干基线、以及当前最新主干。
+ *
+ * 编辑器里的活草稿可能还没落盘，调用方负责先冲刷（见调用方）。
+ */
+async function startRebase(entry: JobVersionHistoryEntry) {
+  if (rebaseLoadingId.value) return;
+  rebaseLoadingId.value = entry.resume.id;
+  closeRebase();
+  try {
+    const trackId = trackIdOf(entry.resume);
+    const applied = props.resumes
+      .filter((row) => !row.jobTarget && trackIdOf(row) === trackId)
+      .sort((left, right) => versionNumberOf(right) - versionNumberOf(left));
+    const latestMaster = applied[0];
+    if (!latestMaster) throw new Error('找不到这条主干的最新版本。');
+    const [branch, latest, base] = await Promise.all([
+      storageManager.read(entry.resume.id),
+      storageManager.read(latestMaster.id),
+      entry.jobTarget.baseId ? storageManager.read(entry.jobTarget.baseId) : Promise.resolve(null),
+    ]);
+    if (!branch || !latest) throw new Error('无法读取简历，请刷新工作台后重试。');
+    // 没有基线快照时退化为「分支 vs 最新主干」比较，宁可不报也不要瞎报。
+    const baseSnapshot = base ?? branch;
+    const latestVersion = versionNumberOf(latestMaster);
+    if (latestVersion <= (entry.jobTarget.baseVersion ?? 0)) {
+      rebasePlan.value = { branch, masterTitle: latestMaster.title, latestVersion, additions: [], unplaced: [], error: '' };
+      rebaseSelected.value = [];
+      return;
+    }
+    const additions = collectMasterAdditions(baseSnapshot, latest, branch);
+    const probe = applyMasterAdditions(branch, additions);
+    rebasePlan.value = {
+      branch,
+      masterTitle: latestMaster.title,
+      latestVersion,
+      additions,
+      unplaced: probe.unplaced,
+      error: '',
+    };
+    // 默认只勾选没有冲突的项；冲突项需要用户自己判断。
+    rebaseSelected.value = additions.map((item, index) => (item.conflict ? -1 : index)).filter((index) => index >= 0);
+  } catch (error) {
+    rebasePlan.value = { branch: entry.resume as unknown as ResumeData, masterTitle: '', latestVersion: 0, additions: [], unplaced: [], error: describeError(error) };
+    rebaseSelected.value = [];
+  } finally {
+    rebaseLoadingId.value = '';
+  }
+}
+
+async function applyRebase() {
+  const plan = rebasePlan.value;
+  if (!plan || plan.error || !rebaseSelected.value.length || rebaseSaving.value) return;
+  rebaseSaving.value = true;
+  try {
+    const chosen = rebaseSelected.value
+      .slice()
+      .sort((left, right) => left - right)
+      .map((index) => plan.additions[index])
+      .filter((item): item is MasterAddition => Boolean(item));
+    const { resume, placements, unplaced } = applyMasterAdditions(plan.branch, chosen);
+    if (!placements.length) {
+      ElMessage.info('所选内容都已经在岗位版本里，无需同步。');
+      closeRebase();
+      return;
+    }
+    const id = await workbench.saveRebasedVersion(resume, plan.latestVersion);
+    const skipped = unplaced.length ? `，跳过 ${unplaced.length} 项无合适落点` : '';
+    ElMessage.success(`已并入 ${placements.length} 项主干内容${skipped}；原岗位版本未更改。`);
+    closeRebase();
+    emit('created', id);
+  } catch (error) {
+    ElMessage.error(`同步失败：${describeError(error)}`);
+  } finally {
+    rebaseSaving.value = false;
+  }
+}
 </script>
 
 <style scoped>
@@ -648,6 +788,12 @@ async function openVersionComparison(entry: JobVersionHistoryEntry) {
 .history-entry-main { display: grid; gap: 4px; min-width: 0; }
 .history-entry-main strong { color: var(--color-ink); }
 .history-entry-main span, .history-entry-main small, .history-entry-actions small { color: var(--color-muted); font-size: 12px; }
+.rebase-list { list-style: none; margin: var(--space-sm) 0; padding: 0; display: grid; gap: var(--space-xs); max-height: 320px; overflow: auto; }
+.rebase-choice { display: flex; gap: var(--space-sm); align-items: flex-start; cursor: pointer; }
+.rebase-choice span { display: grid; gap: 2px; min-width: 0; }
+.rebase-choice strong { font-weight: 500; overflow-wrap: anywhere; }
+.rebase-choice small { color: var(--color-ink-muted, var(--color-rule-strong)); }
+.rebase-error { color: var(--color-danger, #c0392b); }
 .version-behind { display: block; margin-top: 2px; color: var(--color-accent); font-weight: 500; }
 .history-entry-actions { display: flex; align-items: center; gap: 12px; flex: none; }
 @media (max-width: 700px) {
