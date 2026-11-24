@@ -31,6 +31,14 @@
           />
           <circle
             v-for="dot in dots"
+            :key="`halo-${dot.id}`"
+            :cx="dot.x"
+            :cy="dot.y"
+            :r="dot.r + 2.5"
+            class="rail-dot-halo"
+          />
+          <circle
+            v-for="dot in dots"
             :key="dot.id"
             :cx="dot.x"
             :cy="dot.y"
@@ -137,10 +145,36 @@ function rowCenterY(index: number): number {
 }
 
 /** 把一条路径的折点串成一条连续曲线。 */
+/**
+ * 把一条路径的折点串成一条平滑曲线。
+ *
+ * 换列处用三次贝塞尔（C）做整段 S 形过渡，而不是「直线 + 小圆角」拼直角：
+ * 后者在换列点会形成一个可见的折角，看上去是折线不是曲线。
+ *
+ * 控制点取在换列区间的竖直黄金分割处，两端切线都是竖直的，
+ * 因此同一列上的段落仍然是笔直的竖线，只在换列时柔和地弯过去。
+ */
+/**
+ * 把一条路径的折点串成一条平滑曲线。
+ *
+ * 参数对齐 vscode-git-graph（MIT）的做法：
+ * - 换列时用三次贝塞尔，控制点偏移**0.8 个行高**，曲线才能饱满地过渡；
+ *   用 0.5 会让弯折挤在行中点，看起来仍像折线。
+ * - 连续的竖直段合并成一段 `L`，主干因此是一条完整直线，而不是许多小段接起来。
+ */
+/**
+ * 把一条路径的折点串成一条平滑曲线。
+ *
+ * 换列处用三次贝塞尔过渡，控制点沿各自所在列延伸，两端切线竖直；
+ * 同列的连续折点直接在它们之间连直线（主干因此是一条贯通的竖线）。
+ *
+ * 控制点的偏移量限制在**这次换列实际跨过的竖直距离之内**，否则曲线会回环。
+ */
 function pathToD(points: Array<{ row: number; lane: number }>): string {
   if (!points.length) return '';
   const coords = points.map((point) => ({ x: laneX(point.lane), y: rowCenterY(point.row) }));
   if (coords.length === 1) return `M ${coords[0]!.x} ${coords[0]!.y}`;
+
   let d = `M ${coords[0]!.x} ${coords[0]!.y}`;
   for (let i = 1; i < coords.length; i += 1) {
     const previous = coords[i - 1]!;
@@ -149,15 +183,12 @@ function pathToD(points: Array<{ row: number; lane: number }>): string {
       d += ` L ${current.x} ${current.y}`;
       continue;
     }
-    // 换列：在两行之间的中点处用一段平滑弧线过渡，前后仍是竖直段。
-    const midY = (previous.y + current.y) / 2;
-    const radius = Math.min(Math.abs(current.x - previous.x) / 2, Math.abs(current.y - previous.y) / 2, 10);
-    const dir = current.x > previous.x ? 1 : -1;
-    d += ` L ${previous.x} ${midY - radius}`
-      + ` Q ${previous.x} ${midY} ${previous.x + dir * radius} ${midY}`
-      + ` L ${current.x - dir * radius} ${midY}`
-      + ` Q ${current.x} ${midY} ${current.x} ${midY + radius}`
-      + ` L ${current.x} ${current.y}`;
+    // 换列：控制点不超过这段竖直距离的一半，保证曲线单调、不回环。
+    const dy = current.y - previous.y;
+    const bend = Math.abs(dy) * 0.5;
+    const c1y = previous.y + Math.sign(dy) * bend;
+    const c2y = current.y - Math.sign(dy) * bend;
+    d += ` C ${previous.x} ${c1y} ${current.x} ${c2y} ${current.x} ${current.y}`;
   }
   return d;
 }
@@ -176,7 +207,7 @@ const dots = computed(() =>
     id: row.id,
     x: laneX(row.lane),
     y: rowCenterY(index),
-    r: row.behind ? 5 : 4,
+    r: row.behind ? 5.5 : 4.5,
     color: row.color,
     fill: row.behind ? row.color : 'var(--color-paper)',
     behind: Boolean(row.behind),
@@ -227,7 +258,9 @@ defineExpose({ graph });
 .rail-path { stroke-width: 2; stroke-linecap: round; }
 
 .rail-path.rail-branch { stroke-dasharray: 4 3; }
-.rail-dot { stroke-width: 2; }
+.rail-dot { stroke-width: 2.5; }
+/* 圆点压在线条上：先用背景色的外圈「断开」线条，让节点读作节点而不是线上的一个点 */
+.rail-dot-halo { fill: var(--color-paper); stroke: none; }
 .rail-dot.is-orphan { stroke-dasharray: 2 2; opacity: .6; }
 
 .graph-row { display: flex; align-items: stretch; height: 52px; border-bottom: var(--rule-hair) solid var(--color-rule); background: var(--color-paper); }

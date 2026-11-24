@@ -282,14 +282,13 @@ export function buildResumeGraph(resumes: ResumeMeta[], options: GraphOptions = 
     const lane = branchLaneCursor;
     branchLaneCursor += 1;
     laneOf[vertex.row] = lane;
-    const points: PathPoint[] = [{ row: vertex.row, lane }];
-    // 从岗位行向下走到来源行，终点落到主干那一列，形成「竖直接上去」的转折。
-    const start = Math.min(vertex.row, parent);
-    const end = Math.max(vertex.row, parent);
-    for (let row = start + 1; row < end; row += 1) {
-      points.push({ row, lane });
-    }
-    points.push({ row: parent, lane: laneOf[parent] ?? 0 });
+    // 分支只在「自己这一行」和「来源行」各留一个折点，中间不塞折点。
+    // 中间塞折点会画出「先笔直下行、到来源行才拐弯」的 L 形；
+    // 只留两端，渲染时就是一条从派生点斜着汇入主干的 S 形曲线，与 Git 图一致。
+    const points: PathPoint[] = [
+      { row: vertex.row, lane },
+      { row: parent, lane: laneOf[parent] ?? 0 },
+    ];
     paths.push({ lane, color: LANE_COLORS[lane % LANE_COLORS.length]!, kind: 'branch', points });
   }
 
