@@ -18,6 +18,7 @@
 5. 开 PR 前先对齐基线：`git fetch origin && git rebase origin/dev`，冲突在功能分支内解决
 6. 推送功能分支并向 `dev` 开 Pull Request；等待 `Tests and build` 通过后，用 merge commit 合入。不要本地 `git merge` 后再推送 `dev`
 7. 发布：`dev` 验证通过后开 `dev` → `master` 的 Pull Request，用 merge commit 合入；合入即推送并部署
+8. 打 tag：合入后 `git switch master && git pull --ff-only`，用 `node tools/release-tag.mjs vX.Y.Z` 校验并创建附注标签，检查后 `git push origin vX.Y.Z`。版本号只改 `package.json`，与 tag 和 `CHANGELOG.md` 条目保持一致；已发布的 tag 不删除、不移动
 
 ### 合并与历史
 - 合入 `dev`、`master` 走 Pull Request，并使用 merge commit（相当于 `--no-ff`）保留特性边界；不要用 Squash 或 Rebase 合并。合并提交信息写作 `merge(中文范围): 中文说明`。

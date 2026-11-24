@@ -158,7 +158,7 @@ pnpm dev
 | `pnpm test:watch` | 以监听模式运行测试 |
 | `pnpm verify` | 依次运行完整测试、类型检查和生产构建 |
 
-新功能从 `dev` 切出功能分支，用 Pull Request 合入；`master` 是可发布主分支，只接受来自 `dev` 的发布 PR。分支、提交信息与合并方式见 [贡献规范](CONTRIBUTING.md)。
+新功能从 `dev` 切出功能分支，用 Pull Request 合入；`master` 是可发布主分支，只接受来自 `dev` 的发布 PR。合入后用 `node tools/release-tag.mjs vX.Y.Z` 打附注标签，版本号与 `CHANGELOG.md` 同源，界面「设置 → 关于」显示构建时的版本。分支、提交信息、版本规则与发版步骤见 [贡献规范](CONTRIBUTING.md)，历次变更见 [更新日志](CHANGELOG.md)。
 
 ```sh
 pnpm build

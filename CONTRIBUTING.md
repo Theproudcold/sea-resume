@@ -45,6 +45,40 @@ git push -u origin HEAD
 
 `dev` 上验证通过后，开一个 `dev` → `master` 的 Pull Request。同样等待 `Tests and build`，并用 merge commit 合入。合入即推送 `master`，会触发部署；部署 workflow 会在实际部署的提交上再次运行 `pnpm verify`。
 
+合入后再打 tag，tag 是正式发版的唯一标记。
+
+## 版本与发版
+
+### 版本号
+
+- 版本号写在 `package.json` 的 `version`，tag 为 `v` + 版本号，例如 `v1.0.0`。界面「设置 → 关于」显示的版本由构建时从 `package.json` 注入，不手写。
+- 遵循语义化版本：`MAJOR` 用于破坏用户已存数据的改动（简历 JSON、全量备份格式、自定义模板结构）；`MINOR` 用于新模板、新 AI 能力、新的导入导出格式等用户可感知的功能；`PATCH` 用于修复、样式、文档与构建改动。
+- 预发布用 `v1.1.0-rc.1` 这类后缀，GitHub Release 会标为 Pre-release。
+- 一律使用附注标签（`git tag -a`）。已发布的 tag 不删除、不移动；发错了走补丁版本回退。
+
+### 发版步骤
+
+版本号变更同样走 PR，不要在 `master` 上直接提交。
+
+1. 从 `dev` 切出 `chore/release-vX.Y.Z`，改 `package.json` 的 `version`，在 `CHANGELOG.md` 增加该版本的条目，运行 `pnpm verify`。
+2. 向 `dev` 提 PR，用 merge commit 合入。功能与版本号在同一次发布中上线时，也可以把这一步并进下面的发布 PR。
+3. 开 `dev` → `master` 的发布 PR，等待 `Tests and build` 后用 merge commit 合入（部署随推送触发）。
+4. 再把版本号提交同步回 `dev`，避免下次发布把版本号改回去。
+5. 在干净的 `master` 检出上打 tag 并推送：
+
+```sh
+git fetch origin --tags
+git switch master && git pull --ff-only
+node tools/release-tag.mjs v1.0.0   # 校验版本、CHANGELOG 与位置，通过后才创建附注标签
+git push origin v1.0.0
+```
+
+`tools/release-tag.mjs` 只在发版者本机运行：它要求当前在 `master`、工作区干净、`HEAD` 等于 `origin/master`、`package.json` 版本与 tag 一致、`CHANGELOG.md` 有对应条目、新 tag 高于已有 tag。推送 tag 后，[Release workflow](.github/workflows/release.yml) 会再校验一遍，运行 `pnpm verify`，生成 Release 与站点压缩包。
+
+### 热修复发版
+
+`hotfix/*` 合入 `master` 后打补丁版本 tag（例如 `v1.0.1`），同样先跑 `pnpm verify` 再推送 tag，并把修复同步回 `dev`。
+
 ## 紧急修复
 
 ```sh
