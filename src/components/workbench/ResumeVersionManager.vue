@@ -538,8 +538,8 @@ async function compare() {
     const afterData = after as ResumeData;
     differences.value = compareResumeVersions(beforeData, afterData);
     comparisonSnapshot.value = {
-      before: JSON.parse(JSON.stringify(beforeData)) as ResumeData,
-      after: JSON.parse(JSON.stringify(afterData)) as ResumeData,
+      before: structuredClone(beforeData),
+      after: structuredClone(afterData),
     };
     selectedDifferenceIds.value = differences.value.map((difference) => difference.id);
     mergeTitle.value = `${afterData.title} - 合并版`;

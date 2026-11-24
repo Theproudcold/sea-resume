@@ -105,7 +105,7 @@ export function createJobResumeVersion(
   target: Omit<JobTarget, 'sourceResumeId'>,
   id = generateId(),
 ): ResumeData {
-  const copy = JSON.parse(JSON.stringify(source)) as ResumeData;
+  const copy = structuredClone(source);
   const now = new Date().toISOString();
   const versionName = target.versionName.trim() || `${source.title} - ${target.position.trim() || '岗位版本'}`;
   return {
