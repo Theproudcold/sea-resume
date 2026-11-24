@@ -89,7 +89,7 @@ The editor's **AI Assistant** provides five modes, paired with a dedicated **Moc
 
 ### Template Gallery
 
-![Template Gallery: 6 built-in templates with category filters and preview](docs/images/template-gallery.jpg)
+![Template Gallery: 11 built-in templates with category filters and preview](docs/images/template-gallery.jpg)
 
 ### AI Resume Assistant
 
