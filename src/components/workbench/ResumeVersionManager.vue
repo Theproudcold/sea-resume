@@ -388,9 +388,23 @@ function hasReplacementPair(rows: DiffRow[]): boolean {
     && itemRows.some((row) => row.difference.type === 'removed');
 }
 
+/**
+ * 版本选项标签。同一份主干会有多版同名简历，只看标题和更新时间是分不清的，
+ * 因此带上版本号与岗位目标；第一版主干不加后缀，保持原有观感。
+ */
 function resumeOptionLabel(resume: ResumeMeta): string {
   const date = formatUpdatedAt(resume.updatedAt);
-  return date ? `${resume.title} · 更新于 ${date}` : resume.title;
+  const version = versionBadge(resume);
+  const job = resume.jobTarget ? [resume.jobTarget.company, resume.jobTarget.position].filter(Boolean).join(' · ') : '';
+  const parts = [resume.title, version, job, date ? `更新于 ${date}` : ''].filter(Boolean);
+  return parts.join(' · ');
+}
+
+/** 与工作台卡片一致的版本标识：主干第二版起显示「主干 vN」，分支从第二版起显示「vN」。 */
+function versionBadge(resume: ResumeMeta): string {
+  const version = resume.versionNumber;
+  if (typeof version !== 'number' || version <= 1) return '';
+  return resume.jobTarget ? `v${version}` : `主干 v${version}`;
 }
 
 function selectedTitle(id: string): string {
