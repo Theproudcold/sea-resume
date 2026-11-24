@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultResumeData } from '@/utils/resumeData';
+import { clearExternalTasks, enqueueExternalTask } from '../externalTaskQueue';
 import { assertNoActiveInterview, createResumeLibrary, type ResumeCatalog } from '../resumeLibrary';
 
 function catalog() {
@@ -70,6 +71,9 @@ describe('resume library MCP', () => {
       ],
     });
     expect(created.title).toBe('精准岗位简历');
+    expect(created.trackId).toBe(created.id);
+    expect(created.versionNumber).toBe(1);
+    expect(created.jobTarget).toBeUndefined();
     expect(created.templateId).toBe('ai-agent');
     expect(created.theme.color).toMatch(/^#/);
     expect(created.basic.website).toBeUndefined();
@@ -78,5 +82,54 @@ describe('resume library MCP', () => {
     expect(await library.open(created.id)).toEqual({ id: created.id, opened: true });
     expect(opened).toHaveBeenCalledWith(created.id);
     await expect(library.open('missing-id')).rejects.toThrow('没有这份简历');
+  });
+
+  it('supports keyless MCP workflows: derive job version, quality check, JD risk scan, task queue and saving external interviews', async () => {
+    clearExternalTasks();
+    const { backend, store, first } = catalog();
+    const savedInterviews: unknown[] = [];
+    const library = createResumeLibrary({
+      ...backend,
+      interviews: {
+        list: async () => [],
+        get: async () => null,
+        save: async (session) => { savedInterviews.push(session); },
+        remove: async () => undefined,
+        start: async () => null,
+      },
+    });
+    const derived = await library.deriveVersion({ sourceResumeId: first.id, company: '字节', position: '前端架构师' });
+    expect(derived.id).not.toBe(first.id);
+    expect(derived.trackId).toBe(first.id);
+    expect(derived.jobTarget?.company).toBe('字节');
+    expect(derived.jobTarget?.position).toBe('前端架构师');
+    expect(store.has(derived.id)).toBe(true);
+
+    const quality = await library.checkQuality(first.id);
+    expect(quality.issueCount).toBeGreaterThan(0);
+
+    const scan = library.scanJdRisks('本岗位为劳务派遣，要求抗压能力强。');
+    expect(scan.count).toBeGreaterThan(0);
+
+    const { task } = enqueueExternalTask({ kind: 'greeting', resumeId: first.id, summary: '打招呼语', payload: { jd: '前端' } });
+    expect(library.listTasks('pending').map(item => item.id)).toContain(task.id);
+    const done = library.completeTask(task.id, { summary: '完成', greetings: ['您好，看到贵司岗位...'] });
+    expect(done.status).toBe('completed');
+    expect(done.result?.greetings).toEqual(['您好，看到贵司岗位...']);
+
+    const saved = await library.saveInterview({
+      resumeId: first.id,
+      targetRole: '前端架构师',
+      summary: '整体表现稳定，项目指标清晰。',
+      priorities: ['补充缓存失效策略细节'],
+      facts: ['主导将首屏加载从 3.2s 降到 1.1s'],
+      turns: [{ question: '讲一下性能优化', answer: '通过分包和预加载降到 1.1s' }],
+    });
+    expect(saved.provider.baseUrl).toBe('mcp://external-agent');
+    expect(saved.status).toBe('completed');
+    expect(saved.report?.facts[0]?.text).toContain('3.2s');
+    expect(savedInterviews).toHaveLength(1);
+    await expect(library.startInterview(first.id, {})).rejects.toThrow('sea_interview_save');
+    clearExternalTasks();
   });
 });

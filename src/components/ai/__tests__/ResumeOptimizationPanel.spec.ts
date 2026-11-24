@@ -4,8 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElMessageBox } from 'element-plus';
 import ResumeOptimizationPanel from '../ResumeOptimizationPanel.vue';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
-import { saveAiModelSettings, setAiSessionApiKey, clearAiModelSettings } from '@/services/ai/AiSettings';
+import { saveAiModelSettings, setAiSessionApiKey, clearAiModelSettings, clearAiSessionApiKey } from '@/services/ai/AiSettings';
 import { requestAiJson, AiCompatibilityError } from '@/services/ai/transport';
+import { useMcpState } from '@/services/ai/useMcpBridge';
+import { clearExternalTasks, completeExternalTask, listExternalTasks } from '@/services/ai/externalTaskQueue';
 import { useResumeStore } from '@/stores/resume';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { useAiWorkspaceStore } from '@/stores/aiWorkspace';
@@ -197,5 +199,30 @@ describe('ResumeOptimizationPanel', () => {
     await panel.get('.suggestion button').trigger('click'); await flushPromises();
     expect(workspace.run?.suggestions[0]?.rejected).toBe(true); expect(workspace.run?.suggestions[0]?.selected).toBe(false);
     expect(panel.get('[data-testid=apply]').attributes('disabled')).toBeDefined();
+  });
+  it('dispatches resume optimization via external MCP without an API key when connected', async () => {
+    clearAiModelSettings();
+    clearAiSessionApiKey();
+    clearExternalTasks();
+    const mcp = useMcpState();
+    mcp.linkState.value = 'connected';
+    try {
+      const { wrapper: panel } = setup();
+      expect(panel.text()).toContain('外部 Agent（MCP · 免 API Key）');
+      expect(panel.get('[data-testid=start]').text()).toContain('派发给外部 Agent 优化（免 Key）');
+      await panel.get('[data-testid=consent]').setValue(true);
+      await panel.get('[data-testid=start]').trigger('click');
+      await flushPromises();
+      const pending = listExternalTasks('pending');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]?.kind).toBe('optimize');
+      expect(requestAiJson).not.toHaveBeenCalled();
+      completeExternalTask(pending[0]!.id, { summary: '已派生岗位定制版本并打开预览' });
+      await flushPromises();
+      expect(panel.text()).toContain('已派生岗位定制版本并打开预览');
+    } finally {
+      mcp.linkState.value = '';
+      clearExternalTasks();
+    }
   });
 });

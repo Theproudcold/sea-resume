@@ -16,7 +16,14 @@
         show-icon
         title="外部 MCP 已连接"
       >
-        <p>外部 Agent 已可直接读写简历并实时刷新预览，无需在此配置 API Key。本面板仅用于网页内置 AI 功能。</p>
+        <p>外部 Agent 已可直接读写简历并实时刷新预览，无需在此配置 API Key。各功能表单可直接派发给外部 Agent 执行。</p>
+        <div v-if="apiReady" class="driver-switch">
+          <span>当前执行方式：</span>
+          <el-radio-group :model-value="activeDriver" size="small" aria-label="AI 执行方式" @update:model-value="setDriver">
+            <el-radio-button value="mcp">外部 Agent（MCP · 免 Key）</el-radio-button>
+            <el-radio-button value="api">网页模型 API</el-radio-button>
+          </el-radio-group>
+        </div>
       </el-alert>
       <el-alert
         v-else-if="mcpLinkState"
@@ -47,12 +54,14 @@
       <template v-if="!pendingDraft">
         <div class="current-resume provider-summary">
           <div class="provider-summary__details">
-            <span class="eyebrow">当前模型服务</span>
-            <strong>{{ providerLabel }}</strong>
-            <span>{{ modelSettings?.model || '尚未选择模型' }}</span>
-            <span class="provider-key-status" :class="{ 'is-ready': sessionKeyAvailable }">{{ modelSettings?.authMode === 'none' ? '本机服务 · 无需 API Key' : (sessionKeyAvailable ? 'API Key 已配置' : '需要配置 API Key') }}</span>
+            <span class="eyebrow">当前执行通道</span>
+            <strong>{{ isMcpMode ? '外部 Agent（MCP · 免 API Key）' : providerLabel }}</strong>
+            <span>{{ isMcpMode ? '通过本机 MCP 委派给外部 Agent 执行' : (modelSettings?.model || '尚未选择模型') }}</span>
+            <span class="provider-key-status" :class="{ 'is-ready': isMcpMode || sessionKeyAvailable }">
+              {{ isMcpMode ? 'MCP 已连接 · 无需 API Key' : (modelSettings?.authMode === 'none' ? '本机服务 · 无需 API Key' : (sessionKeyAvailable ? 'API Key 已配置' : '需要配置 API Key')) }}
+            </span>
           </div>
-          <el-button text type="primary" @click="emit('configure')">配置模型</el-button>
+          <el-button text type="primary" @click="emit('configure')">{{ isMcpMode ? '模型设置' : '配置模型' }}</el-button>
         </div>
         <el-form label-position="top" class="provider-form">
           <el-form-item label="希望 AI 如何修改？" for="quick-edit-instruction">
@@ -61,17 +70,18 @@
         </el-form>
 
         <el-checkbox v-model="consent" :disabled="loading" class="consent-check">
-          我确认将当前可见的简历正文和这条指令发送给所配置的 AI 服务。
+          {{ isMcpMode ? '我确认将本次修改指令派发给已连接的外部 Agent（通过 MCP 读取并写回当前简历）。' : '我确认将当前可见的简历正文和这条指令发送给所配置的 AI 服务。' }}
         </el-checkbox>
-        <el-checkbox v-model="directApply" :disabled="loading" class="direct-check">
+        <el-checkbox v-if="!isMcpMode" v-model="directApply" :disabled="loading" class="direct-check">
           跳过逐项审核，直接应用本次修改（仍可撤销）
         </el-checkbox>
         <div class="current-resume">当前目标：<strong>{{ resume.basic.name || resume.title }}</strong></div>
         <el-button type="primary" :loading="loading" :disabled="!canRequest" class="request-button" @click="requestChanges">
-          {{ loading ? '正在生成…' : '生成修改建议' }}
+          {{ loading ? '正在生成…' : (isMcpMode ? '派发给外部 Agent 修改（免 Key）' : '生成修改建议') }}
         </el-button>
         <el-button v-if="loading" @click="cancelQuickRequest">取消生成</el-button>
-        <p v-else-if="!sessionKeyAvailable" role="status">请先配置 AI 服务和所需密钥。</p>
+        <p v-else-if="!isMcpMode && !sessionKeyAvailable" role="status">请先配置 AI 服务和所需密钥。</p>
+        <McpTaskStatusCard v-if="activeMcpTask" :task="activeMcpTask" :prompt="mcpPrompt" :initial-copied="mcpCopied" @cancel="cancelMcpTask" />
       </template>
 
       <template v-else>
@@ -108,7 +118,10 @@ import type { ResumePatchOperation } from '@/types/ai';
 import { createExternalProposal, type EditProposal } from '@/services/ai/externalProposal';
 import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import { requestResumeAiDraft } from '@/services/ai/quickEdit';
-import { useMcpBridge } from '@/services/ai/useMcpBridge';
+import { useMcpState } from '@/services/ai/useMcpBridge';
+import { resolveAiDriver, useAiDriverPreference } from '@/services/ai/useAiExecutionMode';
+import { cancelExternalTask, copyExternalTaskPrompt, enqueueExternalTask, useExternalTasks } from '@/services/ai/externalTaskQueue';
+import McpTaskStatusCard from '@/components/ai/McpTaskStatusCard.vue';
 import ResumeOptimizationPanel from '@/components/ai/ResumeOptimizationPanel.vue';
 import StarPolishPanel from '@/components/ai/StarPolishPanel.vue';
 import GreetingPanel from '@/components/ai/GreetingPanel.vue';
@@ -122,9 +135,24 @@ const emit = defineEmits<{
   configure: [];
   applied: [resumeId: string];
 }>();
-const { linkState: mcpLinkState } = useMcpBridge();
+const { linkState: mcpLinkState } = useMcpState();
+const { driverPreference, setAiDriverPreference } = useAiDriverPreference();
+const { findTask } = useExternalTasks();
+const mcpTaskId = ref('');
+const mcpPrompt = ref('');
+const mcpCopied = ref(false);
+const activeMcpTask = computed(() => findTask(mcpTaskId.value));
 const modelSettings = ref<AiModelSettings | null>(loadAiModelSettings());
 const sessionKeyAvailable = ref(isAiProviderReady(modelSettings.value));
+const apiReady = computed(() => !!modelSettings.value?.baseUrl.trim() && !!modelSettings.value?.model.trim() && sessionKeyAvailable.value);
+const activeDriver = computed(() => resolveAiDriver(mcpLinkState.value === 'connected', apiReady.value, driverPreference.value));
+const isMcpMode = computed(() => activeDriver.value === 'mcp');
+function setDriver(value: string | number | boolean | undefined) {
+  if (value === 'mcp' || value === 'api') setAiDriverPreference(value);
+}
+function cancelMcpTask() {
+  if (mcpTaskId.value) cancelExternalTask(mcpTaskId.value);
+}
 const instruction = ref('');
 const consent = ref(false);
 const directApply = ref(false);
@@ -152,7 +180,7 @@ onBeforeUnmount(cancelQuickRequest);
 watch(mode, cancelQuickRequest);
 function handleOptimized(id: string) { emit('applied', id); emit('update:visible', false); }
 const providerLabel = computed(() => modelSettings.value?.profileName || AI_PROVIDER_PRESETS.find((preset) => preset.id === modelSettings.value?.presetId)?.label || '未配置');
-const canRequest = computed(() => !!modelSettings.value?.baseUrl.trim() && !!modelSettings.value?.model.trim() && sessionKeyAvailable.value && !!instruction.value.trim() && consent.value && !loading.value);
+const canRequest = computed(() => (isMcpMode.value || apiReady.value) && !!instruction.value.trim() && consent.value && !loading.value);
 
 watch(() => props.visible, (visible) => {
   if (visible) {
@@ -166,10 +194,31 @@ watch(() => props.visible, (visible) => {
   directApply.value = false;
   pendingDraft.value = null;
   errorMessage.value = '';
+  mcpTaskId.value = '';
+  mcpPrompt.value = '';
+  mcpCopied.value = false;
 }, { immediate: true });
 
 async function requestChanges() {
-  if (!canRequest.value || !modelSettings.value) return;
+  if (!canRequest.value) return;
+  if (isMcpMode.value) {
+    errorMessage.value = '';
+    try {
+      const { task, prompt } = enqueueExternalTask({
+        kind: 'quick_edit',
+        resumeId: props.resume.id,
+        summary: `快捷修改：${instruction.value.trim().slice(0, 40)}`,
+        payload: { resumeId: props.resume.id, instruction: instruction.value.trim() },
+      });
+      mcpTaskId.value = task.id;
+      mcpPrompt.value = prompt;
+      mcpCopied.value = await copyExternalTaskPrompt(prompt);
+    } catch (error) {
+      errorMessage.value = error instanceof Error ? error.message : '派发任务失败。';
+    }
+    return;
+  }
+  if (!modelSettings.value) return;
   loading.value = true;
   const generation = ++requestGeneration;
   controller = new AbortController();
@@ -258,6 +307,13 @@ function describeOperation(operation: ResumePatchOperation): string {
 .assistant-panel :deep(.el-alert p) {
   margin: var(--ui-space-1) 0 0;
   line-height: var(--ui-line-height);
+}
+.driver-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .provider-form :deep(.el-form-item) {

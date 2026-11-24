@@ -26,7 +26,7 @@
         <section v-if="section === 'ai'" class="settings-page">
           <header class="settings-page-heading">
             <h2>AI 服务</h2>
-            <p>用于 AI 助手和 PDF 导入，不影响手动编辑简历。</p>
+            <p>支持通过外部 Agent（MCP，免 API Key）或网页模型 API 驱动，不影响手动编辑简历。</p>
           </header>
           <AiProviderSettingsPanel />
         </section>
