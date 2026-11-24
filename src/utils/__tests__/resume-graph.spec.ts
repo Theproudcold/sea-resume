@@ -247,3 +247,32 @@ describe('列号稳定性', () => {
   });
 
 });
+
+describe('同步判定', () => {
+  it('treats two independent versions as forks, not a sync chain', () => {
+    // 旧数据：同一岗位两条记录，都没有 rebasedFromId，只是基线不同。
+    const graph = buildResumeGraph([
+      master('m1', 1, 'T', 1),
+      master('m2', 2, 'T', 2),
+      job('old', 'm1', 1, { days: 3 }),
+      job('newer', 'm2', 2, { days: 4 }),
+    ]);
+    // 两条都应是「从 vN 分出」，不是「同步到 vN」。
+    const labels = graph.rows.filter((row) => row.kind === 'branch').map((row) => row.versionLabel);
+    expect(labels.every((label) => label.startsWith('从 v'))).toBe(true);
+    expect(graph.links.filter((link) => link.kind === 'rebase')).toHaveLength(0);
+    expect(graph.links.filter((link) => link.kind === 'fork')).toHaveLength(2);
+  });
+
+  it('treats a version with rebasedFromId as a sync', () => {
+    const graph = buildResumeGraph([
+      master('m1', 1, 'T', 1),
+      master('m2', 2, 'T', 2),
+      job('first', 'm1', 1, { days: 3 }),
+      job('synced', 'm2', 2, { days: 4, rebasedFromId: 'first' }),
+    ]);
+    const synced = graph.rows.find((row) => row.id === 'synced')!;
+    expect(synced.versionLabel).toBe('同步到 v2');
+    expect(graph.links.filter((link) => link.kind === 'rebase')).toHaveLength(1);
+  });
+});

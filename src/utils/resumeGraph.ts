@@ -241,14 +241,18 @@ export function buildResumeGraph(resumes: ResumeMeta[], options: GraphOptions = 
       const anchorRow = anchorId ? rowObjects.get(anchorId) : undefined;
       const anchorLane = anchorRow ? anchorRow.lane : (masterLane.get(row.trackId ?? '') ?? 0);
       const index = rowIndexOf.get(row.id)!;
-      // 首版紧挨锚点主干；同岗位的后续版本逐层向右，避免覆盖。
-      // 岗位只在它自己那一行出现，所以区间就是 [index, index]。
-      const lane = claimLane(row.id, index, index, anchorLane + 1 + (chainIndex > 0 ? chainIndex : 0));
+      // 「是同步来的」只由 rebasedFromId 决定，不能按链上的序号判断：
+      // 旧数据没有 rebasedFromId 时，同岗位的多条记录是各自独立的派生版本，
+      // 按序号会把它们错标成「同步到 vN」。
+      const isRebased = Boolean(target.rebasedFromId);
+      // 首版紧挨锚点主干；同步来的版本逐层向右，避免与已有版本重叠。
+      // 岗位只在它自己那一行出现，所以占用区间就是 [index, index]。
+      const lane = claimLane(row.id, index, index, anchorLane + 1 + (isRebased ? chainIndex : 0));
       const graphRow = rowObjects.get(row.id)!;
       graphRow.lane = lane;
-      graphRow.versionLabel = chainIndex === 0
-        ? `从 v${target.baseVersion ?? versionOf(row)} 分出`
-        : `同步到 v${target.baseVersion ?? versionOf(row)}`;
+      graphRow.versionLabel = isRebased
+        ? `同步到 v${target.baseVersion ?? versionOf(row)}`
+        : `从 v${target.baseVersion ?? versionOf(row)} 分出`;
 
       if (!anchorRow) {
         graphRow.orphan = true;
@@ -256,7 +260,7 @@ export function buildResumeGraph(resumes: ResumeMeta[], options: GraphOptions = 
         orphans.push(row.id);
         return;
       }
-      links.push({ from: anchorId!, to: row.id, kind: chainIndex === 0 ? 'fork' : 'rebase' });
+      links.push({ from: anchorId!, to: row.id, kind: isRebased ? 'rebase' : 'fork' });
     });
     if (guessed) for (const row of chain.slice(1)) uncertain.push(row.id);
   }

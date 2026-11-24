@@ -106,10 +106,16 @@ import { computed, ref } from 'vue';
 import type { ResumeMeta } from '@/types/resume';
 import { buildResumeGraph, LANE_COLORS, type GraphRow } from '@/utils/resumeGraph';
 
-const RAIL_MIN_WIDTH = 96;
+/**
+ * 轨道条宽度按内容自适应。
+ *
+ * 之前写死 96px，最多两列时右侧会空出 50px，标题离轨道很远。
+ * 现在最短只要「左侧留白 + 一列间距 + 半径 + 右侧留白」，列多时再按列数增长。
+ */
 const RAIL_PAD = 10;
 const LANE_STEP = 16;
 const DOT_RADIUS = 5;
+const RAIL_MIN_WIDTH = RAIL_PAD + DOT_RADIUS + RAIL_PAD;
 const ROW_HEIGHT = 52;
 
 const props = defineProps<{
