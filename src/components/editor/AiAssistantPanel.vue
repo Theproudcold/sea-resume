@@ -221,6 +221,14 @@ function describeOperation(operation: ResumeAiOperation): string {
   gap: var(--ui-space-4);
 }
 
+/* 模式条是内容宽度的小托盘。面板是纵向 flex，不写 align-self 会被拉成通栏；
+   再补一点下方留白，让标题更像紧跟模式条的小标题。 */
+.assistant-panel > :deep(.el-radio-group) {
+  align-self: flex-start;
+  max-width: 100%;
+  margin-bottom: var(--ui-space-1);
+}
+
 .assistant-panel :deep(.el-alert p) {
   margin: var(--ui-space-1) 0 0;
   line-height: var(--ui-line-height);

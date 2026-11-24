@@ -423,10 +423,11 @@ html.scheme-rippling::view-transition-new(root) {
   }
 }
 
-/* Choice sets: keys on a sunken tray, the chosen one raised. */
+/* Choice sets: keys on a sunken tray, the chosen one raised.
+   托盘留白与按钮间隙同为 4px：外圆角 6px、内圆角 4px 正好同心，相邻圆角之间留出可见缝隙。 */
 .el-radio-group:has(> .el-radio-button) {
-  gap: var(--space-3xs);
-  padding: var(--space-3xs);
+  gap: var(--space-2xs);
+  padding: var(--space-2xs);
   border-radius: var(--radius-input);
   background: var(--color-sunken);
 }
@@ -438,6 +439,8 @@ html.scheme-rippling::view-transition-new(root) {
 }
 
 .el-radio-button__inner {
+  /* 比 Element 默认的 8px 15px 左右各收 1px，抵掉加宽的托盘留白后整条宽度不变。 */
+  padding: 8px 14px;
   border: 0 !important;
   border-radius: var(--radius-s) !important;
   background: transparent;
@@ -448,8 +451,9 @@ html.scheme-rippling::view-transition-new(root) {
   transition: background-color var(--dur-micro) var(--ease-out), color var(--dur-micro) var(--ease-out), box-shadow var(--dur-micro) var(--ease-out);
 }
 
+/* 激活项只靠白面加阴影，在浅色底纹上几乎看不出边界，再补一道 1px 轮廓。 */
 .el-radio-button.is-active .el-radio-button__inner {
-  box-shadow: var(--shadow-key) !important;
+  box-shadow: 0 0 0 1px var(--color-rule), var(--shadow-key) !important;
 }
 
 .el-radio-button:not(.is-active) .el-radio-button__inner:hover {
