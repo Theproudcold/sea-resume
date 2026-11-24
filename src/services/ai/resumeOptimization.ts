@@ -150,7 +150,12 @@ export function parseOptimizationReview(input: unknown, run: ResumeOptimizationR
     return { id: identifier(review.id), status: aiEnum(review.status, ['pass', 'confirm', 'reject'] as const), reason: aiString(review.reason, 2000) };
   });
   if (entries.length !== run.suggestions.length || new Set(entries.map(e => e.id)).size !== entries.length || entries.some(e => !run.suggestions.some(s => s.id === e.id))) throw new Error('审查必须逐条覆盖所有建议，不得新增或遗漏。');
-  return run.suggestions.map(suggestion => { const review = entries.find(e => e.id === suggestion.id)!; return { ...suggestion, review: review.status, reviewReason: review.reason, selected: false, confirmed: false }; });
+  return run.suggestions.map(suggestion => {
+    const review = entries.find(e => e.id === suggestion.id)!;
+    // 确定性校验的结果优先于模型审查：模型把一条被拦下的建议判成 pass 也不能放行。
+    if (suggestion.guard?.length) return { ...suggestion, reviewReason: review.reason, selected: false, confirmed: false };
+    return { ...suggestion, review: review.status, reviewReason: review.reason, selected: false, confirmed: false };
+  });
 }
 const guard = [
   '使用中文。只返回 JSON，不要 Markdown 代码块，不输出思维过程。',

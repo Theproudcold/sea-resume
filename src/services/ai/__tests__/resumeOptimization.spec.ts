@@ -151,6 +151,17 @@ describe('bounded optimization output and application', () => {
     expect(restored.context).toEqual(run.context);
   });
 
+  it('lets the guard verdict outrank a model review that passes the same suggestion', () => {
+    const { resume, run } = fixture();
+    const fabricated = { id: 's1', operation: { type: 'set_basic', field: 'summary', value: '原始描述，效率提升 40%' }, reason: '更具体', requirement: '', sourceRefs: ['basic.summary'] };
+    run.suggestions = parseOptimizationSuggestions({ suggestions: [fabricated] }, run);
+    run.suggestions = parseOptimizationReview({ reviews: [{ id: 's1', status: 'pass', reason: '有来源' }] }, run);
+    expect(run.suggestions[0]!.review).toBe('reject');
+    run.stage = 'ready';
+    run.suggestions[0]!.selected = true;
+    expect(() => applyOptimizationSuggestions(resume, run)).toThrow();
+  });
+
   it('cannot restore a fact-guard rejection back into an applicable suggestion', () => {
     const { resume, run } = fixture();
     const fabricated = { id: 's1', operation: { type: 'set_basic', field: 'summary', value: '原始描述，效率提升 40%' }, reason: '更具体', requirement: '', sourceRefs: ['basic.summary'] };
