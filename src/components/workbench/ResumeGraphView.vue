@@ -19,12 +19,13 @@
           aria-hidden="true"
           data-testid="graph-rail"
         >
+          <!-- 每条路径一条连续曲线：从起点行走到终点行，中间的折点一起画出来 -->
           <path
-            v-for="(seg, segIndex) in railSegments"
-            :key="segIndex"
-            :d="seg.d"
-            :stroke="seg.color"
-            :class="['rail-line', `rail-${seg.kind}`, { 'is-long': seg.span > 1 && seg.crosses }]"
+            v-for="(path, pathIndex) in renderedPaths"
+            :key="pathIndex"
+            :d="path.d"
+            :stroke="path.color"
+            :class="['rail-path', `rail-${path.kind}`]"
             fill="none"
             data-testid="graph-edge"
           />
@@ -135,77 +136,39 @@ function rowCenterY(index: number): number {
   return index * ROW_HEIGHT + ROW_HEIGHT / 2;
 }
 
-interface RailSegment {
-  d: string;
-  color: string;
-  kind: string;
-  /** 跨越的行数。 */
-  span: number;
-  /** 是否跨列：跨列的线才会从别的行背后穿过，同列的竖直主干不算。 */
-  crosses: boolean;
-}
-
-/**
- * 所有连线。用整图坐标画，一条关系就是一根完整的线，跨越多少行都不会断。
- *
- * 走法：从起点行圆心出发，竖直走到两行之间的缝，在缝里横移，再竖直进入终点行圆心。
- * 竖直段落在各自所在列上，所以中间行的衔接处天然对齐。
- */
-const railSegments = computed<RailSegment[]>(() => {
-  const rows = graph.value.rows;
-  const rowIndexOf = new Map(rows.map((row, index) => [row.id, index]));
-  const segments: RailSegment[] = [];
-  for (const link of graph.value.links) {
-    const fromIndex = rowIndexOf.get(link.from);
-    const toIndex = rowIndexOf.get(link.to);
-    if (fromIndex === undefined || toIndex === undefined) continue;
-    const fromRow = rows[fromIndex]!;
-    const toRow = rows[toIndex]!;
-    const x1 = laneX(fromRow.lane);
-    const x2 = laneX(toRow.lane);
-    const y1 = rowCenterY(fromIndex);
-    const y2 = rowCenterY(toIndex);
-    // 跨越超过一行时，横移放在中点附近的行缝里，看起来是一条连贯的斜过渡。
-    const upperIndex = Math.min(fromIndex, toIndex);
-    const lowerIndex = Math.max(fromIndex, toIndex);
-    const gapY = (lowerIndex - upperIndex) === 1
-      ? (y1 + y2) / 2
-      : ROW_HEIGHT * Math.floor((upperIndex + lowerIndex) / 2 + 1) - 0;
-    const dir = Math.sign(toIndex - fromIndex);
-    const color = LANE_COLORS[fromRow.lane % LANE_COLORS.length]!;
-    segments.push({
-      d: linkPath(x1, y1, x2, y2, gapY, dir),
-      color,
-      kind: link.kind,
-      span: Math.abs(fromIndex - toIndex),
-      crosses: x1 !== x2,
-    });
+/** 把一条路径的折点串成一条连续曲线。 */
+function pathToD(points: Array<{ row: number; lane: number }>): string {
+  if (!points.length) return '';
+  const coords = points.map((point) => ({ x: laneX(point.lane), y: rowCenterY(point.row) }));
+  if (coords.length === 1) return `M ${coords[0]!.x} ${coords[0]!.y}`;
+  let d = `M ${coords[0]!.x} ${coords[0]!.y}`;
+  for (let i = 1; i < coords.length; i += 1) {
+    const previous = coords[i - 1]!;
+    const current = coords[i]!;
+    if (previous.x === current.x) {
+      d += ` L ${current.x} ${current.y}`;
+      continue;
+    }
+    // 换列：在两行之间的中点处用一段平滑弧线过渡，前后仍是竖直段。
+    const midY = (previous.y + current.y) / 2;
+    const radius = Math.min(Math.abs(current.x - previous.x) / 2, Math.abs(current.y - previous.y) / 2, 10);
+    const dir = current.x > previous.x ? 1 : -1;
+    d += ` L ${previous.x} ${midY - radius}`
+      + ` Q ${previous.x} ${midY} ${previous.x + dir * radius} ${midY}`
+      + ` L ${current.x - dir * radius} ${midY}`
+      + ` Q ${current.x} ${midY} ${current.x} ${midY + radius}`
+      + ` L ${current.x} ${current.y}`;
   }
-  return segments;
-});
-
-/**
- * 生成一条连接线的路径：竖直 → 圆角横移 → 竖直。
- *
- * 横移发生在 gapY 那条行缝上，两端仍是竖直段，因此与相邻行的线自然接续。
- */
-function linkPath(x1: number, y1: number, x2: number, y2: number, gapY: number, dir: number): string {
-  // 同一列：一条竖直的完整线段，贯穿两端（包含中间经过的所有行）。
-  // 之前这里会绕到 gapY 再回来，跨行时看不出是同一根线。
-  if (x1 === x2) return `M ${x1} ${y1} L ${x2} ${y2}`;
-  const radius = Math.min(Math.abs(x2 - x1) / 2, 8);
-  const before = gapY - radius * Math.sign(dir || 1) * -1;
-  void before;
-  const midDir = x2 > x1 ? 1 : -1;
-  return [
-    `M ${x1} ${y1}`,
-    `L ${x1} ${gapY - radius}`,
-    `Q ${x1} ${gapY} ${x1 + midDir * radius} ${gapY}`,
-    `L ${x2 - midDir * radius} ${gapY}`,
-    `Q ${x2} ${gapY} ${x2} ${gapY + radius}`,
-    `L ${x2} ${y2}`,
-  ].join(' ');
+  return d;
 }
+
+const renderedPaths = computed(() =>
+  graph.value.paths.map((path) => ({
+    d: pathToD(path.points),
+    color: path.color,
+    kind: path.kind,
+  })),
+);
 
 /** 所有节点圆点，用整图坐标。 */
 const dots = computed(() =>
@@ -261,11 +224,9 @@ defineExpose({ graph });
 
 .graph-rows { position: relative; }
 
-.rail-line { stroke-width: 2; }
-/* 跨越 2 行以上的线要从中间那几行的右侧内容背后穿过，画粗一点、淡一点，
-   视觉上读作「在背后」而不是断掉。 */
-.rail-line.is-long { stroke-width: 3.5; opacity: .55; stroke-linecap: round; }
-.rail-line.rail-rebase { stroke-dasharray: 4 3; }
+.rail-path { stroke-width: 2; stroke-linecap: round; }
+
+.rail-path.rail-branch { stroke-dasharray: 4 3; }
 .rail-dot { stroke-width: 2; }
 .rail-dot.is-orphan { stroke-dasharray: 2 2; opacity: .6; }
 
