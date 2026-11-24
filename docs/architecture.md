@@ -135,7 +135,25 @@ A4 是定尺纸张、预览是连续长图，等分必然把正好压线的文�
 `createAdapter` 用穷尽检查（`const unknown: never = type`），
 新增类型时如果忘了适配器会**编译失败**，而不是运行时抛错。
 
-### 12. 自定义版式嵌入简历，不跟随模板库
+### 12. 轨道字段只由派生与复制路径写入
+
+`trackId` / `versionNumber` / `jobTarget.baseId` / `jobTarget.baseVersion` 描述「这份简历属于哪条轨道、从哪一版派生」。写入点只有三处，其它编辑路径都不许改它们：
+
+| 路径 | trackId | versionNumber | jobTarget |
+| --- | --- | --- | --- |
+| `normalizeResumeData`（读盘） | 缺失时补为自身 id | 缺失/非法时补为 1 | 不动 |
+| `createJobResumeVersion`（派生岗位版本） | 沿用来源主干 | 分支内从 1 开始 | 写入 baseId / baseVersion |
+| `createMasterVersion`（主干另存） | 沿用来源轨道 | 同轨道最大值 + 1 | 不写 |
+| `duplicateResume`（复制） | **清空**，副本自成新轨道 | **清空**，读出补为 1 | **清空** |
+
+两条容易踩的坑：
+
+- **复制不是派生**。副本若继承 `jobTarget`，会在列表里冒充同一个岗位版本；若继承轨道，会被当成主干新版本，让所有分支误报「主干已有新版」。`duplicateResume` 必须清掉三者。
+- **分支版本号不参与主干比较**。`masterBehindStatus` 只统计同轨道上「没有 `jobTarget`」的简历；否则一个版本号很大的分支会把标准抬高，产生永久落后。
+
+旧数据没有这些字段：读盘补齐后，旧分支缺 `baseVersion`，判定为「不落后」，避免对历史简历打扰。
+
+### 13. 自定义版式嵌入简历，不跟随模板库
 
 `ResumeData.layout` 存在时，预览、封面、模板缩略图和可搜索 PDF 都读这份配方，不再按 `templateId` 找内置组件。没有 `layout` 的旧简历仍走六套内置模板。
 
@@ -143,7 +161,7 @@ A4 是定尺纸张、预览是连续长图，等分必然把正好压线的文�
 
 版式只接受枚举、`#RRGGBB` 和有界数字。应用内快捷 AI 与外部 AI 都用 `set_layout` 修改它，并拿到当前配方或内置种子作为完整底稿；非法配方在解析时拒绝。应用后，配方里的字号、边距和强调色写回 `theme`。外部 AI 仍不能用 `set_template` 或 `reorder_sections`。
 
-### 13. 外部 MCP 的「已启动」不等于「已连接」
+### 14. 外部 MCP 的「已启动」不等于「已连接」
 
 `startExternalAiBridge` 返回时，页面只是加载完同源宿主和上游 embed，状态是 `waiting`。
 `connected` 只来自上游 widget 在 `hello/accepted` 后发出的 `sea-resume.relay` 消息；
@@ -152,7 +170,7 @@ A4 是定尺纸张、预览是连续长图，等分必然把正好压线的文�
 
 MCP 连接挂在简历主页，离开页面后仍保持，直到用户停止。`sea_resume_list`、`get`、`set`、`create`、`delete` 操作当前存储里的全部简历。正在编辑的简历走 `importData`，其余直接 `saveResume` 并更新列表。删除正在编辑的简历时先 `discardOpenResume`，阻止自动保存把它写回。`sea_resume_export_pdf` 使用可搜索 PDF 并直接触发浏览器下载。面试工具只读写本机 AI 工作区记录；开始面试复用页面已配置的模型。文件交换仍使用草稿和人工确认。
 
-### 14. 本地目录授权只能在用户手势里申请
+### 15. 本地目录授权只能在用户手势里申请
 
 `reauthorizeFileSystem` / `showDirectoryPicker` 必须在点击回调的同步路径中调用，
 否则浏览器不弹授权框。不要把它包装进 `setTimeout` 或 `await` 之后的逻辑。
