@@ -54,20 +54,6 @@ export interface IStorageAdapter {
   /** 删除指定简历 */
   delete(id: string): Promise<void>;
 
-  /** 导出简历为文件（可选） */
-  export?(id: string): Promise<Blob>;
-
   /** 检查是否已初始化/已授权 */
   isReady(): boolean;
-}
-
-/**
- * 数据迁移进度
- */
-export interface MigrationProgress {
-  total: number;
-  current: number;
-  currentItem?: string;
-  status: 'pending' | 'processing' | 'completed' | 'error';
-  error?: string;
 }

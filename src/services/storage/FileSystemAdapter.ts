@@ -251,18 +251,6 @@ export class FileSystemAdapter implements IStorageAdapter {
     }
   }
 
-  /**
-   * 导出简历为 JSON Blob
-   */
-  async export(id: string): Promise<Blob> {
-    const data = await this.read(id);
-    if (!data) {
-      throw new Error(`简历 ${id} 不存在`);
-    }
-    const jsonStr = JSON.stringify(data, null, 2);
-    return new Blob([jsonStr], { type: 'application/json' });
-  }
-
   private async readManifest(): Promise<ResumeMeta[] | null> {
     const root = this.directoryHandle;
     if (!root) throw new Error('文件系统未初始化');

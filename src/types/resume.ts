@@ -102,8 +102,6 @@ export interface ResumeMeta {
   templateId: string;
   createdAt: number;       // 时间戳
   updatedAt: number;       // 时间戳
-  thumbnail?: string;      // 缩略图 Base64（可选）
-  isSynced?: boolean;      // 同步状态标记
   /** 岗位版本索引：带上它就能不读取简历正文直接列出岗位版本历史。 */
   jobTarget?: ResumeJobTarget;
 }
@@ -122,7 +120,6 @@ export interface ThemeConfig {
   fontFamily: string;
   fontSize: number; // px
   lineHeight: number;
-  // spacing: number; // Deprecated -> use moduleMargins
   moduleMargins: {
     top: number;
     bottom: number;
