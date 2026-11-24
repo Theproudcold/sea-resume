@@ -17,13 +17,19 @@ import type { ResumeMeta } from '@/types/resume';
 export type LinkKind = 'commit' | 'fork' | 'rebase';
 
 /** 轨道配色，索引即 lane。 */
+/**
+ * 轨道配色。
+ *
+ * 各轨道之间要能一眼分开，所以色相拉开、彩度给足：
+ * 之前彩度只有 0.12~0.14，深色底上几条线看起来都发灰，分不出是哪条分支。
+ */
 export const LANE_COLORS = [
   'var(--color-accent)',
-  'oklch(62% 0.12 150)',
-  'oklch(66% 0.14 45)',
-  'oklch(58% 0.14 310)',
-  'oklch(60% 0.12 200)',
-  'oklch(64% 0.12 90)',
+  'oklch(68% 0.17 152)',
+  'oklch(72% 0.19 55)',
+  'oklch(64% 0.22 305)',
+  'oklch(70% 0.16 215)',
+  'oklch(76% 0.17 95)',
 ];
 
 export interface GraphRow {
@@ -266,29 +272,48 @@ export function buildResumeGraph(resumes: ResumeMeta[], options: GraphOptions = 
     paths.push({ lane, color: LANE_COLORS[lane % LANE_COLORS.length]!, kind: 'main', points });
   }
 
-  // ② 岗位：每个岗位顶点从自己那行走到来源主干那行，中间的行保持在自己的列上。
-  let branchLaneCursor = mainLaneCursor;
+  // ② 岗位：每条分支占一段行区间（自己那行 → 来源行），区间不重叠时可复用同一列。
+  //
+  // 不复用时每个岗位各占一列，几条分支就横向铺开一大片，线间距看起来忽宽忽窄；
+  // 复用后分支首尾相接在同一条竖线位置，才是 Git 图那种紧凑的轨道感。
+  /** 每列已占用的行区间。 */
+  const laneRanges: Array<Array<{ start: number; end: number }>> = [];
+  const overlaps = (lane: number, start: number, end: number) =>
+    (laneRanges[lane] ?? []).some((range) => start <= range.end && end >= range.start);
+  const claimBranchLane = (start: number, end: number): number => {
+    for (let lane = mainLaneCursor; lane < laneRanges.length + mainLaneCursor; lane += 1) {
+      if (!overlaps(lane, start, end)) {
+        (laneRanges[lane] ??= []).push({ start, end });
+        return lane;
+      }
+    }
+    const lane = laneRanges.length + mainLaneCursor;
+    laneRanges[lane] = [{ start, end }];
+    return lane;
+  };
+
   for (const vertex of vertices) {
     if (rows[vertex.row]!.kind !== 'branch') continue;
     const parent = vertex.parents[0];
     if (parent === undefined) {
-      // 孤立岗位：只给自己一个点。
-      const lane = branchLaneCursor;
-      branchLaneCursor += 1;
+      // 孤立岗位：只给自己一个点，独占一列。
+      const lane = claimBranchLane(vertex.row, vertex.row);
       laneOf[vertex.row] = lane;
       paths.push({ lane, color: LANE_COLORS[lane % LANE_COLORS.length]!, kind: 'branch', points: [{ row: vertex.row, lane }] });
       continue;
     }
-    const lane = branchLaneCursor;
-    branchLaneCursor += 1;
+    // 折点分三段：本列竖直下行 → 在「来源行上一行」处汇入主干列 → 落到来源行。
+    // 中间保持在自己列上竖直走，弯折只占相邻一行，画出来才是平行的竖直轨道。
+    const start = Math.min(vertex.row, parent);
+    const end = Math.max(vertex.row, parent);
+    const lane = claimBranchLane(start, end);
     laneOf[vertex.row] = lane;
-    // 分支只在「自己这一行」和「来源行」各留一个折点，中间不塞折点。
-    // 中间塞折点会画出「先笔直下行、到来源行才拐弯」的 L 形；
-    // 只留两端，渲染时就是一条从派生点斜着汇入主干的 S 形曲线，与 Git 图一致。
-    const points: PathPoint[] = [
-      { row: vertex.row, lane },
-      { row: parent, lane: laneOf[parent] ?? 0 },
-    ];
+    const points: PathPoint[] = [{ row: vertex.row, lane }];
+    if (end - start > 1) {
+      const stayRow = vertex.row < parent ? parent - 1 : parent + 1;
+      points.push({ row: stayRow, lane });
+    }
+    points.push({ row: parent, lane: laneOf[parent] ?? 0 });
     paths.push({ lane, color: LANE_COLORS[lane % LANE_COLORS.length]!, kind: 'branch', points });
   }
 

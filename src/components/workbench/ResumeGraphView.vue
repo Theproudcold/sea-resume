@@ -101,8 +101,9 @@ import { buildResumeGraph, LANE_COLORS, type GraphRow } from '@/utils/resumeGrap
  * 之前写死 96px，最多两列时右侧会空出 50px，标题离轨道很远。
  * 现在最短只要「左侧留白 + 一列间距 + 半径 + 右侧留白」，列多时再按列数增长。
  */
-const RAIL_PAD = 10;
-const LANE_STEP = 16;
+const RAIL_PAD = 14;
+/** 列间距固定值：所有轨道等距，视觉上才是一条条平行的轨道。 */
+const LANE_STEP = 22;
 const DOT_RADIUS = 5;
 const RAIL_MIN_WIDTH = RAIL_PAD + DOT_RADIUS + RAIL_PAD;
 const ROW_HEIGHT = 52;
@@ -170,11 +171,25 @@ function rowCenterY(index: number): number {
  *
  * 控制点的偏移量限制在**这次换列实际跨过的竖直距离之内**，否则曲线会回环。
  */
+/**
+ * 把一条路径的折点串成一条平滑曲线。
+ *
+ * 关键：**弯折只发生在相邻两行之间**，其余段落保持竖直。
+ *
+ * 这是 Git 图「一条条平行轨道」观感的来源——每条分支都是竖直的直线，
+ * 只在分叉/汇合处弯一下。若把弯折摊到整段长度上（例如跨 3 行就斜 3 行），
+ * 画出来是一根斜线，读不出「分支」的感觉。
+ *
+ * 具体做法：换列时先沿本列竖直走到「终点行的上一行」，再用一行高度完成横移，
+ * 然后竖直落到终点。横移用三次贝塞尔，控制点各偏移 0.8 行高，曲线饱满而不生硬。
+ */
 function pathToD(points: Array<{ row: number; lane: number }>): string {
   if (!points.length) return '';
   const coords = points.map((point) => ({ x: laneX(point.lane), y: rowCenterY(point.row) }));
   if (coords.length === 1) return `M ${coords[0]!.x} ${coords[0]!.y}`;
 
+  // 弯折占用的竖直距离：不足一行时按实际距离，避免短距离上拐出尖角。
+  const bend = ROW_HEIGHT * 0.45;
   let d = `M ${coords[0]!.x} ${coords[0]!.y}`;
   for (let i = 1; i < coords.length; i += 1) {
     const previous = coords[i - 1]!;
@@ -183,12 +198,16 @@ function pathToD(points: Array<{ row: number; lane: number }>): string {
       d += ` L ${current.x} ${current.y}`;
       continue;
     }
-    // 换列：控制点不超过这段竖直距离的一半，保证曲线单调、不回环。
     const dy = current.y - previous.y;
-    const bend = Math.abs(dy) * 0.5;
-    const c1y = previous.y + Math.sign(dy) * bend;
-    const c2y = current.y - Math.sign(dy) * bend;
-    d += ` C ${previous.x} ${c1y} ${current.x} ${c2y} ${current.x} ${current.y}`;
+    const dir = Math.sign(dy) || 1;
+    // 横移的起止高度：贴着终点那一行完成，前面整段保持竖直。
+    const available = Math.abs(dy);
+    const span = Math.min(bend, available);
+    const turnStart = current.y - dir * span;
+    if (Math.abs(turnStart - previous.y) > 0.5) {
+      d += ` L ${previous.x} ${turnStart}`;
+    }
+    d += ` C ${previous.x} ${turnStart + dir * span * 0.5} ${current.x} ${current.y - dir * span * 0.5} ${current.x} ${current.y}`;
   }
   return d;
 }
@@ -207,7 +226,7 @@ const dots = computed(() =>
     id: row.id,
     x: laneX(row.lane),
     y: rowCenterY(index),
-    r: row.behind ? 5.5 : 4.5,
+    r: 5,
     color: row.color,
     fill: row.behind ? row.color : 'var(--color-paper)',
     behind: Boolean(row.behind),
@@ -255,10 +274,10 @@ defineExpose({ graph });
 
 .graph-rows { position: relative; }
 
-.rail-path { stroke-width: 2; stroke-linecap: round; }
+.rail-path { stroke-width: 2.5; stroke-linecap: round; }
 
 .rail-path.rail-branch { stroke-dasharray: 4 3; }
-.rail-dot { stroke-width: 2.5; }
+.rail-dot { stroke-width: 3; }
 /* 圆点压在线条上：先用背景色的外圈「断开」线条，让节点读作节点而不是线上的一个点 */
 .rail-dot-halo { fill: var(--color-paper); stroke: none; }
 .rail-dot.is-orphan { stroke-dasharray: 2 2; opacity: .6; }
