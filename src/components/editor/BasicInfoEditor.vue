@@ -183,7 +183,16 @@
         </el-col>
         <el-col :span="12">
           <el-form-item label="显示工作经验时长">
-            <el-switch :model-value="localBasic.showExperienceYears" @update:model-value="(showExperienceYears: unknown) => handleUpdate({ showExperienceYears: !!showExperienceYears })" />
+            <div class="smart-field-control">
+              <el-switch :model-value="localBasic.showExperienceYears" @update:model-value="(showExperienceYears: unknown) => handleUpdate({ showExperienceYears: !!showExperienceYears })" />
+              <p v-if="localBasic.showExperienceYears && calculatedExperience" class="privacy-note">
+                当前显示：工作经验 {{ calculatedExperience }}
+              </p>
+              <p v-else-if="localBasic.showExperienceYears" class="privacy-note">
+                需在「工作经历」填写起止年月后自动计算
+                <el-button link type="primary" size="small" class="smart-field-jump" @click="goToExperience">去填写</el-button>
+              </p>
+            </div>
           </el-form-item>
         </el-col>
       </el-row>
@@ -299,6 +308,7 @@ import type { BasicInfo, CustomContact } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
 import { loadAvatarImage, releaseAvatar, type LoadedAvatar } from '@/utils/avatarImage';
 import { AVATAR_SHAPE_OPTIONS, avatarBorderRadius, normalizeAvatarShape } from '@/utils/avatarShape';
+import { calculateWorkExperience } from '@/utils/resumeSmartFields';
 import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import { describeError } from '@/utils/globalErrorReporting';
 
@@ -306,6 +316,11 @@ const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
 const localBasic = computed(() => data.value.basic);
+const calculatedExperience = computed(() => calculateWorkExperience(data.value.experiences));
+
+const goToExperience = () => {
+  resumeStore.setActiveSection('experience');
+};
 
 const handleUpdate = (updates: Partial<BasicInfo>) => {
   resumeStore.updateBasic(updates);
@@ -501,5 +516,19 @@ const updateCustomContact = (id: string, updates: Partial<CustomContact>) => {
   color: var(--color-muted);
   font-size: var(--text-xs);
   line-height: 1.45;
+}
+
+.smart-field-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.smart-field-jump {
+  padding: 0;
+  margin-left: 4px;
+  height: auto;
+  vertical-align: baseline;
 }
 </style>

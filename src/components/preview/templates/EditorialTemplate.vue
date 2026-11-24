@@ -5,6 +5,10 @@
       '--primary-color': data.theme?.color || '#0f766e',
       '--font-size': (data.theme?.fontSize || 13.5) + 'px',
       '--line-height': data.theme?.lineHeight || 1.55,
+      '--margin-top': (data.theme?.moduleMargins?.top ?? 0) + 'px',
+      '--margin-bottom': (data.theme?.moduleMargins?.bottom ?? 20) + 'px',
+      '--margin-left': (data.theme?.moduleMargins?.left ?? 0) + 'px',
+      '--margin-right': (data.theme?.moduleMargins?.right ?? 0) + 'px',
       '--spacing': (data.theme?.moduleMargins?.bottom ?? 20) + 'px',
       '--page-pad': (data.theme?.pageMargins ?? 28) + 'px',
       fontSize: 'var(--font-size)',
@@ -50,7 +54,7 @@
           <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" />
           <span><template v-if="contact.label">{{ contact.label }}：</template>{{ contact.value }}</span>
         </div>
-        <ResumeSmartFields :data="data" />
+        <ResumeSmartFields :data="data" align="end" />
       </div>
     </header>
 
@@ -308,17 +312,16 @@ const {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--spacing);
 }
 
 .main-sections {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing);
 }
 
 .editorial-section,
 .side-section {
+  margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
   cursor: pointer;
   scroll-margin-top: 12px;
 }

@@ -5,6 +5,10 @@
       '--primary-color': data.theme?.color || '#166534',
       '--font-size': (data.theme?.fontSize || 13) + 'px',
       '--line-height': data.theme?.lineHeight || 1.48,
+      '--margin-top': (data.theme?.moduleMargins?.top ?? 0) + 'px',
+      '--margin-bottom': (data.theme?.moduleMargins?.bottom ?? 16) + 'px',
+      '--margin-left': (data.theme?.moduleMargins?.left ?? 0) + 'px',
+      '--margin-right': (data.theme?.moduleMargins?.right ?? 0) + 'px',
       '--spacing': (data.theme?.moduleMargins?.bottom ?? 16) + 'px',
       padding: (data.theme?.pageMargins ?? 26) + 'px',
       fontSize: 'var(--font-size)',
@@ -46,7 +50,7 @@
           <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" />
           <span><template v-if="contact.label">{{ contact.label }}：</template>{{ contact.value }}</span>
         </div>
-        <ResumeSmartFields :data="data" />
+        <ResumeSmartFields :data="data" align="end" />
       </div>
     </header>
 
@@ -263,7 +267,7 @@ const {
 }
 
 .campus-summary {
-  margin-bottom: var(--spacing);
+  margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
   color: var(--resume-ink-body);
   cursor: pointer;
 }
@@ -271,10 +275,10 @@ const {
 .campus-sections {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing);
 }
 
 .campus-section {
+  margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
   cursor: pointer;
   scroll-margin-top: 12px;
 }

@@ -13,7 +13,9 @@ import EditorialTemplate from '../templates/EditorialTemplate.vue';
 import EngineerTemplate from '../templates/EngineerTemplate.vue';
 import ExecutiveTemplate from '../templates/ExecutiveTemplate.vue';
 import CampusTemplate from '../templates/CampusTemplate.vue';
+import LayoutRecipeTemplate from '../templates/LayoutRecipeTemplate.vue';
 import { templateDemoData } from '@/data/template-demo';
+import { recipeForResume } from '@/utils/layout-template';
 import type { ResumeData } from '@/types/resume';
 
 let dataFixture: ResumeData;
@@ -102,5 +104,47 @@ describe('template theme tokens', () => {
     expect(style()).toContain('--font-size: 15px');
     expect(style()).toContain('--line-height: 1.8');
     expect(style()).toContain('--spacing: 8px');
+  });
+
+  const allBuiltInTemplates: Array<[string, Component, string]> = [
+    ['ModernTemplate', ModernTemplate, '.modern-template'],
+    ['ProfessionalTemplate', ProfessionalTemplate, '.professional-template'],
+    ['MinimalTemplate', MinimalTemplate, '.minimal-template'],
+    ['CreativeTemplate', CreativeTemplate, '.creative-template'],
+    ['TechTemplate', TechTemplate, '.tech-template'],
+    ['AiAgentTemplate', AiAgentTemplate, '.ai-agent-template'],
+    ['ClassicTemplate', ClassicTemplate, '.classic-template'],
+    ['EditorialTemplate', EditorialTemplate, '.editorial-template'],
+    ['EngineerTemplate', EngineerTemplate, '.engineer-template'],
+    ['ExecutiveTemplate', ExecutiveTemplate, '.executive-template'],
+    ['CampusTemplate', CampusTemplate, '.campus-template'],
+  ];
+
+  for (const [name, component, rootClass] of allBuiltInTemplates) {
+    it(`${name} binds all four module margin tokens and preserves explicit 0px`, async () => {
+      dataFixture.theme.moduleMargins = { top: 12, bottom: 0, left: 16, right: 20 };
+      const style = rootStyle(component, rootClass);
+      expect(style()).toContain('--margin-top: 12px');
+      expect(style()).toContain('--margin-bottom: 0px');
+      expect(style()).toContain('--margin-left: 16px');
+      expect(style()).toContain('--margin-right: 20px');
+
+      dataFixture.theme.moduleMargins = { top: 24, bottom: 36, left: 8, right: 4 };
+      await nextTick();
+      expect(style()).toContain('--margin-top: 24px');
+      expect(style()).toContain('--margin-bottom: 36px');
+      expect(style()).toContain('--margin-left: 8px');
+      expect(style()).toContain('--margin-right: 4px');
+    });
+  }
+
+  it('LayoutRecipeTemplate binds all four module margin tokens and preserves explicit 0px', async () => {
+    dataFixture.layout = recipeForResume(dataFixture);
+    dataFixture.theme.moduleMargins = { top: 12, bottom: 0, left: 16, right: 20 };
+    const style = rootStyle(LayoutRecipeTemplate, '.layout-template');
+    expect(style()).toContain('--margin-top: 12px');
+    expect(style()).toContain('--margin-bottom: 0px');
+    expect(style()).toContain('--margin-left: 16px');
+    expect(style()).toContain('--margin-right: 20px');
   });
 });

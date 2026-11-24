@@ -1,9 +1,9 @@
 <template>
   <div class="professional-template" :style="{
-    '--margin-top': (data.theme?.moduleMargins?.top || 0) + 'px',
-    '--margin-bottom': (data.theme?.moduleMargins?.bottom || 16) + 'px',
-    '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
-    '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
+    '--margin-top': (data.theme?.moduleMargins?.top ?? 0) + 'px',
+    '--margin-bottom': (data.theme?.moduleMargins?.bottom ?? 16) + 'px',
+    '--margin-left': (data.theme?.moduleMargins?.left ?? 0) + 'px',
+    '--margin-right': (data.theme?.moduleMargins?.right ?? 0) + 'px',
     '--font-size': (data.theme?.fontSize || 13) + 'px',
     '--line-height': data.theme?.lineHeight || 1.4,
     '--spacing': (data.theme?.moduleMargins?.bottom ?? 16) + 'px',
@@ -89,7 +89,7 @@
       </div>
 
       <!-- 右侧栏 (主要内容) -->
-      <div class="professional-main" style="gap: var(--spacing);">
+      <div class="professional-main">
         <!-- 个人简介 -->
         <div 
           v-if="data.basic.summary"
@@ -349,12 +349,9 @@ const setActiveSection = (id: string) => {
 
 .side-block,
 .main-block {
+  margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
   border-radius: 6px;
   padding: 2px;
-}
-
-.side-block {
-  margin-bottom: 1.25rem;
 }
 
 .professional-main {

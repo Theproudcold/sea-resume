@@ -125,20 +125,52 @@
       <label class="block text-sm font-medium text-gray-700 mb-2">模块边距 (上/下/左/右)</label>
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <span class="text-xs text-gray-500 mb-1 block">上: {{ data.theme.moduleMargins?.top || 0 }}px</span>
-          <el-slider aria-label="模块上边距" v-model="data.theme.moduleMargins.top" :min="0" :max="64" :step="4" @change="handleUpdate" />
+          <span class="text-xs text-gray-500 mb-1 block">上: {{ moduleMargins.top }}px</span>
+          <el-slider
+            aria-label="模块上边距"
+            :model-value="moduleMargins.top"
+            :min="0"
+            :max="64"
+            :step="4"
+            @update:model-value="updateModuleMargin('top', $event)"
+            @change="handleUpdate"
+          />
         </div>
         <div>
-          <span class="text-xs text-gray-500 mb-1 block">下: {{ data.theme.moduleMargins?.bottom || 0 }}px</span>
-          <el-slider aria-label="模块下边距" v-model="data.theme.moduleMargins.bottom" :min="0" :max="64" :step="4" @change="handleUpdate" />
+          <span class="text-xs text-gray-500 mb-1 block">下: {{ moduleMargins.bottom }}px</span>
+          <el-slider
+            aria-label="模块下边距"
+            :model-value="moduleMargins.bottom"
+            :min="0"
+            :max="64"
+            :step="4"
+            @update:model-value="updateModuleMargin('bottom', $event)"
+            @change="handleUpdate"
+          />
         </div>
         <div>
-          <span class="text-xs text-gray-500 mb-1 block">左: {{ data.theme.moduleMargins?.left || 0 }}px</span>
-          <el-slider aria-label="模块左边距" v-model="data.theme.moduleMargins.left" :min="0" :max="64" :step="4" @change="handleUpdate" />
+          <span class="text-xs text-gray-500 mb-1 block">左: {{ moduleMargins.left }}px</span>
+          <el-slider
+            aria-label="模块左边距"
+            :model-value="moduleMargins.left"
+            :min="0"
+            :max="64"
+            :step="4"
+            @update:model-value="updateModuleMargin('left', $event)"
+            @change="handleUpdate"
+          />
         </div>
         <div>
-          <span class="text-xs text-gray-500 mb-1 block">右: {{ data.theme.moduleMargins?.right || 0 }}px</span>
-          <el-slider aria-label="模块右边距" v-model="data.theme.moduleMargins.right" :min="0" :max="64" :step="4" @change="handleUpdate" />
+          <span class="text-xs text-gray-500 mb-1 block">右: {{ moduleMargins.right }}px</span>
+          <el-slider
+            aria-label="模块右边距"
+            :model-value="moduleMargins.right"
+            :min="0"
+            :max="64"
+            :step="4"
+            @update:model-value="updateModuleMargin('right', $event)"
+            @change="handleUpdate"
+          />
         </div>
       </div>
     </div>
@@ -257,6 +289,22 @@ const updateColor = (color: string | null) => {
 
 const handleUpdate = () => {
   resumeStore.scheduleSave();
+};
+
+const moduleMargins = computed(() => ({
+  top: data.value.theme.moduleMargins?.top ?? 0,
+  bottom: data.value.theme.moduleMargins?.bottom ?? 24,
+  left: data.value.theme.moduleMargins?.left ?? 0,
+  right: data.value.theme.moduleMargins?.right ?? 0,
+}));
+
+/** 更新模块四边边距，兼容旧数据缺失 moduleMargins 字段的情况。 */
+const updateModuleMargin = (edge: 'top' | 'bottom' | 'left' | 'right', value: number | number[]) => {
+  const next = Array.isArray(value) ? (value[0] ?? 0) : value;
+  data.value.theme.moduleMargins = {
+    ...moduleMargins.value,
+    [edge]: next,
+  };
 };
 
 const sectionChoices = computed(() => (data.value.sectionOrder || []).map((id) => ({
