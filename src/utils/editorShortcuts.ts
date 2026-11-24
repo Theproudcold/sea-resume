@@ -1,7 +1,18 @@
 export type EditorShortcutAction = 'save' | 'undo' | 'redo' | 'previous-section' | 'next-section' | 'shortcut-help';
 
-export function resolveEditorShortcut(event: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>): EditorShortcutAction | null {
-  const modifier = event.metaKey || event.ctrlKey;
+export interface EditorShortcutEvent {
+  key?: string;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  altKey?: boolean;
+  shiftKey?: boolean;
+  isComposing?: boolean;
+}
+
+export function resolveEditorShortcut(event: EditorShortcutEvent): EditorShortcutAction | null {
+  // 浏览器自动填充或合成输入法事件会触发无 key 字段的 keydown，必须先行放行。
+  if (event.isComposing || typeof event.key !== 'string' || !event.key) return null;
+  const modifier = Boolean(event.metaKey || event.ctrlKey);
   const key = event.key.toLowerCase();
   if (!modifier && !event.altKey) {
     if (event.shiftKey && key === '?') return 'shortcut-help';
