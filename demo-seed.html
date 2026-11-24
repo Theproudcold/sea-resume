@@ -1,0 +1,195 @@
+<!-- 仅用于本地开发：pnpm dev 后访问 /demo-seed.html；生产构建只打包 index.html。 -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sea Resume · 版本历史演示数据</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f6f7f9; color: #1f2937; font: 15px/1.7 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+    main { width: min(520px, calc(100vw - 40px)); padding: 28px 30px; border: 1px solid #e5e7eb; border-radius: 14px; background: #fff; box-shadow: 0 12px 40px rgba(15, 23, 42, .08); }
+    h1 { margin: 0 0 8px; font-size: 20px; }
+    p { margin: 6px 0; color: #6b7280; }
+    code { padding: 1px 6px; border-radius: 5px; background: #f3f4f6; color: #374151; }
+    a { color: #2563eb; }
+    #status { margin-top: 16px; padding: 10px 12px; border-radius: 8px; background: #f0fdf4; color: #166534; }
+    #status.error { background: #fef2f2; color: #b91c1c; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>版本历史演示数据</h1>
+  <p>这个页面只做一件事：把一份带 6 个版本、3 个标签的演示简历写入<strong>当前浏览器</strong>的本地存储。</p>
+  <p>写入完成后会自动打开编辑器；不会上传任何数据，也不会删除其他简历。同 ID 的旧演示数据会被替换。</p>
+  <p id="status" role="status">正在写入演示数据…</p>
+</main>
+<script type="module">
+import { toResumeSnapshot, resumeContentHash, commitHash } from '/src/services/history/hash.ts';
+import { diffStats } from '/src/services/history/diff.ts';
+
+const status = document.getElementById('status');
+const fail = (error) => {
+  console.error(error);
+  status.className = 'error';
+  status.textContent = `写入失败：${error instanceof Error ? error.message : String(error)}`;
+};
+
+try {
+  const now = Date.now();
+  const at = (daysAgo, hour, minute) => {
+    const date = new Date(now);
+    date.setDate(date.getDate() - daysAgo);
+    date.setHours(hour, minute, 0, 0);
+    return date.toISOString();
+  };
+  const resumeId = 'demo-resume-2026';
+  const makeBase = () => ({
+    id: resumeId,
+    title: '张三 · 前端工程师',
+    basic: {
+      name: '张三', title: '前端工程师', email: 'zhangsan@example.com', phone: '138 0013 8000',
+      location: '上海', website: 'https://zhangsan.dev',
+      summary: '5 年前端开发经验，关注性能优化与工程化建设，习惯用数据验证结果。',
+    },
+    experiences: [], education: [], skills: [], projects: [], customBlocks: [],
+    templateId: 'modern',
+    theme: {
+      color: '#2563eb', fontFamily: '"Noto Sans SC", "PingFang SC", sans-serif', fontSize: 14,
+      lineHeight: 1.5, moduleMargins: { top: 0, bottom: 24, left: 0, right: 0 },
+      pageMargins: 24, dateFormat: 'YYYY.MM', displayIcons: true,
+    },
+    sectionOrder: ['experience', 'projects', 'education', 'skills'],
+    hiddenSections: [],
+    sectionTitles: { experience: '工作经历', projects: '项目经验', education: '教育背景', skills: '技能证书' },
+    createdAt: at(365, 9, 0),
+    updatedAt: new Date().toISOString(),
+  });
+  const clone = (value) => JSON.parse(JSON.stringify(value));
+
+  const v1 = makeBase();
+  v1.experiences = [{
+    id: 'exp-bytedance', company: '字节跳动', position: '前端工程师', startDate: '2021-07', endDate: 'present',
+    description: '负责电商中台活动页与运营工具的前端开发。\n与产品、设计协作，持续优化页面性能。',
+  }];
+  const v2 = clone(v1);
+  v2.experiences.unshift({
+    id: 'exp-nio', company: '蔚来汽车', position: '前端工程师', startDate: '2019-07', endDate: '2021-06',
+    description: '负责车主社区与活动页开发，沉淀可复用的活动搭建组件。',
+  });
+  const v3 = clone(v2);
+  v3.experiences[1].description = '主导电商中台活动页架构，支撑大促期间日均 300 万 PV。\n建设低代码活动搭建器，活动上线时间从 2 天缩短到 2 小时。\n推动首屏性能治理，LCP 从 2.4s 降到 1.2s。';
+  v3.experiences[1].highlights = ['大促稳定性保障，核心页面可用性 99.99%', '前端性能专项，首屏体积减少 38%'];
+  const v4 = clone(v3);
+  v4.skills = [
+    { id: 'skill-framework', category: '前端框架', items: ['Vue 3', 'React', 'TypeScript'] },
+    { id: 'skill-engineering', category: '工程化', items: ['Vite', 'Webpack', 'Monorepo', 'CI/CD'] },
+    { id: 'skill-visual', category: '可视化', items: ['ECharts', 'Canvas', 'WebGL'] },
+  ];
+  v4.education = [{ id: 'edu-fudan', school: '复旦大学', degree: '本科', major: '计算机科学与技术', startDate: '2015-09', endDate: '2019-06' }];
+  const v5 = clone(v4);
+  v5.projects = [{
+    id: 'project-sea-resume', name: 'Sea Resume', role: '前端负责人', startDate: '2024-03', endDate: 'present',
+    description: '面向求职者的本地优先简历工具。\n负责编辑器架构、PDF 导出与性能优化，累计服务 2 万名用户。',
+    link: 'https://github.com/Theproudcold/sea-resume',
+    techStack: ['Vue 3', 'TypeScript', 'Vite', 'IndexedDB'],
+  }];
+  const v6 = clone(v5);
+  v6.basic.title = '资深前端工程师';
+  v6.basic.summary = '<p>6 年前端开发经验，专注性能优化、工程化与复杂业务架构；带过 4 人小组，推动跨团队协作。</p>';
+  v6.theme.color = '#0f766e';
+  v6.updatedAt = new Date().toISOString();
+
+  const versions = [
+    { data: v1, message: '初始版本：建立简历骨架', kind: 'initial', tags: [], time: at(6, 10, 12) },
+    { data: v2, message: '补充工作经历：蔚来汽车', kind: 'manual', tags: [], time: at(5, 15, 30) },
+    { data: v3, message: '量化字节跳动项目成果', kind: 'manual', tags: ['投递 Acme'], time: at(3, 9, 45) },
+    { data: v4, message: '补充技能与教育背景', kind: 'manual', tags: [], time: at(2, 18, 20) },
+    { data: v5, message: '添加 Sea Resume 项目', kind: 'ai', tags: ['投递字节'], time: at(1, 11, 5) },
+    { data: v6, message: '调整求职意向与主题色', kind: 'manual', tags: ['最终版'], time: at(0, 9, 15) },
+  ];
+
+  const commits = [];
+  let parentHash = null;
+  for (const version of versions) {
+    const { snapshot } = toResumeSnapshot(version.data);
+    const contentHash = resumeContentHash(snapshot);
+    const hash = commitHash({ parentHash, contentHash, createdAt: version.time, message: version.message });
+    const previous = commits.length ? versions[commits.length - 1].data : null;
+    const meta = {
+      hash, contentHash, parentHash, message: version.message, author: '张三',
+      createdAt: version.time, kind: version.kind, tags: version.tags,
+      stats: diffStats(previous, version.data),
+      bytes: new TextEncoder().encode(JSON.stringify({ snapshot, message: version.message })).length,
+    };
+    commits.push({ meta, commit: { ...meta, schemaVersion: 1, resumeId, snapshot } });
+    parentHash = hash;
+  }
+
+  const refs = {
+    schemaVersion: 1, resumeId, head: commits[commits.length - 1].meta.hash,
+    commits: commits.map((entry) => entry.meta).reverse(),
+    tags: { '投递 Acme': commits[2].meta.hash, '投递字节': commits[4].meta.hash, '最终版': commits[5].meta.hash },
+    totalBytes: commits.reduce((sum, entry) => sum + entry.meta.bytes, 0),
+    truncated: false,
+    updatedAt: commits[commits.length - 1].meta.createdAt,
+  };
+
+  const db = await new Promise((resolve, reject) => {
+    const request = indexedDB.open('sea-resume-history', 1);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains('refs')) database.createObjectStore('refs');
+      if (!database.objectStoreNames.contains('commits')) {
+        const store = database.createObjectStore('commits');
+        store.createIndex('by-resume', 'resumeId');
+      }
+      if (!database.objectStoreNames.contains('avatars')) database.createObjectStore('avatars');
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const previousRefs = await new Promise((resolve, reject) => {
+    const tx = db.transaction('refs', 'readonly');
+    const request = tx.objectStore('refs').get(resumeId);
+    request.onsuccess = () => resolve(request.result ?? null);
+    request.onerror = () => reject(request.error);
+  });
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(['refs', 'commits', 'avatars'], 'readwrite');
+    if (previousRefs) {
+      for (const meta of previousRefs.commits ?? []) {
+        tx.objectStore('commits').delete(`${resumeId.length}:${resumeId}:${meta.hash}`);
+      }
+    }
+    for (const { meta, commit } of commits) {
+      tx.objectStore('commits').put(commit, `${resumeId.length}:${resumeId}:${meta.hash}`);
+    }
+    tx.objectStore('refs').put(refs, resumeId);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+
+  let index = [];
+  try {
+    const parsed = JSON.parse(localStorage.getItem('sea-resume_index') || '[]');
+    if (Array.isArray(parsed)) index = parsed;
+  } catch {
+    index = [];
+  }
+  index = index.filter((entry) => entry && entry.id !== resumeId);
+  index.push({
+    id: resumeId, title: v6.title, templateId: v6.templateId,
+    createdAt: Date.parse(v6.createdAt), updatedAt: Date.parse(v6.updatedAt),
+  });
+  localStorage.setItem('sea-resume_index', JSON.stringify(index));
+  localStorage.setItem(`sea-resume_resume_${resumeId}`, JSON.stringify(v6));
+
+  status.textContent = '写入完成：6 个版本、3 个标签。正在打开编辑器…';
+  window.setTimeout(() => { location.replace(`/editor/${resumeId}`); }, 700);
+} catch (error) {
+  fail(error);
+}
+</script>
+</body>
+</html>
