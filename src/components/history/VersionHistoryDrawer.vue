@@ -341,13 +341,21 @@ async function retryLoad(): Promise<void> {
 .drawer-empty { padding: 48px 24px; }
 .history-body { display: grid; grid-template-columns: 320px minmax(0, 1fr); flex: 1; min-height: 0; }
 .commit-list { overflow-y: auto; padding: 12px 8px 24px; border-right: 1px solid var(--ui-border); background: var(--ui-bg-subtle); }
-.commit-row { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 8px; width: 100%; padding: 10px 8px; border: 0; border-radius: var(--ui-radius-sm); background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.commit-row:hover { background: var(--ui-bg-elevated); }
+.commit-row { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 8px; width: 100%; padding: 10px 8px; border: 0; border-radius: var(--ui-radius-sm); background: transparent; color: inherit; text-align: left; cursor: pointer; transition: background-color 140ms ease, box-shadow 140ms ease; }
+.commit-row:hover { background: color-mix(in srgb, var(--ui-primary) 4%, transparent); }
 .commit-row:focus-visible { outline: 2px solid var(--ui-primary); outline-offset: -2px; }
-.commit-row.is-selected { background: var(--ui-bg-surface); box-shadow: inset 2px 0 0 var(--ui-primary); }
+.commit-row.is-selected {
+  background: color-mix(in srgb, var(--ui-primary) 10%, var(--ui-bg-surface));
+  box-shadow:
+    inset 3px 0 0 var(--ui-primary),
+    inset 0 0 0 1px color-mix(in srgb, var(--ui-primary) 24%, transparent);
+}
+.commit-row.is-selected .commit-main strong { color: color-mix(in srgb, var(--ui-primary) 55%, var(--ui-text-main)); }
+.commit-row.is-selected .dot { width: 11px; height: 11px; margin-top: 4px; box-shadow: 0 0 0 4px color-mix(in srgb, var(--ui-primary) 16%, transparent); }
+.commit-row.is-selected .graph::before { background: color-mix(in srgb, var(--ui-primary) 32%, var(--ui-border)); }
 .graph { position: relative; display: flex; justify-content: center; align-self: stretch; }
 .graph::before { content: ''; position: absolute; top: 0; bottom: -20px; width: 2px; background: var(--ui-border); }
-.commit-row:last-child .graph::before { display: none; }
+.commit-row:last-of-type .graph::before { display: none; }
 .dot { position: relative; z-index: 1; width: 9px; height: 9px; margin-top: 5px; border-radius: 50%; background: var(--ui-primary); box-shadow: 0 0 0 3px var(--ui-bg-subtle); }
 .dot.hollow { background: var(--ui-bg-surface); border: 2px solid var(--ui-text-muted); }
 .commit-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
@@ -373,6 +381,9 @@ async function retryLoad(): Promise<void> {
 .suggest-message { margin: -6px 0 12px; color: var(--ui-text-secondary); font-size: var(--ui-font-xs); }
 :global(.version-history-drawer) { width: min(880px, 100vw) !important; }
 :global(.version-history-drawer .el-drawer__body) { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+@media (prefers-reduced-motion: reduce) {
+  .commit-row { transition: none; }
+}
 @media (max-width: 720px) {
   .drawer-head { padding: 16px; flex-direction: column; }
   .drawer-actions { width: 100%; justify-content: flex-end; }
