@@ -302,3 +302,22 @@ describe('只画有版本关系的简历', () => {
     expect(graph.nodes).toHaveLength(2);
   });
 });
+
+describe('画布尺寸', () => {
+  it('does not leave a huge blank area below the last row', () => {
+    // 三列各一版：最大行号是 0，高度不该按「三个节点」算成三行。
+    const graph = buildResumeGraph([
+      resume('m1', 'T1', 1),
+      resume('a1', 'T2', 1),
+      resume('b1', 'T3', 1),
+    ]);
+    expect(graph.nodes.every((node) => node.row === 0)).toBe(true);
+    expect(graph.height).toBeLessThan(200);
+  });
+
+  it('grows with the number of versions, not the number of nodes', () => {
+    const shallow = buildResumeGraph([resume('m1', 'T1', 1), resume('x1', 'T2', 1)]);
+    const deep = buildResumeGraph([resume('m1', 'T1', 1), resume('m2', 'T1', 2), resume('m3', 'T1', 3)]);
+    expect(deep.height).toBeGreaterThan(shallow.height);
+  });
+});
