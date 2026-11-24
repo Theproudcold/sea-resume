@@ -1,11 +1,15 @@
+import { spawnSync } from 'node:child_process';
 import { webcrypto } from 'node:crypto';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { ExternalAiSession } from '../ExternalAiSession';
 import { assertExternalBaseline, createExternalProposal, parseExternalProposal, resumeRevision } from '../externalProposal';
 import { createExternalContextArchive, readExternalProposal } from '../externalAiFiles';
-import { externalTools, relayAgentPrompt, relayBundleUrl, relayConfiguration, relaySetupCommand, startExternalAiBridge } from '../externalAiBridge';
+import { externalTools, relayAgentPrompt, relayBundleUrl, relayClients, relayConfiguration, relaySetupCommand, startExternalAiBridge, type RelayClient } from '../externalAiBridge';
 import { createResumeLibrary } from '../resumeLibrary';
 import { builtinToRecipe } from '@/utils/layout-template';
 import { applyResumePatch, parseResumePatch } from '../resumePatch';
@@ -195,6 +199,107 @@ describe('MCP business tools', () => {
     expect(prompt).toContain('sea_resume_delete');
     expect(prompt).not.toContain('sea_resume_get_context');
     for (const call of [() => relayBundleUrl('https://example.com/path', baseUrl), () => relaySetupCommand('codex', 'https://example.com/path', baseUrl), () => relayAgentPrompt('claude', 'ftp://example.com', baseUrl)]) expect(call).toThrow();
+  });
+  it('registers the same relay for each harness and updates config files in place', () => {
+    const origin = 'https://resume.example.com';
+    const baseUrl = '/sea-resume/';
+    const flags = '--host 127.0.0.1 --widget-origin https://resume.example.com --max-payload 2000000';
+    const cli: Record<string, string> = {
+      codex: `codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
+      claude: `claude mcp add --transport stdio sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
+      pi: `pi mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
+      opencode: `opencode mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
+      gemini: `gemini mcp add -s user sea-resume node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
+      qwen: `qwen mcp add --scope user sea-resume node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
+      amp: `amp mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
+      copilot: `copilot mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
+    };
+    for (const [id, register] of Object.entries(cli)) {
+      const command = relaySetupCommand(id as RelayClient, origin, baseUrl);
+      expect(command).toContain(register);
+      expect(command).not.toContain('npm ci');
+      expect(relayAgentPrompt(id as RelayClient, origin, baseUrl)).toContain(relayClients.find((item) => item.id === id)!.reload);
+    }
+    const home = mkdtempSync(join(tmpdir(), 'sea-resume-mcp-'));
+    mkdirSync(join(home, '.sea-resume-ai-relay'), { recursive: true });
+    writeFileSync(join(home, '.sea-resume-ai-relay', 'relay.mjs'), '');
+    mkdirSync(join(home, '.zcode', 'cli'), { recursive: true });
+    writeFileSync(join(home, '.zcode', 'cli', 'config.json'), JSON.stringify({ mcp: { servers: { memory: { command: 'npx' } } } }));
+    mkdirSync(join(home, '.config', 'crush'), { recursive: true });
+    mkdirSync(join(home, '.config', 'goose'), { recursive: true });
+    writeFileSync(join(home, '.config', 'goose', 'config.yaml'), 'extensions:\n  developer:\n    enabled: true\n');
+    mkdirSync(join(home, '.dsh', 'profiles', 'desktop'), { recursive: true });
+    writeFileSync(join(home, '.dsh', 'profiles', 'desktop', 'package.json'), '{}');
+    writeFileSync(join(home, '.dsh', 'profiles', 'desktop', 'cordis.patch.yml'), '- id: other\n  name: something\n');
+    mkdirSync(join(home, '.dsh', 'profiles', 'cli'), { recursive: true });
+    writeFileSync(join(home, '.dsh', 'profiles', 'cli', 'cordis.patch.yml'), '- id: mcp-sea-resume\n  name: old\n');
+    const apply = (client: RelayClient) => {
+      const command = relaySetupCommand(client, origin, baseUrl);
+      expect(command).toContain(`SEA_RESUME_MCP_CLIENT='${client}'`);
+      expect(command).toContain(`SEA_RESUME_MCP_ORIGIN='${origin}'`);
+      expect(command).not.toContain('&& node');
+      const script = command.split("<<'EOF'\n")[1]?.split('\nEOF')[0];
+      expect(script).toContain("type: 'stdio'");
+      const result = spawnSync(process.execPath, ['--input-type=module', '-'], {
+        input: script,
+        encoding: 'utf8',
+        env: { ...process.env, SEA_RESUME_MCP_CLIENT: client, SEA_RESUME_MCP_ORIGIN: origin, SEA_RESUME_MCP_HOME: home },
+      });
+      expect(result.status, result.stderr).toBe(0);
+      return result;
+    };
+    apply('zcode');
+    apply('zcode');
+    const zcode = JSON.parse(readFileSync(join(home, '.zcode', 'cli', 'config.json'), 'utf8'));
+    expect(zcode.mcp.servers.memory.command).toBe('npx');
+    expect(zcode.mcp.servers['sea-resume']).toMatchObject({ type: 'stdio', command: process.execPath, protocolVersion: 'auto', args: [join(home, '.sea-resume-ai-relay', 'relay.mjs'), '--host', '127.0.0.1', '--widget-origin', origin, '--max-payload', '2000000'] });
+    const brokenCrush = join(home, '.config', 'crush', 'crush.json');
+    writeFileSync(brokenCrush, '{');
+    const refused = spawnSync(process.execPath, ['--input-type=module', '-'], {
+      input: relaySetupCommand('crush', origin, baseUrl).split("<<'EOF'\n")[1]!.split('\nEOF')[0],
+      encoding: 'utf8',
+      env: { ...process.env, SEA_RESUME_MCP_CLIENT: 'crush', SEA_RESUME_MCP_ORIGIN: origin, SEA_RESUME_MCP_HOME: home },
+    });
+    expect(refused.status).not.toBe(0);
+    expect(readFileSync(brokenCrush, 'utf8')).toBe('{');
+    writeFileSync(brokenCrush, '{"mcp":{"other":{"command":"stay"}}}\n');
+    apply('crush');
+    apply('crush');
+    const crush = JSON.parse(readFileSync(join(home, '.config', 'crush', 'crush.json'), 'utf8'));
+    expect(crush.mcp.other.command).toBe('stay');
+    expect(crush.mcp['sea-resume'].command).toBe(process.execPath);
+    apply('goose');
+    apply('goose');
+    const goose = readFileSync(join(home, '.config', 'goose', 'config.yaml'), 'utf8');
+    expect(goose.match(/sea-resume:/g)).toHaveLength(1);
+    expect(goose).toContain('developer:');
+    expect(goose).toContain(`cmd: ${JSON.stringify(process.execPath)}`);
+    expect(goose).toContain(`"${origin}"`);
+    apply('dsh');
+    apply('dsh');
+    for (const profile of ['desktop', 'cli']) {
+      const patch = readFileSync(join(home, '.dsh', 'profiles', profile, 'cordis.patch.yml'), 'utf8');
+      expect(patch.match(/id: mcp-sea-resume/g)).toHaveLength(1);
+      expect(patch).toContain('@deepseek-ai/dsh-mcp-client');
+      expect(patch).toContain(`command: ${JSON.stringify(process.execPath)}`);
+      expect(patch).toContain('failOnStartupError: false');
+    }
+    expect(readFileSync(join(home, '.dsh', 'profiles', 'desktop', 'cordis.patch.yml'), 'utf8')).toContain('id: other');
+    const missing = mkdtempSync(join(tmpdir(), 'sea-resume-mcp-empty-'));
+    mkdirSync(join(missing, '.sea-resume-ai-relay'), { recursive: true });
+    writeFileSync(join(missing, '.sea-resume-ai-relay', 'relay.mjs'), '');
+    const empty = spawnSync(process.execPath, ['--input-type=module', '-'], {
+      input: relaySetupCommand('dsh', origin, baseUrl).split("<<'EOF'\n")[1]!.split('\nEOF')[0],
+      encoding: 'utf8',
+      env: { ...process.env, SEA_RESUME_MCP_CLIENT: 'dsh', SEA_RESUME_MCP_ORIGIN: origin, SEA_RESUME_MCP_HOME: missing },
+    });
+    expect(empty.status).not.toBe(0);
+    expect(empty.stderr).toContain('没有找到 DSH profile');
+    const powershell = relaySetupCommand('dsh', origin, baseUrl, 'powershell');
+    expect(powershell).toContain('Invoke-WebRequest');
+    expect(powershell.split("@'")[0]).not.toContain('&&');
+    expect(powershell).toContain("$env:SEA_RESUME_MCP_CLIENT='dsh'");
+    expect(powershell).toContain("'@ | node --input-type=module -");
   });
   it('reports waiting after the host loads and only accepts relay notices from that frame', async () => {
     vi.resetModules();

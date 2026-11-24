@@ -4,6 +4,10 @@
 
 ## [未发布]
 
+### 新增
+
+- **外部 AI**：MCP 接入命令覆盖 Pi、ZCode、DeepSeek Harness，以及 OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI、Crush、Goose。Relay 仍是同一条本机 stdio。
+
 ### 修复
 
 - 统一联系方式图标的描边与视觉对齐，修复多图标并排时的截断（随 1.0.0 一起发布）。

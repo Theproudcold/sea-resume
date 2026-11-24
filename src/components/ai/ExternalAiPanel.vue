@@ -2,7 +2,7 @@
   <el-drawer :model-value="visible" title="用文件交给外部 AI" size="min(640px, calc(100vw - 24px))" :before-close="beforeClose" @update:model-value="emit('update:visible', $event)">
     <div class="external-ai-panel">
       <el-alert type="warning" :closable="false" show-icon title="文件交换不连接本机 MCP">
-        <p>实时管理全部简历请回到简历主页的「连接 Codex / Claude Code」。这里只导出可见正文，导入后仍需确认才保存。</p>
+        <p>实时管理全部简历请回到简历主页的「外部 AI」。这里只导出可见正文，导入后仍需确认才保存。</p>
       </el-alert>
         <section v-if="session.entries.length" aria-labelledby="external-proposals-title">
           <h3 id="external-proposals-title">文件导入的草稿（{{ session.entries.length }}）</h3>
@@ -25,7 +25,7 @@
         </section>
         <el-collapse>
           <el-collapse-item title="通过文件导入修改（无需实时连接）" name="files">
-            <p>下载并解压工作区，在该目录启动 Codex CLI 或 Claude Code。让它读取 context/resume.json，按 AGENTS.md / CLAUDE.md 生成 proposals/*.json，再导入审核。请保持本面板打开。</p>
+            <p>下载并解压工作区，在该目录启动外部 Agent。让它读取 context/resume.json，按 AGENTS.md / CLAUDE.md 生成 proposals/*.json，再导入审核。请保持本面板打开。</p>
             <div class="action-row">
               <el-button :loading="busy" @click="exportContext">下载 AI 工作区</el-button>
               <el-button :disabled="busy" @click="fileInput?.click()">导入修改草稿</el-button>
