@@ -14,10 +14,12 @@
         <el-radio-button value="polish">经历润色</el-radio-button>
         <el-radio-button value="quick">快捷修改</el-radio-button>
         <el-radio-button value="greeting">打招呼语</el-radio-button>
+        <el-radio-button value="jdRisk">岗位判读</el-radio-button>
       </el-radio-group>
       <ResumeOptimizationPanel v-if="visible && mode === 'optimize'" ref="optimizationPanel" :resume="resume" @configure="configureModel" @applied="handleOptimized" />
       <StarPolishPanel v-if="visible && mode === 'polish'" ref="polishPanel" :resume="resume" @configure="configureModel" @apply="(proposal, done) => emit('apply', proposal, done)" />
       <GreetingPanel v-if="visible && mode === 'greeting'" :resume="resume" @configure="configureModel" />
+      <JdRiskPanel v-if="visible && mode === 'jdRisk'" />
       <template v-if="mode === 'quick'">
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>隐私说明</template>
@@ -91,6 +93,7 @@ import { requestResumeAiDraft } from '@/services/ai/quickEdit';
 import ResumeOptimizationPanel from '@/components/ai/ResumeOptimizationPanel.vue';
 import StarPolishPanel from '@/components/ai/StarPolishPanel.vue';
 import GreetingPanel from '@/components/ai/GreetingPanel.vue';
+import JdRiskPanel from '@/components/ai/JdRiskPanel.vue';
 
 const props = defineProps<{ visible: boolean; resume: ResumeData; undoAvailable: boolean }>();
 const emit = defineEmits<{
@@ -109,7 +112,7 @@ const loading = ref(false);
 const errorMessage = ref('');
 const pendingDraft = ref<ResumeChangeProposal | null>(null);
 const applying = ref(false);
-const mode = ref<'quick' | 'optimize' | 'polish' | 'greeting'>('optimize');
+const mode = ref<'quick' | 'optimize' | 'polish' | 'greeting' | 'jdRisk'>('optimize');
 const optimizationPanel = ref<InstanceType<typeof ResumeOptimizationPanel>>();
 const polishPanel = ref<InstanceType<typeof StarPolishPanel>>();
 async function beforeClose(): Promise<boolean> {
@@ -119,7 +122,7 @@ async function beforeClose(): Promise<boolean> {
   return true;
 }
 async function closeDrawer(done: () => void) { if (await beforeClose()) done(); }
-async function changeMode(value: string | number | boolean | undefined) { if ((value === 'quick' || value === 'optimize' || value === 'polish' || value === 'greeting') && await beforeClose()) mode.value = value; }
+async function changeMode(value: string | number | boolean | undefined) { if ((value === 'quick' || value === 'optimize' || value === 'polish' || value === 'greeting' || value === 'jdRisk') && await beforeClose()) mode.value = value; }
 async function configureModel() { if (await beforeClose()) emit('configure'); }
 defineExpose({ beforeClose });
 let controller: AbortController | undefined;
