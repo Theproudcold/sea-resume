@@ -8,6 +8,18 @@
 
 - 统一联系方式图标的描边与视觉对齐，修复多图标并排时的截断（随 1.0.0 一起发布）。
 
+## [1.2.0] - 2026-11-24
+
+### 新增
+
+- **版本图谱**：版本管理新增「版本图谱」页签。左侧窄轨道表示版本关系，右侧逐行列出简历。竖线是同一主干推进，折线是岗位版本从某一版主干分出，虚线是同步主干。新的记录在上；没有版本关系的独立简历不占行，数量单独说明。
+
+### 修复
+
+- 同步线连到同轨道上 `baseVersion` 对应的那一版主干。`baseId` 始终是最初分出的那一版，不再被当成这次同步的目标。对应主干已删除时，该岗位标为找不到主干、不连线。
+- 跨多行的轨道线在中间行保持同一列，不再在行缝处提前折走。
+- 岗位一多，左侧轨道跟着变宽，最右一列的圆点不再画出画布。
+
 ## [1.1.0] - 2026-11-24
 
 ### 新增
@@ -65,5 +77,8 @@
 - 约定功能分支经 PR 合入 `dev` 与 `master` 的协作流程。
 - 测试覆盖：114 个 spec 文件；`pnpm verify`（完整测试、类型检查、生产构建）为合入与部署的必经检查。
 
-[未发布]: https://github.com/Theproudcold/sea-resume/compare/v1.0.0...HEAD
+[未发布]: https://github.com/Theproudcold/sea-resume/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Theproudcold/sea-resume/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/Theproudcold/sea-resume/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/Theproudcold/sea-resume/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Theproudcold/sea-resume/releases/tag/v1.0.0

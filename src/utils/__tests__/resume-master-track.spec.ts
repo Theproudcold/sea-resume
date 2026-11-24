@@ -151,3 +151,24 @@ describe('落后主干判定', () => {
     expect(masterBehindStatus(legacy, [master('m1', 1), master('m2', 2)]).behind).toBe(false);
   });
 });
+
+describe('同步来源字段', () => {
+  it('keeps rebasedFromId through normalization', () => {
+    const source = resume();
+    source.jobTarget = {
+      versionName: 'Acme', company: 'Acme', position: '前端',
+      sourceResumeId: 'm1', baseId: 'm1', baseVersion: 2, rebasedFromId: 'previous-branch',
+    };
+    const normalized = normalizeResumeData(source);
+    expect(normalized.jobTarget?.rebasedFromId).toBe('previous-branch');
+  });
+
+  it('does not invent rebasedFromId for legacy records', () => {
+    const legacy = normalizeResumeData({
+      ...resume(),
+      jobTarget: { versionName: 'Acme', company: 'Acme', position: '前端', sourceResumeId: 'main-1' },
+    });
+    // 旧分支没有同步来源：留空，由图谱按「链头」处理，不伪造。
+    expect(legacy.jobTarget?.rebasedFromId).toBeUndefined();
+  });
+});

@@ -286,6 +286,27 @@ describe('ResumeVersionManager comparison', () => {
     expect(wrapper.find('[data-testid=rebase-start]').exists()).toBe(false);
   });
 
+  it('opens the version graph tab and fills version B from a selected node', async () => {
+    const indexed: ResumeMeta[] = [
+      { id: 'm1', title: '我的简历', templateId: 'modern', createdAt: 1, updatedAt: 1, trackId: 'T', versionNumber: 1 },
+      { id: 'm2', title: '我的简历', templateId: 'modern', createdAt: 2, updatedAt: 2, trackId: 'T', versionNumber: 2 },
+    ];
+    // 不用 stub：在真实父组件里确认图谱能挂上，并且点选后切到比较页签。
+    const wrapper = mount(ResumeVersionManager, { props: { modelValue: true, resumes: indexed }, global: { stubs } });
+    await wrapper.find('.open-history').trigger('click');
+    await flushPromises();
+    const vm = wrapper.vm as unknown as { handleGraphSelect: (id: string) => void; activeTab: string; afterId: string };
+    expect(typeof vm.handleGraphSelect).toBe('function');
+    vm.handleGraphSelect('m2');
+    await flushPromises();
+    expect(vm.activeTab).toBe('compare');
+    expect(vm.afterId).toBe('m2');
+    // 点一个不存在的 id 不产生副作用。
+    vm.handleGraphSelect('missing');
+    await flushPromises();
+    expect(vm.afterId).toBe('m2');
+  });
+
   function selectionCount(wrapper: ReturnType<typeof mountManager>) {
     const match = wrapper.text().match(/已选 (\d+) \/ (\d+) 项/);
     return match ? { selected: Number(match[1]), total: Number(match[2]) } : null;

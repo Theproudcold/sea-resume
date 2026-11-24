@@ -125,6 +125,14 @@ export interface ResumeJobTarget {
   baseId?: string;
   /** 派生时所用主干版本的版本号。 */
   baseVersion?: number;
+  /**
+   * 同步主干时，这个新版本来自哪个分支版本。
+   *
+   * 同步会生成一条新记录而不是原地改写，没有这个字段的话，同一岗位上会出现
+   * 多条互不相识的记录，版本图谱只能靠时间猜先后。旧数据没有它：单条记录视为
+   * 链头，多条按基线排序兜底。
+   */
+  rebasedFromId?: string;
 }
 
 // 主题配置
