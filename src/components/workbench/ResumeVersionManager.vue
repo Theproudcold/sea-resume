@@ -219,7 +219,7 @@
             <input v-model="rebaseSelected" type="checkbox" :value="index" data-testid="rebase-choice" />
             <span>
               <strong>{{ rebasePreview(addition) }}</strong>
-              <small>{{ addition.kind === 'highlight' ? '要点' : addition.kind === 'experience' ? '整段经历' : '整段项目' }}{{ addition.conflict ? ' · 该条目在你这里是改过的，请确认' : '' }}</small>
+              <small>{{ addition.kind === 'highlight' ? '要点' : addition.kind === 'description' ? '描述' : addition.kind === 'experience' ? '整段经历' : '整段项目' }}{{ addition.conflict ? ' · 该条目在你这里是改过的，请确认' : '' }}</small>
             </span>
           </label>
         </li>
