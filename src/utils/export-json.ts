@@ -3,7 +3,7 @@ import { withAlignedCustomBlockOrder } from '@/resume/sections';
 import { generateId } from '@/utils/helpers';
 import { parseAvatarShape } from '@/utils/avatarShape';
 import { validateJsonImportFileSize } from '@/utils/importLimits';
-import { isSavedRecipeId, readLayoutRecipe } from '@/utils/layout-template';
+import { isLayoutSeedId, isSavedRecipeId, readLayoutRecipe } from '@/utils/layout-template';
 import { sanitizeRichTextHtml, sanitizeMarkdownUrl } from '@/utils/markdown/markdownSafety';
 
 export { MAX_JSON_IMPORT_FILE_SIZE, validateJsonImportFileSize } from '@/utils/importLimits';
@@ -61,10 +61,9 @@ export function validateResumeData(input: unknown): ResumeData {
   const now = new Date().toISOString();
   const requestedTemplateId = text(input.templateId, 'templateId', 'modern');
   const layout = readLayoutRecipe(input.layout);
-  const builtinTemplateIds = ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'];
   const templateId = layout && isSavedRecipeId(requestedTemplateId)
     ? requestedTemplateId
-    : builtinTemplateIds.includes(requestedTemplateId) ? requestedTemplateId : 'modern';
+    : isLayoutSeedId(requestedTemplateId) ? requestedTemplateId : 'modern';
 
   const resume = {
     ...input,

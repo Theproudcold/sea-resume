@@ -10,6 +10,11 @@ export const templateRegistry = {
   minimal: defineAsyncComponent(() => import('./templates/MinimalTemplate.vue')),
   tech: defineAsyncComponent(() => import('./templates/TechTemplate.vue')),
   'ai-agent': defineAsyncComponent(() => import('./templates/AiAgentTemplate.vue')),
+  classic: defineAsyncComponent(() => import('./templates/ClassicTemplate.vue')),
+  editorial: defineAsyncComponent(() => import('./templates/EditorialTemplate.vue')),
+  engineer: defineAsyncComponent(() => import('./templates/EngineerTemplate.vue')),
+  executive: defineAsyncComponent(() => import('./templates/ExecutiveTemplate.vue')),
+  campus: defineAsyncComponent(() => import('./templates/CampusTemplate.vue')),
 };
 
 export function getTemplateComponent(templateId: string) {

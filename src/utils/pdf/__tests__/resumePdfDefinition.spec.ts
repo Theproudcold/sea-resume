@@ -24,7 +24,10 @@ function cloneDemo(): ResumeData {
 
 describe('pdfmake resume definition', () => {
   it('provides a dedicated layout for each supported template and falls back safely', () => {
-    expect(Object.keys(pdfTemplateLayouts)).toEqual(['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent']);
+    expect(Object.keys(pdfTemplateLayouts)).toEqual([
+      'modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent',
+      'classic', 'editorial', 'engineer', 'executive', 'campus',
+    ]);
     expect(getPdfTemplateLayout('unknown')).toBe(pdfTemplateLayouts.modern);
     for (const templateId of Object.keys(pdfTemplateLayouts)) {
       const definition = createResumePdfDefinition({ ...cloneDemo(), templateId });
@@ -32,6 +35,8 @@ describe('pdfmake resume definition', () => {
       expect(textFrom(definition.content)).toContain('李晨阳');
     }
     expect(pdfTemplateLayouts.professional.sidebarSections).toEqual(['education', 'skills']);
+    expect(pdfTemplateLayouts.editorial.sidebarSections).toEqual(['skills', 'education']);
+    expect(pdfTemplateLayouts.editorial.sidebarSide).toBe('right');
     expect(pdfTemplateLayouts.creative.headerFill).toBeTruthy();
     expect(pdfTemplateLayouts.tech.headerFill).toBeTruthy();
   });

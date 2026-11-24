@@ -207,12 +207,7 @@
         <el-form-item label="新简历名称" required :error="title.trim() ? '' : '请填写简历名称'"><el-input v-model="title" maxlength="80" show-word-limit /></el-form-item>
         <el-form-item label="模板">
           <el-select v-model="templateId" class="w-full">
-            <el-option label="现代简约" value="modern" />
-            <el-option label="商务专业" value="professional" />
-            <el-option label="创意设计" value="creative" />
-            <el-option label="极简主义" value="minimal" />
-            <el-option label="科技感" value="tech" />
-            <el-option label="AI Agent 技术" value="ai-agent" />
+            <el-option v-for="tpl in builtinTemplates" :key="tpl.id" :label="tpl.name" :value="tpl.id" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -245,6 +240,7 @@ import { cancelExternalTask, copyExternalTaskPrompt, enqueueExternalTask, useExt
 import { extractPdfText, renderPdfPagesToImages, requestAiPdfMarkdown, requestAiPdfMarkdownFromImages, buildVisionTruncationWarning, buildTextTruncationWarning, MAX_VISION_PAGES, type ExtractedPdfText, type PdfImportMode, type RenderedPdfPages } from '@/services/ai/pdfResumeImport';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { markdownToSafeHtml } from '@/utils/markdown/markdownSafety';
+import { builtinTemplates } from '@/stores/template';
 import { describeError } from '@/utils/globalErrorReporting';
 
 const props = withDefaults(defineProps<{ modelValue: boolean; loading?: boolean }>(), { loading: false });
