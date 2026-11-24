@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import type { ResumeMeta, ResumeData } from '@/types/resume';
 import { storageManager, metaFromResume } from '@/services/storage/StorageManager';
+import { recordInitialResumeCommit, removeResumeHistory } from '@/services/history/service';
 import { generateId } from '@/utils/helpers';
 import { isBuiltinLayoutId } from '@/utils/custom-template';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
@@ -137,6 +138,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       try {
         await storageManager.saveResume(newResume);
         this.upsertMeta(metaFromResume(newResume));
+        await recordInitialResumeCommit(newResume, '初始版本');
         return newResume.id;
       } catch (error) {
         console.error('创建简历失败:', error);
@@ -173,6 +175,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       };
       await storageManager.saveResume(newResume);
       this.upsertMeta(metaFromResume(newResume));
+      await recordInitialResumeCommit(newResume, '初始版本');
       return id;
     },
 
@@ -182,6 +185,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       const version = createJobResumeVersion(source, target, generateId());
       await storageManager.saveResume(version);
       this.upsertMeta(metaFromResume(version));
+      await recordInitialResumeCommit(version, `创建岗位版本：${target.versionName.trim() || target.position.trim() || '未命名'}`);
       return version.id;
     },
     /**
@@ -192,6 +196,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       try {
         await storageManager.delete(id);
         this.removeMeta(id);
+        await removeResumeHistory(id);
 
         // 如果删除的是当前选中的简历，清除选中状态
         if (this.currentResumeId === id) {
@@ -230,6 +235,7 @@ export const useWorkbenchStore = defineStore('workbench', {
 
         await storageManager.saveResume(newResume);
         this.upsertMeta(metaFromResume(newResume));
+        await recordInitialResumeCommit(newResume, `复制自 ${originalData.title}`);
         return newId;
       } catch (error) {
         console.error(`复制简历 ${id} 失败:`, error);

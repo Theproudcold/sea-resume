@@ -106,7 +106,7 @@ describe('ResumeCard 操作菜单', () => {
     await flushPromises();
 
     const items = wrapper.findAll('li.menu-item');
-    expect(items.map((item) => item.text())).toEqual(['模拟面试', '重命名', '复制', '删除']);
+    expect(items.map((item) => item.text())).toEqual(['模拟面试', '版本历史', '重命名', '复制', '删除']);
     for (const item of items) {
       expect(item.find('.menu-icon').exists()).toBe(true);
     }

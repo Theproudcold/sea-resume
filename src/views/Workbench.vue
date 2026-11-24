@@ -104,6 +104,7 @@
               @edit="handleEdit(resume.id)"
               @interview="router.push({ path: '/interview/new', query: { resumeId: resume.id } })"
               @rename="handleRename(resume)"
+              @history="openHistory(resume.id)"
               @duplicate="handleDuplicate(resume.id)"
               @delete="handleDelete(resume)"
             />
@@ -276,6 +277,10 @@ const handleEdit = (id: string) => {
   router.push(`/editor/${id}`);
 };
 
+const openHistory = (id: string) => {
+  router.push({ path: `/editor/${id}`, query: { history: '1' } });
+};
+
 const goToTemplates = () => {
   router.push('/templates');
 };
@@ -365,7 +370,7 @@ const handleDuplicate = async (id: string) => {
 const handleDelete = async (resume: ResumeMeta) => {
   try {
     await ElMessageBox.confirm(
-      `确定要删除「${resume.title}」吗？此操作无法撤销。`,
+      `确定要删除「${resume.title}」吗？此操作无法撤销，版本历史也会一并删除。`,
       '删除确认',
       {
         confirmButtonText: '删除',

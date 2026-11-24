@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import type { StorageType, StorageConfig } from '@/types/storage';
 import { coerceStorageType } from '@/types/storage';
 import { storageManager } from '@/services/storage/StorageManager';
+import { clearResumeHistory } from '@/services/history/service';
 
 const STORAGE_CONFIG_KEY = 'sea-resume_storage-config';
 
@@ -110,6 +111,7 @@ export const useStorageStore = defineStore('storage', {
     async clearAll() {
       const resumes = await storageManager.list();
       await Promise.all(resumes.map((resume) => storageManager.delete(resume.id)));
+      await clearResumeHistory();
     },
   },
 });
