@@ -90,6 +90,30 @@ describe('ResumeOptimizationPanel', () => {
     expect(version.basic.summary).toContain('真实个人行动'); expect(version.basic.title).toBe(resume.basic.title); expect(store.data.basic.summary).toBe(resume.basic.summary);
     expect(panel.emitted('applied')).toEqual([['new-job-version']]);
   });
+  it('shows the deterministic guard verdict and keeps blocked suggestions out of the apply count', async () => {
+    const { wrapper: panel } = setup();
+    const fabricated = { id: 's1', operation: { type: 'set_basic', field: 'summary', value: '原始内容，效率提升 40%' }, reason: '更具体', requirement: '', sourceRefs: ['basic.summary'] };
+    vi.mocked(requestAiJson).mockResolvedValueOnce(analysis).mockResolvedValueOnce({ suggestions: [fabricated, suggestions[1]] }).mockResolvedValueOnce({ reviews: [{ id: 's1', status: 'pass', reason: '自审通过' }, { id: 's2', status: 'pass', reason: '有来源' }] });
+    await startAndSkip(panel);
+    const blocked = panel.get('[data-review=reject]');
+    expect(blocked.text()).toContain('事实校验未通过');
+    expect(blocked.text()).toContain('40');
+    expect(blocked.get('input').attributes('disabled')).toBeDefined();
+    // 用户对通过校验的建议勾选后，应用计数只包含未被拦下的那一条。
+    await panel.get('[data-review=pass] input').setValue(true);
+    expect(panel.get('[data-testid=apply]').text()).toContain('应用 1 条');
+  });
+
+  it('does not duplicate the guard message when the review also rejects the suggestion', async () => {
+    const { wrapper: panel } = setup();
+    const fabricated = { id: 's1', operation: { type: 'set_basic', field: 'summary', value: '原始内容，效率提升 40%' }, reason: '更具体', requirement: '', sourceRefs: ['basic.summary'] };
+    vi.mocked(requestAiJson).mockResolvedValueOnce(analysis).mockResolvedValueOnce({ suggestions: [fabricated] }).mockResolvedValueOnce({ reviews: [{ id: 's1', status: 'reject', reason: '无依据' }] });
+    await startAndSkip(panel);
+    const text = panel.get('[data-review=reject]').text();
+    expect(text).toContain('事实校验未通过');
+    expect(text.match(/改写引入了原句没有的数字/g) ?? []).toHaveLength(1);
+  });
+
   it('detects live edits before copying and never overwrites conflicts', async () => {
     const { wrapper: panel, store } = setup();
     const create = vi.spyOn(useWorkbenchStore(), 'createResumeFromData').mockResolvedValue('copy');
