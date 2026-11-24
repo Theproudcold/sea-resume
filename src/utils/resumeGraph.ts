@@ -272,42 +272,44 @@ export function buildResumeGraph(resumes: ResumeMeta[], options: GraphOptions = 
     paths.push({ lane, color: LANE_COLORS[lane % LANE_COLORS.length]!, kind: 'main', points });
   }
 
-  // ② 岗位：每条分支占一段行区间（自己那行 → 来源行），区间不重叠时可复用同一列。
+  // ② 岗位：**同一个岗位的所有版本共用一列**，不同岗位各占一列。
   //
-  // 不复用时每个岗位各占一列，几条分支就横向铺开一大片，线间距看起来忽宽忽窄；
-  // 复用后分支首尾相接在同一条竖线位置，才是 Git 图那种紧凑的轨道感。
-  /** 每列已占用的行区间。 */
-  const laneRanges: Array<Array<{ start: number; end: number }>> = [];
-  const overlaps = (lane: number, start: number, end: number) =>
-    (laneRanges[lane] ?? []).some((range) => start <= range.end && end >= range.start);
-  const claimBranchLane = (start: number, end: number): number => {
-    for (let lane = mainLaneCursor; lane < laneRanges.length + mainLaneCursor; lane += 1) {
-      if (!overlaps(lane, start, end)) {
-        (laneRanges[lane] ??= []).push({ start, end });
-        return lane;
-      }
-    }
-    const lane = laneRanges.length + mainLaneCursor;
-    laneRanges[lane] = [{ start, end }];
+  // 之前按「行区间不重叠就复用列」分配，结果 `Acme 前端` 和 `Beta 后端` 这两个
+  // 毫不相干的岗位落在同一列上，视觉上被读成一条连续的轨道——语义是错的。
+  // 列应当表示「哪条分支」，而不是「谁的占位没撞车」。
+  const laneOfJob = new Map<string, number>();
+  let branchLaneCursor = mainLaneCursor;
+
+  const assignLane = (row: ResumeMeta, start: number, end: number): number => {
+    const target = row.jobTarget!;
+    const key = `${row.trackId ?? ''}::${target.company ?? ''}::${target.position ?? ''}`;
+    const existingLane = laneOfJob.get(key);
+    if (existingLane !== undefined) return existingLane;
+    const lane = branchLaneCursor;
+    branchLaneCursor += 1;
+    laneOfJob.set(key, lane);
+    void start;
+    void end;
     return lane;
   };
 
   for (const vertex of vertices) {
     if (rows[vertex.row]!.kind !== 'branch') continue;
+    const row = ordered[vertex.row]!;
     const parent = vertex.parents[0];
+    const start = parent === undefined ? vertex.row : Math.min(vertex.row, parent);
+    const end = parent === undefined ? vertex.row : Math.max(vertex.row, parent);
+    const lane = assignLane(row, start, end);
+    laneOf[vertex.row] = lane;
+
     if (parent === undefined) {
-      // 孤立岗位：只给自己一个点，独占一列。
-      const lane = claimBranchLane(vertex.row, vertex.row);
-      laneOf[vertex.row] = lane;
+      // 孤立岗位：只给自己一个点。
       paths.push({ lane, color: LANE_COLORS[lane % LANE_COLORS.length]!, kind: 'branch', points: [{ row: vertex.row, lane }] });
       continue;
     }
+
     // 折点分三段：本列竖直下行 → 在「来源行上一行」处汇入主干列 → 落到来源行。
     // 中间保持在自己列上竖直走，弯折只占相邻一行，画出来才是平行的竖直轨道。
-    const start = Math.min(vertex.row, parent);
-    const end = Math.max(vertex.row, parent);
-    const lane = claimBranchLane(start, end);
-    laneOf[vertex.row] = lane;
     const points: PathPoint[] = [{ row: vertex.row, lane }];
     if (end - start > 1) {
       const stayRow = vertex.row < parent ? parent - 1 : parent + 1;
