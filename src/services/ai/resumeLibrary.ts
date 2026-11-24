@@ -1,8 +1,13 @@
-import type { InterviewSession, InterviewSettings } from '@/types/interview';
+import type { InterviewObservation, InterviewSession, InterviewSettings, InterviewTurn } from '@/types/interview';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
+import { scanJdRisks, type JdRiskScan } from '@/utils/jdRiskLexicon';
+import { checkResumeQuality, type ResumeQualityIssue } from '@/utils/resumeQuality';
+import { createJobResumeVersion } from '@/utils/resumeVersions';
 import { exportInterviewMarkdown } from './interview';
+import { buildResumeContext } from './resumeContext';
 import { parseExternalResume } from './externalResume';
+import { completeExternalTask, listExternalTasks, type ExternalTask, type ExternalTaskStatus } from './externalTaskQueue';
 
 export interface ResumeSummary {
   id: string;
@@ -18,10 +23,13 @@ export interface ResumeCatalog {
   remove: (id: string) => Promise<void>;
   /** The resume open in the editor must not be saved again after deletion. */
   discardOpen?: (id: string) => Promise<void>;
+  /** Navigate the browser into the visual editor for live preview of this resume. */
+  open?: (id: string) => Promise<void>;
   exportPdf?: (resume: ResumeData) => Promise<void>;
   interviews?: {
     list: () => Promise<InterviewSession[]>;
     get: (id: string) => Promise<InterviewSession | null>;
+    save?: (session: InterviewSession) => Promise<void>;
     remove: (id: string) => Promise<void>;
     start: (resume: ResumeData, settings: InterviewSettings) => Promise<InterviewSession | null>;
   };
@@ -79,6 +87,10 @@ export function createResumeLibrary(catalog: ResumeCatalog) {
       const next = parseExternalResume(input);
       const now = new Date().toISOString();
       next.id = generateId();
+      // 新建简历自成一条干净主干轨道，避免沿用归一化阶段生成的临时 id 或被外部伪造分支指向。
+      next.trackId = next.id;
+      next.versionNumber = 1;
+      delete next.jobTarget;
       next.createdAt = now;
       next.updatedAt = now;
       await catalog.save(next);
@@ -89,6 +101,42 @@ export function createResumeLibrary(catalog: ResumeCatalog) {
       await catalog.discardOpen?.(id);
       await catalog.remove(id);
       return { id, deleted: true };
+    },
+    async open(id: string): Promise<{ id: string; opened: true }> {
+      if (!await catalog.read(id)) throw new Error('没有这份简历。');
+      if (!catalog.open) throw new Error('当前页面不能打开编辑器预览。');
+      await catalog.open(id);
+      return { id, opened: true };
+    },
+    async deriveVersion(input: unknown): Promise<ResumeData> {
+      const value = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : {};
+      const sourceId = typeof value.sourceResumeId === 'string' ? value.sourceResumeId.trim() : '';
+      if (!sourceId) throw new Error('请提供来源简历 sourceResumeId。');
+      const source = await catalog.read(sourceId);
+      if (!source) throw new Error('没有这份来源简历。');
+      const derived = createJobResumeVersion(source, {
+        versionName: typeof value.versionName === 'string' ? value.versionName.slice(0, 100) : '',
+        company: typeof value.company === 'string' ? value.company.slice(0, 120) : '',
+        position: typeof value.position === 'string' ? value.position.slice(0, 120) : '',
+      });
+      await catalog.save(derived);
+      return derived;
+    },
+    async checkQuality(id: string): Promise<{ id: string; issueCount: number; issues: ResumeQualityIssue[] }> {
+      const resume = await catalog.read(id);
+      if (!resume) throw new Error('没有这份简历。');
+      const issues = checkResumeQuality(resume);
+      return { id, issueCount: issues.length, issues };
+    },
+    scanJdRisks(jd: string): JdRiskScan {
+      return scanJdRisks(jd);
+    },
+    listTasks(status?: string): ExternalTask[] {
+      const normalized: ExternalTaskStatus | 'all' = status === 'completed' || status === 'cancelled' || status === 'all' ? status : 'pending';
+      return listExternalTasks(normalized);
+    },
+    completeTask(id: string, result: unknown): ExternalTask {
+      return completeExternalTask(id, result);
     },
     async exportPdf(id: string): Promise<{ id: string; downloaded: true }> {
       const resume = await catalog.read(id);
@@ -112,6 +160,73 @@ export function createResumeLibrary(catalog: ResumeCatalog) {
       if (!session) throw new Error('没有这份面试记录。');
       return { session, markdown: exportInterviewMarkdown(session) };
     },
+    async saveInterview(input: unknown): Promise<InterviewSession> {
+      if (!catalog.interviews?.save) throw new Error('当前页面不能保存面试记录。');
+      const value = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : {};
+      const resumeId = typeof value.resumeId === 'string' ? value.resumeId.trim() : '';
+      const resume = resumeId ? await catalog.read(resumeId) : null;
+      if (!resume) throw new Error('没有这份简历。');
+      const now = new Date().toISOString();
+      const settings = interviewSettings(value);
+      const cleanStrings = (items: unknown, limit: number, maxLen: number) => Array.isArray(items)
+        ? items.filter((item): item is string => typeof item === 'string' && !!item.trim()).map(item => item.trim().slice(0, maxLen)).slice(0, limit)
+        : [];
+      const observations: InterviewObservation[] = Array.isArray(value.observations)
+        ? value.observations.slice(0, 30).flatMap((entry): InterviewObservation[] => {
+          if (!entry || typeof entry !== 'object') return [];
+          const row = entry as Record<string, unknown>;
+          const text = typeof row.text === 'string' ? row.text.trim().slice(0, 600) : '';
+          if (!text) return [];
+          const category = row.category === 'strength' || row.category === 'knowledge' ? row.category : 'expression';
+          return [{ category, text, verification: 'needs-verification', evidence: [] }];
+        })
+        : [];
+      const turns: InterviewTurn[] = Array.isArray(value.turns)
+        ? value.turns.slice(0, 30).flatMap((entry, index): InterviewTurn[] => {
+          if (!entry || typeof entry !== 'object') return [];
+          const row = entry as Record<string, unknown>;
+          const questionText = typeof row.question === 'string' ? row.question.trim().slice(0, 1000) : '';
+          if (!questionText) return [];
+          const answer = typeof row.answer === 'string' ? row.answer.trim().slice(0, 4000) : '';
+          return [{
+            id: `turn-${index + 1}`,
+            mainNumber: index + 1,
+            followup: false,
+            question: { text: questionText, focus: settings.targetRole || settings.direction, kind: 'experience', itemIds: [] },
+            ...(answer ? { answer, submittedAt: now } : { skipped: true }),
+          }];
+        })
+        : [];
+      const facts = cleanStrings(value.facts, 20, 500).map((text, index) => ({ id: `fact-${index + 1}`, answerId: turns[0]?.id ?? 'external', text }));
+      const session: InterviewSession = {
+        id: `interview-mcp-${generateId()}`,
+        sourceResumeId: resume.id,
+        createdAt: now,
+        updatedAt: now,
+        context: buildResumeContext(resume, { generalizeOrganizations: false }),
+        settings,
+        provider: { baseUrl: 'mcp://external-agent', model: 'external-agent' },
+        status: 'completed',
+        pendingStage: null,
+        coveragePlan: cleanStrings(value.coveragePlan, 12, 200),
+        turns,
+        report: {
+          incomplete: false,
+          observations,
+          followupReview: [],
+          priorities: cleanStrings(value.priorities, 10, 400),
+          facts,
+          referencePhrasing: typeof value.summary === 'string' ? value.summary.trim().slice(0, 3000) : '',
+          knowledgeExplanation: '',
+        },
+        usage: { calls: 0, promptTokens: 0, completionTokens: 0 },
+        persistence: true,
+        jsonMode: false,
+        ending: true,
+      };
+      await catalog.interviews.save(session);
+      return session;
+    },
     async deleteInterview(id: string) {
       const interviews = catalog.interviews;
       if (!interviews || !await interviews.get(id)) throw new Error('没有这份面试记录。');
@@ -122,7 +237,7 @@ export function createResumeLibrary(catalog: ResumeCatalog) {
       const resume = await catalog.read(resumeId);
       if (!resume || !catalog.interviews) throw new Error('没有这份简历，或当前页面不能开始面试。');
       const session = await catalog.interviews.start(resume, interviewSettings(settings));
-      if (!session) throw new Error('请先在设置里配置可用的 AI 模型。');
+      if (!session) throw new Error('网页未配置直连 AI 模型。若希望通过外部 Agent 免 API Key 模拟面试，请直接由 Agent 主持面试并调用 sea_interview_save 保存复盘记录。');
       return session;
     },
   };

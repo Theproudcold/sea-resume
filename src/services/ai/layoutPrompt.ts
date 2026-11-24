@@ -15,7 +15,7 @@ export function layoutEditBasis(resume: ResumeData): { layout: LayoutRecipe | nu
 /** 快捷助手与外部 AI 共用的改版式步骤。两边只改语言，不改决策。 */
 export const QUICK_LAYOUT_GUIDANCE = [
   '版式只在用户提到排版时才改。没提到栏数、侧栏、页眉、头像、标题样式、纸色、字号、行距、页边距或主题色时，不要输出 set_layout，也不要为了“顺便整理”输出 set_template。',
-  '用户只是点名一套现成模板，且没有额外的结构要求时，只输出一条 set_template：现代简约 modern、商务专业 professional、创意设计 creative、极简 minimal、科技 tech、AI Agent ai-agent。这条操作会去掉自定义版式，不要再附 set_layout。',
+  '用户只是点名一套现成模板，且没有额外的结构要求时，只输出一条 set_template：现代简约 modern、商务专业 professional、创意设计 creative、极简 minimal、科技 tech、AI Agent ai-agent、经典学院 classic、现代杂志双栏 editorial、浅色工程文档 engineer、资深管理 executive、校招学术 campus。这条操作会去掉自定义版式，不要再附 set_layout。',
   '用户要改结构、页眉、纸色，或只改字号、行距、边距、主题色时，只输出一条 set_layout，不要同时 set_template。',
   'set_layout 必须返回完整版式，不能只写改过的字段。底稿用本次数据里的 layout；layout 为 null 时改用 layoutSeed。用户没提到的字段原样保留，否则字号和颜色会被重置。',
   'layout 为 null 表示取消自定义版式并回到当前内置模板，不改正文，也不改现有主题。',

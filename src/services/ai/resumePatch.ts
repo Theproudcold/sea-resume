@@ -1,9 +1,11 @@
 import type { ResumeData } from '@/types/resume';
 import type { ResumePatch, ResumePatchOperation } from '@/types/ai';
+import type { LayoutSeedId } from '@/types/layout-template';
+import { BUILTIN_LAYOUT_IDS } from '@/utils/custom-template';
 import { readLayoutRecipe, themeFromRecipe } from '@/utils/layout-template';
 import { markdownToSafeHtml, sanitizeMarkdownUrl } from '@/utils/markdown/markdownSafety';
 
-const templates = new Set(['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent']);
+const templates = new Set<string>(BUILTIN_LAYOUT_IDS);
 const entryCollections = new Set(['experiences', 'projects', 'education', 'skills', 'customBlocks']);
 const textFields: Record<string, string[]> = {
   set_basic: ['name', 'title', 'email', 'phone', 'location', 'website', 'summary'],
@@ -48,7 +50,7 @@ export function parseResumePatch(input: unknown, options?: { allowEmpty?: boolea
     const type = operation.type;
     if (type === 'set_template') {
       if (typeof operation.templateId !== 'string' || !templates.has(operation.templateId)) throw new Error('AI 请求了不支持的模板。');
-      return { type: 'set_template', templateId: operation.templateId as 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' | 'ai-agent' };
+      return { type: 'set_template', templateId: operation.templateId as LayoutSeedId };
     }
     if (type === 'set_layout') {
       if (operation.layout === null) return { type: 'set_layout', layout: null };

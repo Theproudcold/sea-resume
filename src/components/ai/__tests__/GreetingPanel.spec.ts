@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElButton } from 'element-plus';
 import GreetingPanel from '../GreetingPanel.vue';
 import { requestGreetings } from '@/services/ai/greeting';
-import { clearAiModelSettings, saveAiModelSettings, setAiSessionApiKey } from '@/services/ai/AiSettings';
+import { clearAiModelSettings, clearAiSessionApiKey, saveAiModelSettings, setAiSessionApiKey } from '@/services/ai/AiSettings';
+import { useMcpState } from '@/services/ai/useMcpBridge';
+import { clearExternalTasks, completeExternalTask, listExternalTasks } from '@/services/ai/externalTaskQueue';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import type { ResumeData } from '@/types/resume';
 vi.mock('@/services/ai/greeting', () => ({ requestGreetings: vi.fn() }));
@@ -83,5 +85,33 @@ describe('GreetingPanel', () => {
     setup(); vi.mocked(requestGreetings).mockResolvedValue(['1', '2', '3']);
     await start();
     expect(requestGreetings).toHaveBeenCalledWith(expect.objectContaining({ apiKey: '', authMode: 'none', model: 'local-model' }), resume, '', expect.anything());
+  });
+  it('dispatches greeting generation via MCP without an API key and populates returned candidates live', async () => {
+    clearAiModelSettings();
+    clearAiSessionApiKey();
+    clearExternalTasks();
+    const mcp = useMcpState();
+    mcp.linkState.value = 'connected';
+    try {
+      setup();
+      expect(panel.text()).toContain('外部 Agent（MCP · 免 API Key）');
+      expect(panel.get('[data-testid=greeting-start]').text()).toContain('派发给外部 Agent 生成（免 Key）');
+      await panel.get('[data-testid=greeting-jd]').setValue('招聘高级前端工程师');
+      await start();
+      const pending = listExternalTasks('pending');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]?.kind).toBe('greeting');
+      expect(requestGreetings).not.toHaveBeenCalled();
+      completeExternalTask(pending[0]!.id, {
+        summary: '已生成 2 条打招呼语',
+        greetings: ['您好，看到贵司前端岗位与我的架构经验高度匹配。', 'Hi，我主导过多个中后台前端性能优化项目。'],
+      });
+      await flushPromises();
+      expect(panel.findAll('.greeting-result')).toHaveLength(2);
+      expect((panel.get('#greeting-result-0').element as HTMLTextAreaElement).value).toContain('架构经验高度匹配');
+    } finally {
+      mcp.linkState.value = '';
+      clearExternalTasks();
+    }
   });
 });

@@ -167,12 +167,16 @@ A4 是定尺纸张、预览是连续长图，等分必然把正好压线的文�
 
 ### 14. 外部 MCP 的「已启动」不等于「已连接」
 
-`startExternalAiBridge` 返回时，页面只是加载完同源宿主和上游 embed，状态是 `waiting`。
-`connected` 只来自上游 widget 在 `hello/accepted` 后发出的 `sea-resume.relay` 消息；
-连接关闭或进入两分钟一次的休眠探测时是 `reconnecting`。宿主页只接受自己那个隐藏 frame、
-且来源等于本站的消息。停止桥接必须同时拆掉 frame 和这条监听，不能让旧连接继续改新会话的状态。
+`startExternalAiBridge` 返回时，若尚未收到握手通知，状态是 `waiting`。
+上游 `embed.js` 在隐藏 `host` iframe 内还会再创建一层 `iframe[data-webmcp-relay]`（`blob:` widget），
+因此 widget 调用 `window.parent.postMessage` 的接收者是 `host.contentWindow` 而非顶层 `window`。
+`startExternalAiBridge` 直接监听 `host.contentWindow`，且只接受来自 `hostDocument.querySelector('iframe[data-webmcp-relay]').contentWindow`、
+来源等于本站的 `sea-resume.relay` 消息：`connected` 来自 `hello/accepted`，`rejected` 来自 `hello/rejected`（如 `--widget-origin` 不匹配），
+连接关闭或进入两分钟一次的休眠探测时是 `reconnecting`。停止桥接必须同时拆掉 `host` frame 和这条监听，不能让旧连接继续改新会话的状态。
 
-MCP 连接挂在简历主页，离开页面后仍保持，直到用户停止。`sea_resume_list`、`get`、`set`、`create`、`delete` 操作当前存储里的全部简历。正在编辑的简历走 `importData`，其余直接 `saveResume` 并更新列表。删除正在编辑的简历时先 `discardOpenResume`，阻止自动保存把它写回。`sea_resume_export_pdf` 使用可搜索 PDF 并直接触发浏览器下载。面试工具只读写本机 AI 工作区记录；开始面试复用页面已配置的模型。文件交换仍使用草稿和人工确认。
+MCP 连接在主页与编辑器顶栏共享同一份单例状态，切换路由后仍保持，直到用户停止。`sea_resume_list`、`get`、`set`、`create`、`derive_version`、`delete`、`open`、`quality`、`sea_jd_risk_scan` 操作当前存储与纯前端规则引擎。`sea_resume_set` 要求传入完整结构；`sea_resume_create` 允许在空库或外部知识库场景只传核心字段，缺省章节、主题和条目 ID 由归一化补齐并经 `sanitizeResumeDataContent` 清洗；`sea_resume_derive_version` 复用 `createJobResumeVersion` 维持主干轨道与岗位分支谱系。正在编辑的简历走 `importData`，其余直接 `saveResume` 并更新列表；删除时同步调用 `removeMeta`，删除正在编辑的简历前先 `discardOpenResume` 阻止自动保存写回。`sea_resume_open` 将浏览器导航到 `/editor/:id` 供实时可视化预览。`sea_resume_export_pdf` 使用可搜索 PDF 并直接触发浏览器下载。
+
+外部 MCP 已连接时，AI 设置、AI 简历助手（简历优化、STAR 润色、快捷修改、打招呼语）、文本 PDF 导入与模拟面试均支持免 API Key 的 MCP 委派模式：网页把表单意图写入仅存内存的 `externalTaskQueue`（最多 20 条、断开桥接即清空），外部 Agent 通过 `sea_task_list` / `sea_task_complete` 读取并回填结果；外部 Agent 主持的模拟面试通过 `sea_interview_save` 写入本机面试历史，不再强制要求网页 API Key。`sea_interview_start` 仍用于网页模型直连出题。文件交换仍使用草稿和人工确认。
 
 ### 15. 本地目录授权只能在用户手势里申请
 

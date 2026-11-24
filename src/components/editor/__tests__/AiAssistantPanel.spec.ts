@@ -4,8 +4,10 @@ import { resolve } from 'node:path';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import ElementPlus, { ElRadioGroup } from 'element-plus';
 import AiAssistantPanel from '../AiAssistantPanel.vue';
-import { clearAiModelSettings, saveAiModelSettings } from '@/services/ai/AiSettings';
+import { clearAiModelSettings, clearAiSessionApiKey, saveAiModelSettings } from '@/services/ai/AiSettings';
 import { requestResumeAiDraft } from '@/services/ai/quickEdit';
+import { useMcpState } from '@/services/ai/useMcpBridge';
+import { clearExternalTasks, completeExternalTask, listExternalTasks } from '@/services/ai/externalTaskQueue';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 
 vi.mock('@/services/ai/quickEdit', () => ({ requestResumeAiDraft: vi.fn() }));
@@ -81,5 +83,35 @@ describe('AI assistant quick editing UX', () => {
     await flushPromises();
     expect(panel.text()).not.toContain('过期结果');
     expect(panel.get('.request-button').text()).toBe('生成修改建议');
+  });
+
+  it('当外部 MCP 已连接且未配 API Key 时，快捷修改可直接免 Key 派发任务给外部 Agent', async () => {
+    clearAiModelSettings();
+    clearAiSessionApiKey();
+    clearExternalTasks();
+    const mcp = useMcpState();
+    mcp.linkState.value = 'connected';
+    try {
+      await render();
+      expect(panel.text()).toContain('外部 MCP 已连接');
+      expect(panel.text()).toContain('外部 Agent（MCP · 免 API Key）');
+      await panel.get('#quick-edit-instruction').setValue('突出跨端性能优化成果');
+      await panel.get('.consent-check input').setValue(true);
+      expect(panel.get('.request-button').attributes('disabled')).toBeUndefined();
+      expect(panel.get('.request-button').text()).toContain('派发给外部 Agent 修改（免 Key）');
+      await panel.get('.request-button').trigger('click');
+      await flushPromises();
+      const pending = listExternalTasks('pending');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]?.kind).toBe('quick_edit');
+      expect(panel.text()).toContain(pending[0]!.id);
+      completeExternalTask(pending[0]!.id, { summary: '已按要求优化简介并实时刷新预览' });
+      await flushPromises();
+      expect(panel.text()).toContain('已按要求优化简介并实时刷新预览');
+      expect(requestResumeAiDraft).not.toHaveBeenCalled();
+    } finally {
+      mcp.linkState.value = '';
+      clearExternalTasks();
+    }
   });
 });

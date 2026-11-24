@@ -14,9 +14,12 @@ import {
   toAiProviderConfig,
   type AiProviderProfile,
 } from '@/services/ai/AiSettings';
+import { useMcpState } from '@/services/ai/useMcpBridge';
 
 const props = defineProps<{ preview: unknown; frozenProvider?: { baseUrl: string; model: string }; disabled?: boolean; revision?: number; authorized?: boolean }>();
 const emit = defineEmits<{ confirmed: [config: AiProviderConfig]; changed: []; configure: [] }>();
+const { linkState: mcpLinkState } = useMcpState();
+const mcpConnected = computed(() => mcpLinkState.value === 'connected');
 
 // Service and model are configured once in the settings panel; this step only picks
 // among saved providers, fills in a missing key, and records consent.
@@ -112,7 +115,8 @@ defineExpose({ reset: () => { editingKey.value = false; invalidate(); } });
 <template>
   <section class="consent-card">
     <div v-if="!profiles.length" class="empty-provider">
-      <p>还没有可用的 AI 服务。先完成配置，再确认发送范围。</p>
+      <p v-if="mcpConnected">已连接外部 MCP（免 API Key）：你可以直接让外部 Agent 主持文字模拟面试，并通过 <code>sea_interview_save</code> 将复盘报告保存到本机面试记录。如需由网页自动出题，再配置下方网页模型。</p>
+      <p v-else>还没有可用的 AI 服务。先完成配置，再确认发送范围。</p>
       <el-button :disabled="disabled" @click="emit('configure')">配置 AI 服务</el-button>
     </div>
     <template v-else>

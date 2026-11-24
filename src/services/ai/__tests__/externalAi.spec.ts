@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { webcrypto } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +9,7 @@ import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { ExternalAiSession } from '../ExternalAiSession';
 import { assertExternalBaseline, createExternalProposal, parseExternalProposal, resumeRevision } from '../externalProposal';
 import { createExternalContextArchive, readExternalProposal } from '../externalAiFiles';
-import { externalTools, relayAgentPrompt, relayBundleUrl, relayClients, relayConfiguration, relaySetupCommand, startExternalAiBridge, type RelayClient } from '../externalAiBridge';
+import { detectRelayShell, externalTools, relayAgentPrompt, relayBundleUrl, relayClients, relayConfigTarget, relayConfiguration, relaySetupCommand, startExternalAiBridge, type RelayClient } from '../externalAiBridge';
 import { createResumeLibrary } from '../resumeLibrary';
 import { builtinToRecipe } from '@/utils/layout-template';
 import { applyResumePatch, parseResumePatch } from '../resumePatch';
@@ -166,7 +166,25 @@ describe('MCP business tools', () => {
       remove: async () => undefined,
     });
     const tools = externalTools(library);
-    expect(tools.map(tool => tool.name)).toEqual(['sea_resume_list', 'sea_resume_get', 'sea_resume_set', 'sea_resume_create', 'sea_resume_delete', 'sea_resume_export_pdf', 'sea_interview_list', 'sea_interview_get', 'sea_interview_delete', 'sea_interview_start']);
+    expect(tools.map(tool => tool.name)).toEqual([
+      'sea_resume_list',
+      'sea_resume_get',
+      'sea_resume_set',
+      'sea_resume_create',
+      'sea_resume_derive_version',
+      'sea_resume_delete',
+      'sea_resume_open',
+      'sea_resume_quality',
+      'sea_jd_risk_scan',
+      'sea_resume_export_pdf',
+      'sea_task_list',
+      'sea_task_complete',
+      'sea_interview_list',
+      'sea_interview_get',
+      'sea_interview_save',
+      'sea_interview_delete',
+      'sea_interview_start',
+    ]);
     const listed = await tools[0]!.execute({}) as { content: { text: string }[] };
     expect(JSON.parse(listed.content[0]!.text)[0].id).toBe(resume.id);
     const read = await tools[1]!.execute({ id: resume.id }) as { content: { text: string }[] };
@@ -191,7 +209,7 @@ describe('MCP business tools', () => {
     expect(codex).not.toContain('npm ci');
     const claude = relaySetupCommand('claude', origin, baseUrl, 'powershell');
     expect(claude).toContain('Invoke-WebRequest -UseBasicParsing');
-    expect(claude).toContain('; if (-not $?) { exit 1 }; claude mcp add --transport stdio sea-resume -- node "$HOME\\.sea-resume-ai-relay\\relay.mjs"');
+    expect(claude).toContain('; if (-not $?) { exit 1 }; claude mcp add --scope user --transport stdio sea-resume -- node "$HOME\\.sea-resume-ai-relay\\relay.mjs"');
     expect(claude).not.toContain('&&');
     const prompt = relayAgentPrompt('codex', origin, baseUrl);
     expect(prompt).toContain(codex);
@@ -200,13 +218,13 @@ describe('MCP business tools', () => {
     expect(prompt).not.toContain('sea_resume_get_context');
     for (const call of [() => relayBundleUrl('https://example.com/path', baseUrl), () => relaySetupCommand('codex', 'https://example.com/path', baseUrl), () => relayAgentPrompt('claude', 'ftp://example.com', baseUrl)]) expect(call).toThrow();
   });
-  it('registers the same relay for each harness and updates config files in place', () => {
+  it('keeps mcp add for CLI harnesses and a short config snippet for the rest', () => {
     const origin = 'https://resume.example.com';
     const baseUrl = '/sea-resume/';
     const flags = '--host 127.0.0.1 --widget-origin https://resume.example.com --max-payload 2000000';
     const cli: Record<string, string> = {
       codex: `codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
-      claude: `claude mcp add --transport stdio sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
+      claude: `claude mcp add --scope user --transport stdio sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
       pi: `pi mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
       opencode: `opencode mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
       gemini: `gemini mcp add -s user sea-resume node "$HOME/.sea-resume-ai-relay/relay.mjs" ${flags}`,
@@ -218,117 +236,156 @@ describe('MCP business tools', () => {
       const command = relaySetupCommand(id as RelayClient, origin, baseUrl);
       expect(command).toContain(register);
       expect(command).not.toContain('npm ci');
+      expect(command).not.toContain('printf');
+      expect(command).not.toContain('SEA_RESUME_MCP_CLIENT');
+      expect(relayConfigTarget(id as RelayClient)).toBeNull();
       expect(relayAgentPrompt(id as RelayClient, origin, baseUrl)).toContain(relayClients.find((item) => item.id === id)!.reload);
     }
     const home = mkdtempSync(join(tmpdir(), 'sea-resume-mcp-'));
+    const relay = join(home, '.sea-resume-ai-relay', 'relay.mjs');
     mkdirSync(join(home, '.sea-resume-ai-relay'), { recursive: true });
-    writeFileSync(join(home, '.sea-resume-ai-relay', 'relay.mjs'), '');
-    mkdirSync(join(home, '.zcode', 'cli'), { recursive: true });
-    writeFileSync(join(home, '.zcode', 'cli', 'config.json'), JSON.stringify({ mcp: { servers: { memory: { command: 'npx' } } } }));
-    mkdirSync(join(home, '.config', 'crush'), { recursive: true });
-    mkdirSync(join(home, '.config', 'goose'), { recursive: true });
-    writeFileSync(join(home, '.config', 'goose', 'config.yaml'), 'extensions:\n  developer:\n    enabled: true\n');
-    mkdirSync(join(home, '.dsh', 'profiles', 'desktop'), { recursive: true });
-    writeFileSync(join(home, '.dsh', 'profiles', 'desktop', 'package.json'), '{}');
-    writeFileSync(join(home, '.dsh', 'profiles', 'desktop', 'cordis.patch.yml'), '- id: other\n  name: something\n');
-    mkdirSync(join(home, '.dsh', 'profiles', 'cli'), { recursive: true });
-    writeFileSync(join(home, '.dsh', 'profiles', 'cli', 'cordis.patch.yml'), '- id: mcp-sea-resume\n  name: old\n');
-    const apply = (client: RelayClient) => {
+    writeFileSync(relay, '');
+    const relayArgs = [relay, '--host', '127.0.0.1', '--widget-origin', origin, '--max-payload', '2000000'];
+    const printed = (client: RelayClient) => {
       const command = relaySetupCommand(client, origin, baseUrl);
-      expect(command).toContain(`SEA_RESUME_MCP_CLIENT='${client}'`);
-      expect(command).toContain(`SEA_RESUME_MCP_ORIGIN='${origin}'`);
-      expect(command).not.toContain('&& node');
       const script = command.split("<<'EOF'\n")[1]?.split('\nEOF')[0];
-      expect(script).toContain("type: 'stdio'");
+      expect(script).toBeTruthy();
       const result = spawnSync(process.execPath, ['--input-type=module', '-'], {
         input: script,
         encoding: 'utf8',
         env: { ...process.env, SEA_RESUME_MCP_CLIENT: client, SEA_RESUME_MCP_ORIGIN: origin, SEA_RESUME_MCP_HOME: home },
       });
       expect(result.status, result.stderr).toBe(0);
-      return result;
+      expect(result.stdout).not.toContain('$HOME');
+      expect(result.stdout).not.toContain('绝对路径');
+      return result.stdout.trim();
     };
-    apply('zcode');
-    apply('zcode');
-    const zcode = JSON.parse(readFileSync(join(home, '.zcode', 'cli', 'config.json'), 'utf8'));
-    expect(zcode.mcp.servers.memory.command).toBe('npx');
-    expect(zcode.mcp.servers['sea-resume']).toMatchObject({ type: 'stdio', command: process.execPath, protocolVersion: 'auto', args: [join(home, '.sea-resume-ai-relay', 'relay.mjs'), '--host', '127.0.0.1', '--widget-origin', origin, '--max-payload', '2000000'] });
-    const brokenCrush = join(home, '.config', 'crush', 'crush.json');
-    writeFileSync(brokenCrush, '{');
-    const refused = spawnSync(process.execPath, ['--input-type=module', '-'], {
-      input: relaySetupCommand('crush', origin, baseUrl).split("<<'EOF'\n")[1]!.split('\nEOF')[0],
-      encoding: 'utf8',
-      env: { ...process.env, SEA_RESUME_MCP_CLIENT: 'crush', SEA_RESUME_MCP_ORIGIN: origin, SEA_RESUME_MCP_HOME: home },
-    });
-    expect(refused.status).not.toBe(0);
-    expect(readFileSync(brokenCrush, 'utf8')).toBe('{');
-    writeFileSync(brokenCrush, '{"mcp":{"other":{"command":"stay"}}}\n');
-    apply('crush');
-    apply('crush');
-    const crush = JSON.parse(readFileSync(join(home, '.config', 'crush', 'crush.json'), 'utf8'));
-    expect(crush.mcp.other.command).toBe('stay');
-    expect(crush.mcp['sea-resume'].command).toBe(process.execPath);
-    apply('goose');
-    apply('goose');
-    const goose = readFileSync(join(home, '.config', 'goose', 'config.yaml'), 'utf8');
+    const mcpJson = JSON.parse(printed('mcp-json'));
+    expect(mcpJson.mcpServers['sea-resume']).toEqual({ command: 'node', args: relayArgs });
+    const codexToml = printed('codex-config');
+    expect(codexToml).toContain('[mcp_servers.sea-resume]');
+    expect(codexToml).toContain('command = "node"');
+    expect(codexToml).toContain(`args = ${JSON.stringify(relayArgs)}`);
+    expect(relayConfigTarget('codex-config', 'posix')).toBe('~/.codex/config.toml');
+    expect(relayConfigTarget('codex-config', 'powershell')).toBe('%USERPROFILE%\\.codex\\config.toml');
+    expect(detectRelayShell('Win32', '')).toBe('powershell');
+    expect(detectRelayShell('', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe('powershell');
+    expect(detectRelayShell('MacIntel', 'Mozilla/5.0 (Macintosh)')).toBe('posix');
+    const zcode = JSON.parse(printed('zcode'));
+    expect(zcode.mcp.servers['sea-resume']).toEqual({ type: 'stdio', command: 'node', args: relayArgs, protocolVersion: 'auto' });
+    const crush = JSON.parse(printed('crush'));
+    expect(crush.mcp['sea-resume']).toEqual({ type: 'stdio', command: 'node', args: relayArgs });
+    expect(crush.mcp['sea-resume'].protocolVersion).toBeUndefined();
+    const goose = printed('goose');
+    expect(goose.split('\n')).toHaveLength(15);
+    expect(goose.match(/extensions:/g)).toHaveLength(1);
     expect(goose.match(/sea-resume:/g)).toHaveLength(1);
-    expect(goose).toContain('developer:');
-    expect(goose).toContain(`cmd: ${JSON.stringify(process.execPath)}`);
-    expect(goose).toContain(`"${origin}"`);
-    apply('dsh');
-    apply('dsh');
-    for (const profile of ['desktop', 'cli']) {
-      const patch = readFileSync(join(home, '.dsh', 'profiles', profile, 'cordis.patch.yml'), 'utf8');
-      expect(patch.match(/id: mcp-sea-resume/g)).toHaveLength(1);
-      expect(patch).toContain('@deepseek-ai/dsh-mcp-client');
-      expect(patch).toContain(`command: ${JSON.stringify(process.execPath)}`);
-      expect(patch).toContain('failOnStartupError: false');
+    expect(goose).toContain('cmd: "node"');
+    expect(goose).toContain(`      - ${JSON.stringify(relay)}`);
+    expect(goose).toContain('timeout: 300');
+    const dsh = printed('dsh');
+    expect(dsh.match(/id: mcp-sea-resume/g)).toHaveLength(1);
+    expect(dsh).toContain('name: "@deepseek-ai/dsh-mcp-client"');
+    expect(dsh).toContain(`command: ${JSON.stringify(process.execPath)}`);
+    expect(dsh).toContain('failOnStartupError: false');
+    expect(dsh).toContain('toolCallTimeoutMs: 120000');
+    for (const id of ['mcp-json', 'codex-config', 'zcode', 'crush', 'goose', 'dsh'] as const) {
+      const command = relaySetupCommand(id, origin, baseUrl);
+      expect(command).toContain(`curl -fsSL '${relayBundleUrl(origin, baseUrl)}'`);
+      expect(command).toContain(`SEA_RESUME_MCP_CLIENT='${id}'`);
+      expect(command).not.toContain('mcp add');
+      expect(command).not.toContain('writeFileSync');
+      const prompt = relayAgentPrompt(id, origin, baseUrl);
+      expect(prompt).toContain(relayConfigTarget(id));
+      expect(prompt).toContain('终端打印出的配置');
+      expect(prompt).not.toContain('/绝对路径/');
+      expect(prompt).toContain(relayClients.find((item) => item.id === id)!.reload);
     }
-    expect(readFileSync(join(home, '.dsh', 'profiles', 'desktop', 'cordis.patch.yml'), 'utf8')).toContain('id: other');
-    const missing = mkdtempSync(join(tmpdir(), 'sea-resume-mcp-empty-'));
-    mkdirSync(join(missing, '.sea-resume-ai-relay'), { recursive: true });
-    writeFileSync(join(missing, '.sea-resume-ai-relay', 'relay.mjs'), '');
-    const empty = spawnSync(process.execPath, ['--input-type=module', '-'], {
-      input: relaySetupCommand('dsh', origin, baseUrl).split("<<'EOF'\n")[1]!.split('\nEOF')[0],
-      encoding: 'utf8',
-      env: { ...process.env, SEA_RESUME_MCP_CLIENT: 'dsh', SEA_RESUME_MCP_ORIGIN: origin, SEA_RESUME_MCP_HOME: missing },
-    });
-    expect(empty.status).not.toBe(0);
-    expect(empty.stderr).toContain('没有找到 DSH profile');
+    expect(relayConfigTarget('crush', 'powershell')).toBe('%APPDATA%\\crush\\crush.json');
+    expect(relayConfigTarget('dsh')).toBe('~/.dsh/profiles/<profile>/cordis.patch.yml');
     const powershell = relaySetupCommand('dsh', origin, baseUrl, 'powershell');
     expect(powershell).toContain('Invoke-WebRequest');
     expect(powershell.split("@'")[0]).not.toContain('&&');
     expect(powershell).toContain("$env:SEA_RESUME_MCP_CLIENT='dsh'");
     expect(powershell).toContain("'@ | node --input-type=module -");
+    const missing = mkdtempSync(join(tmpdir(), 'sea-resume-mcp-empty-'));
+    const absent = spawnSync(process.execPath, ['--input-type=module', '-'], {
+      input: relaySetupCommand('zcode', origin, baseUrl).split("<<'EOF'\n")[1]!.split('\nEOF')[0],
+      encoding: 'utf8',
+      env: { ...process.env, SEA_RESUME_MCP_CLIENT: 'zcode', SEA_RESUME_MCP_ORIGIN: origin, SEA_RESUME_MCP_HOME: missing },
+    });
+    expect(absent.status).not.toBe(0);
+    expect(absent.stderr).toContain('找不到 relay.mjs');
+    expect(absent.stdout).toBe('');
+    expect(() => relaySetupCommand('goose', 'https://example.com/path', baseUrl)).toThrow();
   });
-  it('reports waiting after the host loads and only accepts relay notices from that frame', async () => {
+  it('reports waiting after the host loads and accepts relay notices posted by the nested widget iframe to host.contentWindow', async () => {
     vi.resetModules();
     vi.doMock('@mcp-b/webmcp-polyfill', () => ({ installWebMCP() { Object.defineProperty(document, 'modelContext', { configurable: true, value: { registerTool: vi.fn(async () => undefined) } }); } }));
     const { startExternalAiBridge: start } = await import('../externalAiBridge');
     const states: string[] = [];
     const access = createResumeLibrary({ list: async () => [], read: async () => fixture(), save: async () => undefined, remove: async () => undefined });
     const host = document.createElement('iframe');
+    const hostWindow = new EventTarget();
+    const widgetWindow = {} as MessageEventSource;
+    const otherWindow = {} as MessageEventSource;
     const realCreate = document.createElement.bind(document);
     const embed = realCreate('script');
     const append = vi.spyOn(document.body, 'appendChild').mockImplementation(node => node);
     vi.spyOn(document, 'createElement').mockImplementation(tag => (tag === 'iframe' ? host : embed));
-    Object.defineProperty(host, 'contentDocument', { configurable: true, value: { body: { appendChild: () => undefined }, createElement: () => embed } });
-    Object.defineProperty(host, 'contentWindow', { configurable: true, value: {} });
+    Object.defineProperty(host, 'contentDocument', {
+      configurable: true,
+      value: {
+        body: { appendChild: () => undefined },
+        createElement: () => embed,
+        querySelector: (selector: string) => selector === 'iframe[data-webmcp-relay]' ? { contentWindow: widgetWindow } : null,
+      },
+    });
+    Object.defineProperty(host, 'contentWindow', { configurable: true, value: hostWindow });
     Object.defineProperty(host, 'onload', { configurable: true, set(value: () => void) { queueMicrotask(value); } });
     Object.defineProperty(embed, 'onload', { configurable: true, set(value: () => void) { queueMicrotask(value); } });
     const stop = await start(access, undefined, state => states.push(state));
     expect(states).toEqual(['waiting']);
-    const notice = (source: MessageEventSource | null, origin: string, type: string, state: string) => {
-      window.dispatchEvent(new MessageEvent('message', { origin, source, data: { type, state } }));
+    const postToHost = (source: MessageEventSource | null, origin: string, type: string, state: string) => {
+      hostWindow.dispatchEvent(new MessageEvent('message', { origin, source, data: { type, state } }));
     };
-    notice(window, location.origin, 'sea-resume.relay', 'connected');
-    notice(host.contentWindow, 'https://evil.example', 'sea-resume.relay', 'connected');
-    notice(host.contentWindow, location.origin, 'sea-resume.relay', 'connected');
-    notice(host.contentWindow, location.origin, 'webmcp.reload', 'connected');
-    expect(states).toEqual(['waiting', 'connected']);
+    // 伪造在顶层 window 或非 widget iframe 或跨站来源上的消息必须被忽略
+    window.dispatchEvent(new MessageEvent('message', { origin: location.origin, source: hostWindow as unknown as MessageEventSource, data: { type: 'sea-resume.relay', state: 'connected' } }));
+    postToHost(otherWindow, location.origin, 'sea-resume.relay', 'connected');
+    postToHost(widgetWindow, 'https://evil.example', 'sea-resume.relay', 'connected');
+    postToHost(widgetWindow, location.origin, 'webmcp.reload', 'connected');
+    expect(states).toEqual(['waiting']);
+    // 真实上游架构：widget (blob iframe) 向 window.parent (即 host.contentWindow) postMessage
+    postToHost(widgetWindow, location.origin, 'sea-resume.relay', 'connected');
+    postToHost(widgetWindow, location.origin, 'sea-resume.relay', 'rejected');
+    expect(states).toEqual(['waiting', 'connected', 'rejected']);
     stop();
-    notice(host.contentWindow, location.origin, 'sea-resume.relay', 'reconnecting');
-    expect(states).toEqual(['waiting', 'connected']);
+    postToHost(widgetWindow, location.origin, 'sea-resume.relay', 'reconnecting');
+    expect(states).toEqual(['waiting', 'connected', 'rejected']);
+    // 若在 embed.onload 回调之前 widget 已完成握手，waiting 不得覆盖 connected
+    const earlyStates: string[] = [];
+    const earlyHost = document.createElement('iframe');
+    const earlyHostWindow = new EventTarget();
+    const earlyEmbed = realCreate('script');
+    vi.spyOn(document, 'createElement').mockImplementation(tag => (tag === 'iframe' ? earlyHost : earlyEmbed));
+    Object.defineProperty(earlyHost, 'contentDocument', {
+      configurable: true,
+      value: {
+        body: {
+          appendChild: () => {
+            earlyHostWindow.dispatchEvent(new MessageEvent('message', { origin: location.origin, source: widgetWindow, data: { type: 'sea-resume.relay', state: 'connected' } }));
+          },
+        },
+        createElement: () => earlyEmbed,
+        querySelector: (selector: string) => selector === 'iframe[data-webmcp-relay]' ? { contentWindow: widgetWindow } : null,
+      },
+    });
+    Object.defineProperty(earlyHost, 'contentWindow', { configurable: true, value: earlyHostWindow });
+    Object.defineProperty(earlyHost, 'onload', { configurable: true, set(value: () => void) { queueMicrotask(value); } });
+    Object.defineProperty(earlyEmbed, 'onload', { configurable: true, set(value: () => void) { queueMicrotask(value); } });
+    const stopEarly = await start(access, undefined, state => earlyStates.push(state));
+    expect(earlyStates).toEqual(['connected']);
+    stopEarly();
     append.mockRestore();
     vi.doUnmock('@mcp-b/webmcp-polyfill');
     vi.resetModules();

@@ -1,6 +1,17 @@
 <template>
   <section class="provider-manager" aria-label="AI 服务商配置">
     <section v-if="view === 'list'" class="provider-flow-view">
+      <article class="mcp-driver-card" :class="{ 'is-connected': mcpConnected }" aria-label="外部 Agent MCP 免密钥通道">
+        <div class="mcp-driver-copy">
+          <div class="mcp-driver-heading">
+            <strong>外部 Agent（MCP · 无需 API Key）</strong>
+            <el-tag size="small" :type="mcpBadge.type" effect="light" round>{{ mcpBadge.label }}</el-tag>
+          </div>
+          <p v-if="mcpConnected">已通过外部 MCP 就绪：AI 简历助手、PDF 导入与模拟面试均可直接委派给外部 Agent，无需配置 API Key。下方模型服务仅用于网页直连推理（可选）。</p>
+          <p v-else>通过 Antigravity、VS Code（Claude / Codex 插件）、Cursor 或 CLI 接入后，可直接免 API Key 使用全部简历 AI 能力。</p>
+        </div>
+        <el-button text type="primary" @click="requestOpenMcpDialog">{{ mcpConnected ? '管理 MCP 连接' : '连接外部 Agent' }}</el-button>
+      </article>
       <div v-if="profiles.length" class="provider-list" aria-label="已添加的服务商">
         <article
           v-for="profile in profiles"
@@ -52,7 +63,7 @@
         </div>
       </div>
 
-      <el-alert v-if="profiles.length && !enabledCount" class="empty-enabled-alert" type="info" :closable="false" show-icon title="目前没有启用的服务商。启用一家服务商后，AI 助手和 PDF 导入才可使用。" />
+      <el-alert v-if="profiles.length && !enabledCount && !mcpConnected" class="empty-enabled-alert" type="info" :closable="false" show-icon title="目前没有启用的服务商。启用一家服务商后，AI 助手和 PDF 导入才可使用。" />
       <el-alert class="privacy-note" type="info" :closable="false" show-icon>
         <template #title>隐私说明</template>
         <p>服务商地址、模型选择和启用状态保存在本机。API Key 默认只在页面内存；勾选「记住密钥到本机」后会以明文保存在本机浏览器存储，可在服务商详情中清除。导出配置与备份都不包含 API Key。</p>
@@ -189,9 +200,19 @@ import {
   type AiProviderProfile,
 } from '@/services/ai/AiSettings';
 import { listProviderModels } from '@/services/ai/quickEdit';
+import { useMcpState } from '@/services/ai/useMcpBridge';
 import { describeError } from '@/utils/globalErrorReporting';
 
 const emit = defineEmits<{ saved: [] }>();
+const { linkState: mcpLinkState, requestOpenMcpDialog } = useMcpState();
+const mcpConnected = computed(() => mcpLinkState.value === 'connected');
+const mcpBadge = computed(() => {
+  if (mcpLinkState.value === 'connected') return { type: 'success' as const, label: '已就绪 · 免 API Key' };
+  if (mcpLinkState.value === 'waiting') return { type: 'warning' as const, label: '等待连接' };
+  if (mcpLinkState.value === 'rejected') return { type: 'danger' as const, label: '来源受限' };
+  if (mcpLinkState.value === 'reconnecting') return { type: 'danger' as const, label: '重连中' };
+  return { type: 'info' as const, label: '未连接' };
+});
 const profiles = ref<AiProviderProfile[]>(loadAiProviderProfiles());
 const defaultProviderId = ref(getActiveAiProviderId() ?? '');
 const selectedProfile = ref<AiProviderProfile | null>(null);
@@ -480,6 +501,12 @@ async function importConfigFile(event: Event) {
 .advanced-settings summary { padding: 14px 0; color: var(--ui-text-secondary); cursor: pointer; }
 .validation-message { margin: 0; color: var(--ui-warning); font-size: var(--ui-font-sm); }
 .provider-manager { display: flex; flex-direction: column; gap: 16px; }
+.mcp-driver-card { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-lg); background: var(--ui-bg-subtle); }
+.mcp-driver-card.is-connected { border-color: color-mix(in srgb, var(--ui-success) 45%, var(--ui-border)); background: color-mix(in srgb, var(--ui-success) 6%, var(--ui-bg-surface)); }
+.mcp-driver-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 6px; }
+.mcp-driver-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.mcp-driver-heading strong { color: var(--ui-text-main); font-size: var(--ui-font-md); font-weight: 650; }
+.mcp-driver-copy p { margin: 0; color: var(--ui-text-secondary); font-size: var(--ui-font-xs); line-height: 1.6; }
 .provider-flow-view { display: flex; min-height: 0; flex-direction: column; gap: 16px; }
 .flow-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
 .flow-heading > div:not(.detail-heading-copy) { flex: 1; min-width: 0; }

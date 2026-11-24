@@ -5,7 +5,10 @@ import { generateId } from '@/utils/helpers';
 import { readLayoutRecipe } from '@/utils/layout-template';
 import { normalizeResumeData } from '@/utils/resumeData';
 
-export const BUILTIN_LAYOUT_IDS = ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'] as const;
+export const BUILTIN_LAYOUT_IDS = [
+  'modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent',
+  'classic', 'editorial', 'engineer', 'executive', 'campus',
+] as const;
 export type BuiltinLayoutId = (typeof BUILTIN_LAYOUT_IDS)[number];
 
 export const CUSTOM_TEMPLATE_NAME_MAX = 40;

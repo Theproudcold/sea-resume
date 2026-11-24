@@ -5,6 +5,8 @@ import type { MarkdownImportResult } from '@/types/markdown-import';
 import type { ResumeData } from '@/types/resume';
 import AiPdfImportDialog from '@/components/workbench/AiPdfImportDialog.vue';
 import { clearAiModelSettings, clearAiSessionApiKey, saveAiModelSettings, setAiSessionApiKey } from '@/services/ai/AiSettings';
+import { useMcpState } from '@/services/ai/useMcpBridge';
+import { clearExternalTasks, listExternalTasks } from '@/services/ai/externalTaskQueue';
 
 const mocks = vi.hoisted(() => ({
   extractPdfText: vi.fn(),
@@ -385,6 +387,33 @@ describe('AiPdfImportDialog', () => {
     await flushPromises();
     expect((wrapper.find('input[type="checkbox"]').element as HTMLInputElement).checked).toBe(false);
     expect(wrapper.findAll('button').find(button => button.text().includes('发送文本并解析简历'))!.attributes('disabled')).toBeDefined();
+  });
+
+  it('dispatches extracted PDF text to the connected external MCP agent without an API key', async () => {
+    clearAiModelSettings();
+    clearAiSessionApiKey();
+    clearExternalTasks();
+    const mcp = useMcpState();
+    mcp.linkState.value = 'connected';
+    try {
+      const wrapper = createWrapper();
+      await extractPdf(wrapper);
+      expect(wrapper.text()).toContain('外部 Agent（MCP · 免 API Key）');
+      await wrapper.find('input[type="checkbox"]').setValue(true);
+      const dispatchButton = wrapper.findAll('button').find(button => button.text().includes('派发给外部 Agent 导入（免 Key）'));
+      expect(dispatchButton).toBeDefined();
+      expect(dispatchButton!.attributes('disabled')).toBeUndefined();
+      await dispatchButton!.trigger('click');
+      await flushPromises();
+      const pending = listExternalTasks('pending');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]?.kind).toBe('pdf_import');
+      expect(pending[0]?.payload.text).toBe('Locally extracted resume text');
+      expect(mocks.requestAiPdfMarkdown).not.toHaveBeenCalled();
+    } finally {
+      mcp.linkState.value = '';
+      clearExternalTasks();
+    }
   });
 
 });

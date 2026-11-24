@@ -68,23 +68,29 @@
       </el-alert>
       <div class="pdf-provider-card">
         <div class="pdf-provider-summary">
-          <span class="pdf-provider-label">当前模型服务</span>
-          <span class="pdf-provider-name"><strong>{{ providerLabel }}</strong><span>{{ modelSettings?.model || '未配置模型' }}</span></span>
-          <span class="pdf-provider-state" :class="{ 'is-ready': isModelReady }">{{ isModelReady ? '模型服务已就绪' : '需要完成模型配置' }}</span>
+          <span class="pdf-provider-label">{{ isMcpTextMode ? '当前执行通道' : '当前模型服务' }}</span>
+          <span class="pdf-provider-name">
+            <strong>{{ isMcpTextMode ? '外部 Agent（MCP · 免 API Key）' : providerLabel }}</strong>
+            <span>{{ isMcpTextMode ? '委派外部 Agent 解析后创建简历' : (modelSettings?.model || '未配置模型') }}</span>
+          </span>
+          <span class="pdf-provider-state" :class="{ 'is-ready': isMcpTextMode || isModelReady }">
+            {{ isMcpTextMode ? 'MCP 已连接 · 无需 API Key' : (isModelReady ? '模型服务已就绪' : '需要完成模型配置') }}
+          </span>
         </div>
         <el-button :disabled="requesting" @click="showModelSettings = !showModelSettings">
-          {{ showModelSettings ? '收起配置' : '配置模型' }}
+          {{ showModelSettings ? '收起配置' : (isMcpTextMode ? '模型设置' : '配置模型') }}
         </el-button>
       </div>
       <AiProviderSettingsPanel v-if="showModelSettings" @saved="handleModelSettingsSaved" />
-      <p v-if="mode === 'vision'" class="pdf-model-note">请选用支持图片的模型，例如 GPT-4o 或 Qwen-VL。</p>
+      <p v-if="mode === 'vision'" class="pdf-model-note">请选用支持图片的模型，例如 GPT-4o 或 Qwen-VL{{ mcpConnected && !isModelReady ? '；若使用外部 Agent 免 API Key，可直接把本地 PDF 交给 Agent 读取并调用 sea_resume_create 导入' : '' }}。</p>
       <el-checkbox v-model="consent" :disabled="requesting" class="consent-check">
-        {{ mode === 'text' ? '我确认将 PDF 提取文本发送给上方 AI 服务用于本次解析。' : '我确认将 PDF 页面图片发送给上方 AI 服务用于本次解析。' }}
+        {{ isMcpTextMode ? '我确认将 PDF 提取文本派发给已连接的外部 Agent 用于解析并创建简历。' : (mode === 'text' ? '我确认将 PDF 提取文本发送给上方 AI 服务用于本次解析。' : '我确认将 PDF 页面图片发送给上方 AI 服务用于本次解析。') }}
       </el-checkbox>
-      <p v-if="!isModelReady" class="pdf-model-note" role="status">请先配置 AI 服务，再确认发送。</p>
+      <p v-if="!isMcpTextMode && !isModelReady" class="pdf-model-note" role="status">请先配置 AI 服务，再确认发送。</p>
       <el-button :type="showModelSettings ? 'default' : 'primary'" class="parse-button" :loading="requesting" :disabled="!canRequest" @click="parseWithAi">
-        {{ mode === 'text' ? '发送文本并解析简历' : '发送页面图片并解析简历' }}
+        {{ isMcpTextMode ? '派发给外部 Agent 导入（免 Key）' : (mode === 'text' ? '发送文本并解析简历' : '发送页面图片并解析简历') }}
       </el-button>
+      <McpTaskStatusCard v-if="activeMcpTask" :task="activeMcpTask" :prompt="mcpPrompt" :initial-copied="mcpCopied" @cancel="cancelMcpTask" />
     </template>
 
     <template v-else-if="parsed && draftResume">
@@ -201,12 +207,7 @@
         <el-form-item label="新简历名称" required :error="title.trim() ? '' : '请填写简历名称'"><el-input v-model="title" maxlength="80" show-word-limit /></el-form-item>
         <el-form-item label="模板">
           <el-select v-model="templateId" class="w-full">
-            <el-option label="现代简约" value="modern" />
-            <el-option label="商务专业" value="professional" />
-            <el-option label="创意设计" value="creative" />
-            <el-option label="极简主义" value="minimal" />
-            <el-option label="科技感" value="tech" />
-            <el-option label="AI Agent 技术" value="ai-agent" />
+            <el-option v-for="tpl in builtinTemplates" :key="tpl.id" :label="tpl.name" :value="tpl.id" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -232,9 +233,14 @@ import type { ResumeData } from '@/types/resume';
 import type { MarkdownImportResult } from '@/types/markdown-import';
 import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import AiProviderSettingsPanel from '@/components/workbench/AiProviderSettingsPanel.vue';
+import McpTaskStatusCard from '@/components/ai/McpTaskStatusCard.vue';
+import { useMcpState } from '@/services/ai/useMcpBridge';
+import { resolveAiDriver, useAiDriverPreference } from '@/services/ai/useAiExecutionMode';
+import { cancelExternalTask, copyExternalTaskPrompt, enqueueExternalTask, useExternalTasks } from '@/services/ai/externalTaskQueue';
 import { extractPdfText, renderPdfPagesToImages, requestAiPdfMarkdown, requestAiPdfMarkdownFromImages, buildVisionTruncationWarning, buildTextTruncationWarning, MAX_VISION_PAGES, type ExtractedPdfText, type PdfImportMode, type RenderedPdfPages } from '@/services/ai/pdfResumeImport';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { markdownToSafeHtml } from '@/utils/markdown/markdownSafety';
+import { builtinTemplates } from '@/stores/template';
 import { describeError } from '@/utils/globalErrorReporting';
 
 const props = withDefaults(defineProps<{ modelValue: boolean; loading?: boolean }>(), { loading: false });
@@ -264,10 +270,20 @@ const isDragging = ref(false);
 const errorMessage = ref('');
 let sourceGeneration = 0;
 let requestGeneration = 0;
+const { linkState: mcpLinkState } = useMcpState();
+const { driverPreference } = useAiDriverPreference();
+const { findTask } = useExternalTasks();
+const mcpTaskId = ref('');
+const mcpPrompt = ref('');
+const mcpCopied = ref(false);
+const activeMcpTask = computed(() => findTask(mcpTaskId.value));
+const mcpConnected = computed(() => mcpLinkState.value === 'connected');
 const isModelReady = computed(() => sessionKeyAvailable.value);
+const isMcpTextMode = computed(() => mode.value === 'text' && resolveAiDriver(mcpConnected.value, isModelReady.value, driverPreference.value) === 'mcp');
+function cancelMcpTask() { if (mcpTaskId.value) cancelExternalTask(mcpTaskId.value); }
 const hasSource = computed(() => extracted.value !== null || rendered.value !== null);
 const pageCount = computed(() => extracted.value?.pageCount ?? rendered.value?.pageCount ?? 0);
-const canRequest = computed(() => isModelReady.value && consent.value && !requesting.value && !extracting.value
+const canRequest = computed(() => (isMcpTextMode.value || isModelReady.value) && consent.value && !requesting.value && !extracting.value
   && (mode.value === 'text' ? !!extracted.value : !!rendered.value?.images.length));
 const modeDescription = computed(() => mode.value === 'text'
   ? '适合能复制文字的 PDF，最大 15 MB、30 页。发送给 AI 前会请你确认。'
@@ -309,6 +325,9 @@ function reset() {
   explanation.value = '';
   errorMessage.value = '';
   showModelSettings.value = false;
+  mcpTaskId.value = '';
+  mcpPrompt.value = '';
+  mcpCopied.value = false;
   if (fileInput.value) fileInput.value.value = '';
 }
 
@@ -336,7 +355,7 @@ async function loadSource() {
     draftResume.value = null;
     consent.value = false;
     refreshAiConfiguration();
-    showModelSettings.value = !isModelReady.value;
+    showModelSettings.value = !isModelReady.value && !isMcpTextMode.value;
   } catch (error) {
     if (generation !== sourceGeneration) return;
     extracted.value = null;
@@ -376,7 +395,29 @@ function handleDrop(event: DragEvent) {
 }
 
 async function parseWithAi() {
-  if (!canRequest.value || !modelSettings.value) return;
+  if (!canRequest.value) return;
+  if (isMcpTextMode.value) {
+    errorMessage.value = '';
+    try {
+      const { task, prompt } = enqueueExternalTask({
+        kind: 'pdf_import',
+        summary: `解析 PDF 简历：${fileName.value || '未命名.pdf'}`,
+        payload: {
+          fileName: fileName.value,
+          pageCount: pageCount.value,
+          text: extracted.value?.text ?? '',
+          preferredTools: ['sea_resume_create', 'sea_resume_open', 'sea_task_complete'],
+        },
+      });
+      mcpTaskId.value = task.id;
+      mcpPrompt.value = prompt;
+      mcpCopied.value = await copyExternalTaskPrompt(prompt);
+    } catch (error) {
+      errorMessage.value = describeError(error);
+    }
+    return;
+  }
+  if (!modelSettings.value) return;
   const generation = ++requestGeneration;
   requesting.value = true;
   errorMessage.value = '';

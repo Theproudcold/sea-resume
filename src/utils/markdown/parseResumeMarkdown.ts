@@ -1,6 +1,7 @@
 import type { CustomBlock, CustomItem, ResumeData } from '@/types/resume';
 import type { MarkdownImportResult, MarkdownImportWarning } from '@/types/markdown-import';
 import { generateId } from '@/utils/helpers';
+import { isLayoutSeedId } from '@/utils/layout-template';
 import { markdownToSafeHtml, sanitizeMarkdownUrl } from './markdownSafety';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 
@@ -357,7 +358,7 @@ export function parseResumeMarkdown(source: string, filename = 'resume.md'): Mar
   const website = values.website || values.url;
   if (website && sanitizeMarkdownUrl(website)) resume.basic.website = website;
   if (values.summary) resume.basic.summary = markdownToSafeHtml(values.summary);
-  if (values.template && ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'].includes(values.template)) resume.templateId = values.template;
+  if (values.template && isLayoutSeedId(values.template)) resume.templateId = values.template;
 
   const unknownMetadata = Object.entries(values).filter(([key]) => !knownFrontmatter.has(key));
   for (const [key, value] of unknownMetadata) warnings.push({ code: 'unknown-frontmatter', message: `未识别的 frontmatter 字段“${key}”，已保留在自定义模块。`, detail: value });
