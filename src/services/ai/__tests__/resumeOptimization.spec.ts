@@ -98,6 +98,44 @@ describe('bounded optimization output and application', () => {
     resume.experiences = [];
     expect(() => applyOptimizationSuggestions(resume, run)).toThrow('删除');
   });
+
+  it('marks suggestions that fail the deterministic fact guard as rejected and unapplicable', () => {
+    const { resume, run } = fixture();
+    // 原文是「原始描述」，模型改写里凭空多出 40% 这个指标。
+    const fabricated = { id: 's1', operation: { type: 'set_basic', field: 'summary', value: '原始描述，效率提升 40%' }, reason: '更具体', requirement: '', sourceRefs: ['basic.summary'] };
+    const parsed = parseOptimizationSuggestions({ suggestions: [fabricated] }, run)[0]!;
+    expect(parsed.review).toBe('reject');
+    expect(parsed.guard?.[0]?.code).toBe('metric');
+    expect(parsed.reviewReason).toContain('40');
+    run.suggestions = [parsed]; run.stage = 'ready';
+    parsed.selected = true;
+    expect(() => applyOptimizationSuggestions(resume, run)).toThrow();
+    expect(resume.basic.summary).toBe('<p>原始描述</p>');
+  });
+  it('leaves passing suggestions untouched and keeps them reviewable', () => {
+    const { run, suggestion } = fixture();
+    const parsed = parseOptimizationSuggestions({ suggestions: [suggestion] }, run)[0]!;
+    expect(parsed.review).toBe('unreviewed');
+    expect(parsed.guard).toBeUndefined();
+    expect(parsed.reviewReason).toBe('');
+  });
+  it('accepts numbers that the user already confirmed as facts', () => {
+    const { run, suggestion, resume } = fixture();
+    run.facts = [{ id: 'f1', text: '把构建时间从 12 分钟降到 3 分钟', targetId: 'basic' }];
+    const withFact = { ...suggestion, operation: { type: 'set_basic', field: 'summary', value: '把构建时间从 12 分钟降到 3 分钟' }, sourceRefs: ['basic.summary', 'fact.f1'] };
+    const parsed = parseOptimizationSuggestions({ suggestions: [withFact] }, run)[0]!;
+    expect(parsed.review).toBe('unreviewed');
+    expect(parsed.guard).toBeUndefined();
+    void resume;
+  });
+  it('blocks an unsolicited translation but allows a requested one', () => {
+    const translated = { id: 's1', operation: { type: 'set_basic', field: 'summary', value: 'Owned the onboarding flow and the related tooling for the team' }, reason: '更具体', requirement: '', sourceRefs: ['basic.summary'] };
+    const { run } = fixture();
+    expect(parseOptimizationSuggestions({ suggestions: [translated] }, run)[0]!.review).toBe('reject');
+    // 用户明确要求翻译：岗位要求里写了「译成英文」，该翻译即属用户请求的改写。
+    const asked = { ...run, options: { ...run.options, jd: '请把简历译成英文后对照这段要求调整' } };
+    expect(parseOptimizationSuggestions({ suggestions: [translated] }, asked)[0]!.review).toBe('unreviewed');
+  });
   it('restores exact long raw HTML and list baselines without applying AI output limits', () => {
     const { resume, suggestion } = fixture();
     const raw = `  <p>${'原文'.repeat(6000)}</p>  `;
@@ -111,6 +149,20 @@ describe('bounded optimization output and application', () => {
     expect(restored.baseline).toEqual(run.baseline);
     expect(restored.suggestions[0]!.before).toBe(raw);
     expect(restored.context).toEqual(run.context);
+  });
+
+  it('cannot restore a fact-guard rejection back into an applicable suggestion', () => {
+    const { resume, run } = fixture();
+    const fabricated = { id: 's1', operation: { type: 'set_basic', field: 'summary', value: '原始描述，效率提升 40%' }, reason: '更具体', requirement: '', sourceRefs: ['basic.summary'] };
+    run.suggestions = parseOptimizationSuggestions({ suggestions: [fabricated] }, run);
+    // 模拟旧版本存档：当时没有校验，review 被标成 pass。
+    const legacy = { ...run, stage: 'ready' as const };
+    legacy.suggestions = [{ ...run.suggestions[0]!, review: 'pass' as const, selected: true }];
+    const restored = restoreOptimizationRun(JSON.parse(JSON.stringify(legacy)));
+    expect(restored.suggestions[0]!.review).toBe('reject');
+    restored.stage = 'ready';
+    expect(() => applyOptimizationSuggestions(resume, restored)).toThrow();
+    expect(resume.basic.summary).toBe('<p>原始描述</p>');
   });
 
   it('restores in-flight runs as interrupted and clears saved selections', () => {

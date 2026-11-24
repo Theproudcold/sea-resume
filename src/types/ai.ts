@@ -1,4 +1,5 @@
 import type { LayoutRecipe } from '@/types/layout-template';
+import type { FactGuardIssue } from '@/utils/aiFactGuard';
 
 export type ResumeAiOperation =
   | { type: 'set_basic'; field: 'name' | 'title' | 'email' | 'phone' | 'location' | 'website' | 'summary'; value: string }
@@ -59,6 +60,8 @@ export interface ResumeSuggestion {
   id: string;
   operation: OptimizationOperation;
   before: string | string[];
+  /** 确定性事实校验的结论；缺省表示未执行（例如恢复的旧记录）。 */
+  guard?: FactGuardIssue[];
   reason: string;
   requirement: string;
   sourceRefs: string[];
