@@ -5,7 +5,7 @@ import { generateId } from '@/utils/helpers';
 import { isBuiltinLayoutId } from '@/utils/custom-template';
 import { isSavedRecipeId, readLayoutRecipe } from '@/utils/layout-template';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
-import { createJobResumeVersion, type JobTarget } from '@/utils/resumeVersions';
+import { createJobResumeVersion, trackIdOf, versionNumberOf, type JobTarget } from '@/utils/resumeVersions';
 import { describeError } from '@/utils/globalErrorReporting';
 
 /**
@@ -180,6 +180,35 @@ export const useWorkbenchStore = defineStore('workbench', {
       return id;
     },
 
+    /**
+     * 把当前主干另存为下一版本。
+     *
+     * 主干的新版本沿用同一 `trackId`，版本号取该轨道上的最大值 + 1，
+     * 岗位分支据此判断自己是否落后。旧数据没有版本号，按 1 起算。
+     */
+    async createMasterVersion(sourceId: string): Promise<string> {
+      const source = await storageManager.read(sourceId);
+      if (!source) throw new Error('源简历不存在。');
+      if (source.jobTarget) throw new Error('岗位版本不能再派生主干版本。');
+      const trackId = trackIdOf(source);
+      const listed = await storageManager.list();
+      const latest = listed
+        .filter((row) => !row.jobTarget && trackIdOf(row) === trackId)
+        .reduce((max, row) => Math.max(max, versionNumberOf(row)), 0);
+      const next: ResumeData = {
+        ...JSON.parse(JSON.stringify(source)) as ResumeData,
+        id: generateId(),
+        trackId,
+        versionNumber: Math.max(latest, versionNumberOf(source)) + 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      delete next.jobTarget;
+      await storageManager.saveResume(next);
+      this.upsertMeta(metaFromResume(next));
+      return next.id;
+    },
+
     async createJobVersion(sourceId: string, target: Omit<JobTarget, 'sourceResumeId'>): Promise<string> {
       const source = await storageManager.read(sourceId);
       if (!source) throw new Error('源简历不存在。');
@@ -231,6 +260,11 @@ export const useWorkbenchStore = defineStore('workbench', {
           createdAt: now,
           updatedAt: now,
         };
+        // 复制是「另起一份」，不是「派生」：副本不是岗位版本，也不属于原主干轨道。
+        // 否则副本会被当成主干新版本，让所有岗位分支误报落后。
+        delete newResume.jobTarget;
+        delete newResume.trackId;
+        delete newResume.versionNumber;
 
         await storageManager.saveResume(newResume);
         this.upsertMeta(metaFromResume(newResume));
