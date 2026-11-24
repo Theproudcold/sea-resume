@@ -2,11 +2,20 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。版本号与发版 tag 一一对应，规则的完整说明见 [CONTRIBUTING.md](CONTRIBUTING.md#版本与发版)。
 
-## [未发布]
+## [1.3.0] - 2026-11-24
+
+### 新增
+
+- **外部 AI**：MCP 接入命令覆盖 Pi、ZCode、DeepSeek Harness，以及 OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI、Crush、Goose，面板按各客户端给出注册方式并显示其图标。Relay 仍是同一条本机 stdio。
 
 ### 修复
 
-- 统一联系方式图标的描边与视觉对齐，修复多图标并排时的截断（随 1.0.0 一起发布）。
+- **版本图谱**改为按 Git 分支的方式绘制：同一岗位的多个版本连成一条连续分支，不再各自垂到主干后在中间断开。有同步来源时新版向上连到旧版，只有最初分出的版本弯进当时的主干，同步到新主干时另画一条汇入线。
+- 轨道图改成一张覆盖整列高度的画布，跨多行的关系不再断在行边界；列间距固定，分支只在汇入主干的那一段弯折。
+
+### 重构
+
+- 复制简历时用 `structuredClone` 得到脱离响应式的副本。
 
 ## [1.2.0] - 2026-11-24
 
@@ -77,7 +86,7 @@
 - 约定功能分支经 PR 合入 `dev` 与 `master` 的协作流程。
 - 测试覆盖：114 个 spec 文件；`pnpm verify`（完整测试、类型检查、生产构建）为合入与部署的必经检查。
 
-[未发布]: https://github.com/Theproudcold/sea-resume/compare/v1.2.0...HEAD
+[1.3.0]: https://github.com/Theproudcold/sea-resume/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Theproudcold/sea-resume/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Theproudcold/sea-resume/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/Theproudcold/sea-resume/compare/v1.0.0...v1.0.1

@@ -6,7 +6,7 @@
 
 1. 应用内线上 AI：现有 OpenAI-compatible 多服务商配置。
 2. 应用内本地推理：Ollama / LM Studio 的兼容接口。
-3. 外部 Agent：Codex CLI / Claude Code，通过文件交换或可选 MCP relay 提交修改草稿，使用 CLI 自己的登录和模型配置。
+3. 外部 Agent：通过文件交换或可选 MCP relay。MCP 面板为 Codex CLI、Claude Code、Pi、ZCode、DeepSeek Harness，以及 OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI、Crush、Goose 生成接入命令。各 CLI 使用自己的登录和模型配置。
 
 外部 CLI 在本机运行不代表模型在本机推理。内容可能被 CLI 发送给其配置的服务商。
 
@@ -28,7 +28,7 @@ JSON 模式不兼容时关闭配置中的 JSON 模式，输出仍会严格校验
 
 ## 外部 Agent：文件交换（无需 MCP）
 
-1. 编辑器「更多 → 外部 AI · Codex / Claude Code」。隐私打码模式下禁用。
+1. 编辑器「更多 → 用文件交给外部 AI」。隐私打码模式下禁用。
 2. 下载工作区即授权当前简历 30 分钟。文件导入始终在网页确认后保存，和 MCP 的直接写回不是同一条路径。
 3. 下载、解压 AI 工作区，在该目录运行 CLI。
 4. 让 Agent 读取 `context/resume.json`、`AGENTS.md` / `CLAUDE.md`，在 `proposals/` 生成 JSON 草稿。
@@ -43,13 +43,13 @@ ZIP 包还含 `edit-schema.json`、`proposal.example.json` 和 `.gitignore`。�
 ## 外部 Agent：可选 MCP
 
 ```text
-Codex CLI / Claude Code
+面板所选的外部 Agent
           │ MCP stdio
           ▼
 站点托管的单文件 relay（构建时打包，依赖内联）
           │ ws://127.0.0.1:9333
           ▼
-网页中的两个工具 → 直接读写当前简历 → Resume Store → 当前存储适配器
+网页中的业务工具 → 直接读写当前简历、导出 PDF、管理模拟面试 → Resume Store → 当前存储适配器
 ```
 
 LocalStorage 和本地文件夹存储均可使用，因为业务工具在页面内调用现有 Store。页面必须保持打开。无需浏览器扩展、浏览器调试端口或云端中转。
@@ -57,14 +57,14 @@ LocalStorage 和本地文件夹存储均可使用，因为业务工具在页面�
 ### 接入：一句话
 
 1. 在简历主页顶栏点「外部 AI」，再点「启用 MCP 桥接」。关闭对话框或离开主页后连接仍保持，只有点「停止 MCP 桥接」才断开。
-2. 复制面板给出的一行命令到终端执行；或复制「给 AI 的一句话」直接粘给 Codex CLI / Claude Code，由它自己下载 `relay.mjs` 并注册 MCP。
-3. 按 CLI 提示重新加载 MCP，再让 Agent 使用下列业务工具。命令形如：
+2. 在面板选择客户端，复制命令到终端执行；或复制接入指令直接粘给该 Agent，由它自己下载 `relay.mjs` 并注册 MCP。Codex、Claude Code、Pi、OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI 走各自的 `mcp add`。ZCode、DeepSeek Harness、Crush、Goose 由同一条命令写入它们的配置文件，重复执行只更新 `sea-resume`。
+3. 按面板里该客户端的说明重新加载 MCP，再让 Agent 使用下列业务工具。Codex 的命令形如：
 
 ```sh
 mkdir -p "$HOME/.sea-resume-ai-relay" && curl -fsSL '<站点>/ai-relay/relay.mjs' -o "$HOME/.sea-resume-ai-relay/relay.mjs" && codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" --host 127.0.0.1 --widget-origin <站点来源> --max-payload 2000000
 ```
 
-Windows 使用面板生成的 PowerShell 版本。其他 MCP 客户端使用面板 JSON 配置，需要 `relay.mjs` 的真实绝对路径（JSON 不展开 `~`）。不需要解压、不需要 `npm ci`，也不需要再次输入 CLI 的 API Key。
+Windows 使用面板生成的 PowerShell 版本。DeepSeek Harness 会清洗子进程的 PATH，所以写入的是 Node 的绝对路径；ZCode 的协议版本写成 `auto`。不需要解压、不需要 `npm ci`，也不需要再次输入 CLI 的 API Key。Gemini CLI 注册到用户级配置，不写进当前项目目录。
 
 | 工具 | 作用 |
 | --- | --- |
@@ -81,7 +81,7 @@ Windows 使用面板生成的 PowerShell 版本。其他 MCP 客户端使用面�
 
 文件交换仍是另一条路：下载的上下文只有可见正文，导入的 JSON 仍在面板里确认后保存。
 
-上游 relay 还提供来源、工具列表和工具转发。这些业务工具不读取电脑上的任意文件，也不执行命令。
+上游 relay 还提供来源、工具列表和工具转发。这些业务工具不读取电脑上的任意文件，也不执行命令。DeepSeek Harness 展示的名字会带 `mcp__sea-resume__` 前缀。
 
 面板在连接宿主加载完成后显示「尚未连接本机 relay」。只有上游 widget 完成本机握手后才显示「本机 relay 已连接」；relay 退出或进入休眠重试时显示「正在重试连接本机 relay」。CLI 是否已加载这些工具，仍以 CLI 的 MCP 工具列表为准。浏览器可能要求本地网络访问许可；被拒绝时使用文件交换。
 
