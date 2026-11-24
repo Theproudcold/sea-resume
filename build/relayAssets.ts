@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { Plugin } from 'vite';
 import { zipSync } from 'fflate';
 import { createRelayBundle } from './relayBundle';
+import { patchRelayWidget } from './relayWidget';
 
 /** Ship pinned upstream browser resources, never fetch executable code from a CDN. */
 export function relayAssets(): Plugin {
@@ -11,7 +12,9 @@ export function relayAssets(): Plugin {
   const root = dirname(require.resolve('@mcp-b/webmcp-local-relay'));
   const files = new Map<string, { body: string | Uint8Array; type: string }>();
   for (const file of ['embed.js', 'widget.html', 'widget.js']) {
-    files.set(file, { body: readFileSync(join(root, 'browser', file), 'utf8'), type: file.endsWith('.js') ? 'text/javascript' : 'text/html' });
+    const source = readFileSync(join(root, 'browser', file), 'utf8');
+    const body = file.startsWith('widget.') ? patchRelayWidget(source, file) : source;
+    files.set(file, { body, type: file.endsWith('.js') ? 'text/javascript' : 'text/html' });
   }
   files.set('LICENSE', { body: readFileSync(join(root, '..', 'LICENSE'), 'utf8'), type: 'text/plain' });
   files.set('host.html', { body: '<!doctype html><html><head><meta charset="utf-8"><title>Sea Resume AI Relay</title></head><body></body></html>', type: 'text/html' });

@@ -46,4 +46,13 @@ describe('resume AI tools', () => {
     expect(() => applyResumeAiOperations(resume, [{ type: 'update_experience', id: 'unknown', field: 'company', value: 'bad' }])).toThrow('不存在');
     expect(() => applyResumeAiOperations(resume, [{ type: 'set_basic', field: 'website', value: 'javascript:alert(1)' }])).toThrow('不安全');
   });
+
+  it('removes one existing entry and rejects a missing entry', () => {
+    const id = resume.experiences[0]!.id;
+    const updated = applyResumeAiOperations(resume, [{ type: 'remove_entry', collection: 'experiences', id }]);
+    expect(updated.experiences.map(item => item.id)).not.toContain(id);
+    expect(resume.experiences.map(item => item.id)).toContain(id);
+    expect(() => applyResumeAiOperations(resume, [{ type: 'remove_entry', collection: 'experiences', id: 'missing' }])).toThrow('不存在');
+    expect(() => parseResumeAiDraft({ operations: [{ type: 'remove_entry', collection: 'files', id }] })).toThrow('不允许');
+  });
 });

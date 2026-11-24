@@ -29,6 +29,8 @@ export const useResumeStore = defineStore('resume', {
     isLoading: false,
     activeSection: null as string | null, // 当前选中的模块 ID
     appliedProposalIds: [] as string[],
+    /** Set when MCP deletes the resume open in the editor, so autosave cannot recreate it. */
+    discardedId: '',
   }),
   getters: {
     canUndo: (state) => state.historyPast.length > 0,
@@ -178,6 +180,7 @@ export const useResumeStore = defineStore('resume', {
 
         // 旧简历可能缺少 theme 等新增字段，统一归一再交给界面渲染。
         this.data = normalizeResumeData(resume);
+        this.discardedId = '';
         this.historyPast = [];
         this.saveGeneration += 1;
         this.activeSection = null;
@@ -509,8 +512,19 @@ export const useResumeStore = defineStore('resume', {
 
     // Explicit saves are FIFO barriers. Background saves may supersede queued work,
     // but never cancel a write that has already started.
+    discardOpenResume() {
+      this.cancelScheduledSave();
+      this.discardedId = this.data.id;
+      this.saveGeneration += 1;
+    },
+
     async autoSave(background = false) {
       this.cancelScheduledSave();
+      if (this.discardedId && this.data.id === this.discardedId) {
+        this.saveStatus = 'saved';
+        this.saveError = null;
+        return;
+      }
       const source = this.data;
       const snapshot = background ? null : this.exportData();
       const token = {};

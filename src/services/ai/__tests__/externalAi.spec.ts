@@ -5,7 +5,8 @@ import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { ExternalAiSession } from '../ExternalAiSession';
 import { assertProposalBaseline, createChangeProposal, parseChangeProposal, resumeRevision } from '../changeProposal';
 import { createExternalContextArchive, readExternalProposal } from '../externalAiFiles';
-import { externalTools, relayAgentPrompt, relayBundleUrl, relayConfiguration, relaySetupCommand } from '../externalAiBridge';
+import { externalTools, relayAgentPrompt, relayBundleUrl, relayConfiguration, relaySetupCommand, startExternalAiBridge } from '../externalAiBridge';
+import { createResumeLibrary } from '../resumeLibrary';
 import { builtinToRecipe } from '@/utils/layout-template';
 import { applyResumeAiOperations, parseResumeAiDraft } from '../resumeTools';
 
@@ -134,21 +135,45 @@ describe('external AI authorization and file exchange', () => {
     for (let i = 0; i < 50; i++) await session.propose({ ...proposal, proposalId: `p-${i}` });
     await expect(session.propose({ ...proposal, proposalId: 'overflow' })).rejects.toThrow('上限');
   });
+  it('accepts removal of a shared visible entry and rejects a hidden one', async () => {
+    const { session, save, read } = setup();
+    const visible = read().experiences[0]!;
+    read().experiences.push({ ...visible, id: 'hidden-exp', visible: false, company: 'Hidden Co' });
+    session.authorize();
+    await session.getContext();
+    const removal = await createChangeProposal(read(), { explanation: '删除这段经历', operations: [{ type: 'remove_entry', collection: 'experiences', id: visible.id }] });
+    await session.propose(removal);
+    expect(save).not.toHaveBeenCalled();
+    await expect(session.propose({ ...removal, proposalId: 'hidden', operations: [{ type: 'remove_entry', collection: 'experiences', id: 'hidden-exp' }] })).rejects.toThrow('未授权');
+    await session.approve(removal.proposalId);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(read().experiences.map(item => item.id)).not.toContain(visible.id);
+    expect(read().experiences.map(item => item.id)).toContain('hidden-exp');
+  });
 });
 
 describe('MCP business tools', () => {
-  it('exposes exactly four non-saving tools and pins loopback, package and origin', async () => {
+  it('lists every resume and updates one by id without a second grant', async () => {
     const resume = fixture();
-    const session = new ExternalAiSession(() => resume, vi.fn());
-    const tools = externalTools(session);
-    expect(tools.map(tool => tool.name)).toEqual(['sea_resume_get_context', 'sea_resume_get_edit_schema', 'sea_resume_propose_changes', 'sea_resume_get_proposal_status']);
-    await expect(tools[0]!.execute({})).rejects.toThrow('授权');
-    session.authorize(); const result = await tools[0]!.execute({}) as { content: { text: string }[] };
-    expect(JSON.parse(result.content[0]!.text).baseRevision).toMatch(/^sha256:/);
+    const library = createResumeLibrary({
+      list: async () => [{ id: resume.id, title: resume.title, templateId: resume.templateId, createdAt: 1, updatedAt: 2 }],
+      read: async (id) => id === resume.id ? resume : null,
+      save: async () => undefined,
+      remove: async () => undefined,
+    });
+    const tools = externalTools(library);
+    expect(tools.map(tool => tool.name)).toEqual(['sea_resume_list', 'sea_resume_get', 'sea_resume_set', 'sea_resume_create', 'sea_resume_delete']);
+    const listed = await tools[0]!.execute({}) as { content: { text: string }[] };
+    expect(JSON.parse(listed.content[0]!.text)[0].id).toBe(resume.id);
+    const read = await tools[1]!.execute({ id: resume.id }) as { content: { text: string }[] };
+    expect(JSON.parse(read.content[0]!.text).basic.email).toBe('secret@example.com');
+    const rejected = await tools[2]!.execute({ resume: { id: resume.id, basic: {} } }) as { isError?: boolean; content: { text: string }[] };
+    expect(rejected.isError).toBe(true);
+    expect(rejected.content[0]!.text).toContain('完整');
     const config = relayConfiguration('https://resume.example.com', '/Users/test/sea-resume-ai-relay/start.mjs');
     expect(config.command).toBe('node');
     expect(config.args[0]).toBe('/Users/test/sea-resume-ai-relay/start.mjs');
-    expect(config.args.slice(-6)).toEqual(['--host', '127.0.0.1', '--widget-origin', 'https://resume.example.com', '--max-payload', '500000']);
+    expect(config.args.slice(-6)).toEqual(['--host', '127.0.0.1', '--widget-origin', 'https://resume.example.com', '--max-payload', '2000000']);
     expect(() => relayConfiguration('https://example.com/path')).toThrow();
   });
   it('turns the pinned single-file relay into one terminal line and one sentence for the CLI', () => {
@@ -158,7 +183,7 @@ describe('MCP business tools', () => {
     expect(url).toBe('https://resume.example.com/sea-resume/ai-relay/relay.mjs');
     const codex = relaySetupCommand('codex', origin, baseUrl);
     expect(codex).toContain(`curl -fsSL '${url}' -o "$HOME/.sea-resume-ai-relay/relay.mjs"`);
-    expect(codex).toContain('codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" --host 127.0.0.1 --widget-origin https://resume.example.com --max-payload 500000');
+    expect(codex).toContain('codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" --host 127.0.0.1 --widget-origin https://resume.example.com --max-payload 2000000');
     expect(codex).not.toContain('npm ci');
     const claude = relaySetupCommand('claude', origin, baseUrl, 'powershell');
     expect(claude).toContain('Invoke-WebRequest -UseBasicParsing');
@@ -166,10 +191,42 @@ describe('MCP business tools', () => {
     expect(claude).not.toContain('&&');
     const prompt = relayAgentPrompt('codex', origin, baseUrl);
     expect(prompt).toContain(codex);
-    expect(prompt).toContain('sea_resume_get_context');
-    expect(prompt).toContain('sea_resume_propose_changes');
-    expect(prompt).toContain('只能由我在网页确认');
-    expect(prompt).toContain('baseRevision 必须原样复制');
+    expect(prompt).toContain('sea_resume_list');
+    expect(prompt).toContain('sea_resume_delete');
+    expect(prompt).not.toContain('sea_resume_get_context');
     for (const call of [() => relayBundleUrl('https://example.com/path', baseUrl), () => relaySetupCommand('codex', 'https://example.com/path', baseUrl), () => relayAgentPrompt('claude', 'ftp://example.com', baseUrl)]) expect(call).toThrow();
+  });
+  it('reports waiting after the host loads and only accepts relay notices from that frame', async () => {
+    vi.resetModules();
+    vi.doMock('@mcp-b/webmcp-polyfill', () => ({ installWebMCP() { Object.defineProperty(document, 'modelContext', { configurable: true, value: { registerTool: vi.fn(async () => undefined) } }); } }));
+    const { startExternalAiBridge: start } = await import('../externalAiBridge');
+    const states: string[] = [];
+    const access = createResumeLibrary({ list: async () => [], read: async () => fixture(), save: async () => undefined, remove: async () => undefined });
+    const host = document.createElement('iframe');
+    const realCreate = document.createElement.bind(document);
+    const embed = realCreate('script');
+    const append = vi.spyOn(document.body, 'appendChild').mockImplementation(node => node);
+    vi.spyOn(document, 'createElement').mockImplementation(tag => (tag === 'iframe' ? host : embed));
+    Object.defineProperty(host, 'contentDocument', { configurable: true, value: { body: { appendChild: () => undefined }, createElement: () => embed } });
+    Object.defineProperty(host, 'contentWindow', { configurable: true, value: {} });
+    Object.defineProperty(host, 'onload', { configurable: true, set(value: () => void) { queueMicrotask(value); } });
+    Object.defineProperty(embed, 'onload', { configurable: true, set(value: () => void) { queueMicrotask(value); } });
+    const stop = await start(access, undefined, state => states.push(state));
+    expect(states).toEqual(['waiting']);
+    const notice = (source: MessageEventSource | null, origin: string, type: string, state: string) => {
+      window.dispatchEvent(new MessageEvent('message', { origin, source, data: { type, state } }));
+    };
+    notice(window, location.origin, 'sea-resume.relay', 'connected');
+    notice(host.contentWindow, 'https://evil.example', 'sea-resume.relay', 'connected');
+    notice(host.contentWindow, location.origin, 'sea-resume.relay', 'connected');
+    notice(host.contentWindow, location.origin, 'webmcp.reload', 'connected');
+    expect(states).toEqual(['waiting', 'connected']);
+    stop();
+    notice(host.contentWindow, location.origin, 'sea-resume.relay', 'reconnecting');
+    expect(states).toEqual(['waiting', 'connected']);
+    append.mockRestore();
+    vi.doUnmock('@mcp-b/webmcp-polyfill');
+    vi.resetModules();
+    delete (document as unknown as { modelContext?: unknown }).modelContext;
   });
 });

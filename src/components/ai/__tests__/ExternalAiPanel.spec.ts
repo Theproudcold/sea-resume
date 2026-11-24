@@ -1,6 +1,6 @@
 import { defineComponent, h, reactive } from 'vue';
-import { mount, flushPromises } from '@vue/test-utils';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mount } from '@vue/test-utils';
+import { describe, expect, it, vi } from 'vitest';
 
 const resume = reactive({ id: 'resume-1', basic: {}, title: '简历' });
 vi.mock('@/stores/resume', () => ({
@@ -14,71 +14,17 @@ vi.mock('@/stores/resume', () => ({
 import ExternalAiPanel from '@/components/ai/ExternalAiPanel.vue';
 
 const Passthrough = defineComponent({ setup(_, { slots }) { return () => h('div', slots.default?.()); } });
-const ButtonStub = defineComponent({
-  props: { disabled: Boolean },
-  emits: ['click'],
-  setup(props, { emit, slots }) { return () => h('button', { disabled: props.disabled, onClick: () => emit('click') }, slots.default?.()); },
-});
-const CheckboxStub = defineComponent({
-  props: { modelValue: Boolean },
-  emits: ['update:modelValue'],
-  setup(props, { emit }) { return () => h('input', { type: 'checkbox', checked: props.modelValue, onChange: (event: Event) => emit('update:modelValue', (event.target as HTMLInputElement).checked) }); },
-});
 const stubs = {
-  'el-drawer': Passthrough, 'el-alert': Passthrough, 'el-tag': Passthrough, 'el-checkbox': CheckboxStub, 'el-button': ButtonStub,
-  'el-radio-group': Passthrough, 'el-radio-button': Passthrough, 'el-collapse': Passthrough, 'el-collapse-item': Passthrough,
-  'el-form-item': Passthrough, 'el-input': Passthrough,
+  'el-drawer': Passthrough, 'el-alert': Passthrough, 'el-tag': Passthrough, 'el-button': Passthrough,
+  'el-collapse': Passthrough, 'el-collapse-item': Passthrough,
 };
 
-async function authorize() {
-  const wrapper = mount(ExternalAiPanel, { props: { visible: true }, global: { stubs } });
-  await wrapper.find('input[type="checkbox"]').setValue(true);
-  await wrapper.findAll('button')[0]!.trigger('click');
-  await flushPromises();
-  return wrapper;
-}
-
-beforeEach(() => { vi.unstubAllGlobals(); resume.id = 'resume-1'; });
-
-/**
- * 站点可能部署在子路径下（GitHub Pages 为 /<repo>/），此时 import.meta.env.BASE_URL
- * 不再是 "/"。relay 包地址必须跟随 BASE_URL，不能硬编码根路径，否则 CI 会与
- * 本地跑出不同结果。
- */
-const baseUrl = import.meta.env.BASE_URL;
-
-describe('外部 AI 面板接入', () => {
-  it('授权后给出可直接粘贴的一行命令和一句话，且不带 npm ci', async () => {
-    const wrapper = await authorize();
-    const command = wrapper.find('pre').text();
-    expect(command).toContain(`${location.origin}${baseUrl}ai-relay/relay.mjs`);
-    expect(command).toContain('codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs"');
-    expect(command).toContain('--host 127.0.0.1 --widget-origin http://localhost:3000 --max-payload 500000');
-    expect(command).not.toContain('npm ci');
-    expect(wrapper.text()).toContain('复制 AI 接入指令');
-    expect(wrapper.text()).toContain('启用 MCP 桥接');
-    wrapper.unmount();
-  });
-
-  it('复制按钮写入剪贴板，Windows 分支改用 PowerShell', async () => {
-    const writeText = vi.fn(async (_value: string) => undefined);
-    vi.stubGlobal('navigator', { clipboard: { writeText } });
-    const wrapper = await authorize();
-    const button = (text: string) => wrapper.findAll('button').find(item => item.text() === text)!;
-    await button('复制终端命令').trigger('click');
-    await flushPromises();
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('codex mcp add'));
-    await button('复制 AI 接入指令').trigger('click');
-    await flushPromises();
-    expect(writeText.mock.calls[1]![0]).toContain('sea_resume_get_context');
-    wrapper.unmount();
-  });
-
-  it('撤销授权或关闭面板后回到授权表单', async () => {
-    const wrapper = await authorize();
-    const revoke = wrapper.findAll('button').find(button => button.text() === '撤销授权')!;
-    await revoke.trigger('click');
-    expect(wrapper.text()).toContain('授权当前简历');
+describe('外部 AI 文件交换', () => {
+  it('只提供文件交换，并把实时连接指向简历主页', () => {
+    const wrapper = mount(ExternalAiPanel, { props: { visible: true }, global: { stubs } });
+    expect(wrapper.text()).toContain('简历主页');
+    expect(wrapper.text()).toContain('下载 AI 工作区');
+    expect(wrapper.text()).not.toContain('启用 MCP 桥接');
     wrapper.unmount();
   });
 });

@@ -8,6 +8,7 @@ import { sanitizeResumeDataContent } from '@/utils/sanitizeResumeData';
 export const FULL_BACKUP_FORMAT = 'sea-resume-full-backup' as const;
 export const FULL_BACKUP_VERSION = 1 as const;
 export const FULL_BACKUP_REMINDER_STORAGE_KEY = 'sea-resume_full-backup-last-success';
+export const FULL_BACKUP_REMINDER_DISMISS_KEY = 'sea-resume_full-backup-reminder-dismissed';
 export const FULL_BACKUP_REMINDER_INTERVAL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface FullBackupEnvelope {
@@ -402,13 +403,37 @@ export function getFullBackupReminderStatus(
   if (!availableStorage) return { available: false, due: false, lastSuccessfulBackupAt: null };
   try {
     const lastSuccessfulBackupAt = availableStorage.getItem(FULL_BACKUP_REMINDER_STORAGE_KEY);
+    const dismissedAt = availableStorage.getItem(FULL_BACKUP_REMINDER_DISMISS_KEY);
     return {
       available: true,
-      due: isFullBackupReminderDue(lastSuccessfulBackupAt, now),
+      due: isFullBackupReminderDue(lastSuccessfulBackupAt, now) && !isFullBackupReminderDismissed(dismissedAt, now),
       lastSuccessfulBackupAt,
     };
   } catch {
     return { available: false, due: false, lastSuccessfulBackupAt: null };
+  }
+}
+
+function isFullBackupReminderDismissed(dismissedAt: string | null, now: Date | number): boolean {
+  if (!dismissedAt) return false;
+  const dismissed = Date.parse(dismissedAt);
+  const nowTimestamp = asTimestamp(now);
+  return Number.isFinite(dismissed) && Number.isFinite(nowTimestamp) && nowTimestamp - dismissed < FULL_BACKUP_REMINDER_INTERVAL_MS;
+}
+
+/** Hide the routine reminder until the next 30-day cycle. This is not a backup. */
+export function dismissFullBackupReminder(
+  storage?: BackupReminderStorage | null,
+  now: Date | number = Date.now(),
+): boolean {
+  const availableStorage = resolveReminderStorage(storage);
+  const timestamp = asTimestamp(now);
+  if (!availableStorage || !Number.isFinite(timestamp)) return false;
+  try {
+    availableStorage.setItem(FULL_BACKUP_REMINDER_DISMISS_KEY, new Date(timestamp).toISOString());
+    return true;
+  } catch {
+    return false;
   }
 }
 

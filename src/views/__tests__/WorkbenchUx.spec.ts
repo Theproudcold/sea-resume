@@ -28,7 +28,7 @@ async function render(options: { error?: string; count?: number } = {}) {
   await router.push('/');
   wrapper = mount(Workbench, { global: {
     plugins: [pinia, router, ElementPlus],
-    stubs: { SettingsCenter: true, ResumeCard: true, FullBackupManager: true, ResumeVersionManager: true, MarkdownImportDialog: true, AiPdfImportDialog: true },
+    stubs: { SettingsCenter: true, ResumeCard: true, FullBackupManager: true, ResumeVersionManager: true, MarkdownImportDialog: true, AiPdfImportDialog: true, McpConnection: true },
   } });
   await flushPromises();
   return { store, init, create, router, wrapper };
@@ -69,10 +69,33 @@ describe('workbench primary user journeys', () => {
     vi.spyOn(storage, 'reauthorizeFileSystem').mockResolvedValue('简历文件夹');
     init.mockImplementationOnce(async () => { store.error = null; });
     await flushPromises();
-    await button('重新授权本地目录').trigger('click');
+    await button('重新授权').trigger('click');
     await flushPromises();
     expect(wrapper!.find('.load-error').exists()).toBe(false);
     expect(wrapper!.find('.empty-board').exists()).toBe(true);
+  });
+
+  it('shows only the folder recovery prompt while browser storage is a fallback', async () => {
+    await render({ count: 1 });
+    const storage = useStorageStore();
+    storage.initializationWarning = '本地文件夹暂不可用，已回退到浏览器缓存。 本地文件夹尚未授权';
+    storage.hasFileSystemConfig = true;
+    await flushPromises();
+    const alert = wrapper!.get('.backup-reminder--alert');
+    expect(alert.text()).toContain('本地文件夹需要重新授权，简历暂时存在这台浏览器里。');
+    expect(alert.text()).not.toContain('尚未授权');
+    expect(wrapper!.text()).not.toContain('建议下载一份备份');
+    expect(button('先备份')).toBeTruthy();
+  });
+
+  it('keeps a dismissed browser backup reminder hidden for the next cycle', async () => {
+    await render({ count: 1 });
+    expect(wrapper!.get('.backup-reminder--quiet').text()).toContain('简历只保存在这台浏览器里');
+    await button('以后再说').trigger('click');
+    expect(wrapper!.text()).not.toContain('简历只保存在这台浏览器里');
+    wrapper!.unmount();
+    await render({ count: 1 });
+    expect(wrapper!.text()).not.toContain('简历只保存在这台浏览器里');
   });
 
   it('offers search with just two resumes and a way back from no results', async () => {
