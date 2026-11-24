@@ -10,7 +10,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { CSSProperties } from 'vue';
 import type { ResumeData } from '@/types/resume';
-import { getTemplateComponent } from '@/components/preview/template-registry';
+import { resolveTemplateView } from '@/components/preview/template-registry';
 
 const previewRef = ref<HTMLDivElement | null>(null);
 const coverScale = ref(0.3);
@@ -36,7 +36,7 @@ const props = defineProps<{
   data: ResumeData;
 }>();
 
-const templateComponent = computed(() => getTemplateComponent(props.data.templateId) || getTemplateComponent('modern'));
+const templateComponent = computed(() => resolveTemplateView(props.data));
 const paperStyle = computed(() => ({
   '--font-size': `${props.data.theme?.fontSize || 14}px`,
   '--line-height': props.data.theme?.lineHeight || 1.5,

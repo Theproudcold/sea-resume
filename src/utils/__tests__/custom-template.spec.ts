@@ -5,6 +5,7 @@ import {
   customTemplateToMetadata,
   resumeFromCustomTemplate,
 } from '@/utils/custom-template';
+import { builtinToRecipe } from '@/utils/layout-template';
 
 const resume = {
   id: 'resume-1',
@@ -76,5 +77,23 @@ describe('custom templates', () => {
 
   it('rejects a blank name', () => {
     expect(() => buildCustomTemplateFromResume(resume, { name: '   ' })).toThrow('请填写模板名称。');
+  });
+
+  it('keeps a valid layout inside a content snapshot', () => {
+    const withLayout = {
+      ...resume,
+      templateId: 'layout:saved',
+      layout: builtinToRecipe('tech', resume.theme),
+    };
+    const template = buildCustomTemplateFromResume(withLayout, { name: '深色内容' }, { id: 'with-layout' });
+    expect(template.baseTemplateId).toBe('tech');
+    expect(template.snapshot.templateId).toBe('layout:saved');
+    expect(template.snapshot.layout?.paper).toBe('dark');
+
+    const created = resumeFromCustomTemplate(template);
+    expect(created.templateId).toBe('layout:saved');
+    expect(created.layout?.paper).toBe('dark');
+    created.layout = undefined;
+    expect(template.snapshot.layout?.paper).toBe('dark');
   });
 });

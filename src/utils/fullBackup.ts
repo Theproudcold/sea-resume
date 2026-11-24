@@ -2,6 +2,7 @@ import type { ResumeData } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
 import { MAX_JSON_IMPORT_FILE_SIZE } from '@/utils/importLimits';
 
+import { readLayoutRecipe } from '@/utils/layout-template';
 import { sanitizeResumeDataContent } from '@/utils/sanitizeResumeData';
 
 export const FULL_BACKUP_FORMAT = 'sea-resume-full-backup' as const;
@@ -231,6 +232,9 @@ function validateResumeData(value: unknown, index: number): asserts value is Res
     if (typeof margins[field] !== 'number' || !Number.isFinite(margins[field])) {
       throw new Error(`Full backup field "${path}.theme.moduleMargins.${field}" must be a finite number.`);
     }
+  }
+  if (resume.layout !== undefined && readLayoutRecipe(resume.layout) === null) {
+    throw new Error(`Full backup field "${path}.layout" is invalid.`);
   }
 }
 

@@ -6,6 +6,7 @@ import { ExternalAiSession } from '../ExternalAiSession';
 import { assertProposalBaseline, createChangeProposal, parseChangeProposal, resumeRevision } from '../changeProposal';
 import { createExternalContextArchive, readExternalProposal } from '../externalAiFiles';
 import { externalTools, relayAgentPrompt, relayBundleUrl, relayConfiguration, relaySetupCommand } from '../externalAiBridge';
+import { builtinToRecipe } from '@/utils/layout-template';
 import { applyResumeAiOperations, parseResumeAiDraft } from '../resumeTools';
 
 const fixture = () => {
@@ -79,6 +80,9 @@ describe('external AI authorization and file exchange', () => {
       { type: 'update_experience', id: 'hidden', field: 'company', value: 'bad' },
       { type: 'set_template', templateId: 'modern' },
     ]) await expect(session.propose({ ...proposal, operations: [operation] })).rejects.toThrow();
+    const layout = builtinToRecipe('professional', read().theme);
+    await expect(session.propose({ ...proposal, proposalId: 'layout-edit', operations: [{ type: 'set_layout', layout }] })).resolves.toMatchObject({ status: 'pending' });
+    await expect(session.propose({ ...proposal, proposalId: 'layout-css', operations: [{ type: 'set_layout', layout: { ...layout, css: 'x' } }] })).rejects.toThrow('版式');
   });
   it('returns pending without saving; handles duplicate concurrent requests and ID collisions', async () => {
     const { session, save, read } = setup(); session.authorize(); await session.getContext();

@@ -13,7 +13,7 @@
 import { computed, useTemplateRef } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
-import { getTemplateComponent } from '@/components/preview/template-registry';
+import { resolveTemplateView } from '@/components/preview/template-registry';
 import ResumeCanvas from './ResumeCanvas.vue';
 import { createPrivacyMaskedResume } from '@/utils/privacyMask';
 
@@ -22,7 +22,7 @@ const resumeStore = useResumeStore();
 const { data: resumeData } = storeToRefs(resumeStore);
 const previewData = computed(() => props.privacyMode ? createPrivacyMaskedResume(resumeData.value) : resumeData.value);
 
-const currentTemplate = computed(() => getTemplateComponent(previewData.value.templateId));
+const currentTemplate = computed(() => resolveTemplateView(previewData.value));
 
 // Expose measurements to the common editor parent; sibling panels cannot inject from here.
 const canvasRef = useTemplateRef<InstanceType<typeof ResumeCanvas>>('canvasRef');

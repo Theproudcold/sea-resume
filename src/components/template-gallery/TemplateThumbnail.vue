@@ -14,7 +14,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { ResumeData } from '@/types/resume';
-import { getTemplateComponent } from '@/components/preview/template-registry';
+import { resolveTemplateView } from '@/components/preview/template-registry';
 import { useWhenVisible } from '@/composables/useWhenVisible';
 
 const props = defineProps<{
@@ -44,7 +44,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => resizeObserver?.disconnect());
 
-const templateComponent = computed(() => getTemplateComponent(props.data.templateId || props.templateId));
+const templateComponent = computed(() => resolveTemplateView({
+  ...props.data,
+  templateId: props.data.templateId || props.templateId,
+}));
 </script>
 
 <style scoped>

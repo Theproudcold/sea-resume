@@ -18,6 +18,65 @@
       </div>
       <el-alert v-if="!fitUnavailable && (estimatedPages ?? 0) > 1" class="fit-panel__alert" type="warning" :closable="false" title="当前为多页简历，可压缩排版或精简内容。" />
     </section>
+
+    <section class="fit-panel">
+      <div class="fit-panel__heading">
+        <div>
+          <strong>版式结构</strong>
+          <p>{{ data.layout ? '当前使用自定义版式。字号和主题色仍在下面调整。' : '基于当前模板生成可编辑版式。细节可能和原模板不同，可以撤销。' }}</p>
+        </div>
+      </div>
+      <div class="fit-panel__actions">
+        <el-button v-if="!data.layout" type="primary" plain @click="customizeLayout">基于当前模板自定义</el-button>
+        <el-button v-else text @click="clearLayout">恢复内置模板</el-button>
+      </div>
+      <template v-if="data.layout">
+        <label class="layout-field"><span>栏数</span>
+          <el-select aria-label="版式栏数" :model-value="data.layout.structure" @change="patchLayout({ structure: $event })">
+            <el-option label="单栏" value="single" />
+            <el-option label="左侧栏" value="sidebar-left" />
+            <el-option label="右侧栏" value="sidebar-right" />
+          </el-select>
+        </label>
+        <label v-if="data.layout.structure !== 'single'" class="layout-field"><span>侧栏宽度 ({{ data.layout.sidebarWidth }}%)</span>
+          <el-slider aria-label="侧栏宽度" :model-value="data.layout.sidebarWidth" :min="24" :max="42" :step="1" @change="patchLayout({ sidebarWidth: $event })" />
+        </label>
+        <fieldset v-if="data.layout.structure !== 'single'" class="layout-field">
+          <legend>放进侧栏的模块</legend>
+          <el-checkbox v-for="section in sectionChoices" :key="section.id" :model-value="data.layout.sidebarSections.includes(section.id)" @change="toggleSidebarSection(section.id, $event)">{{ section.label }}</el-checkbox>
+        </fieldset>
+        <label class="layout-field"><span>个人简介</span>
+          <el-select aria-label="简介位置" :model-value="data.layout.summaryPlacement" @change="patchLayout({ summaryPlacement: $event })">
+            <el-option label="主栏" value="main" /><el-option label="侧栏" value="sidebar" /><el-option label="不显示" value="hidden" />
+          </el-select>
+        </label>
+        <label class="layout-field"><span>联系方式</span>
+          <el-select aria-label="联系方式位置" :model-value="data.layout.contactsPlacement" @change="patchLayout({ contactsPlacement: $event })">
+            <el-option label="页眉" value="header" /><el-option label="侧栏" value="sidebar" />
+          </el-select>
+        </label>
+        <label class="layout-field"><span>页眉</span>
+          <el-select aria-label="页眉样式" :model-value="data.layout.header.variant" @change="patchHeader({ variant: $event })">
+            <el-option label="行内" value="inline" /><el-option label="色带" value="banner" /><el-option label="堆叠" value="stacked" />
+          </el-select>
+        </label>
+        <label class="layout-field"><span>头像</span>
+          <el-select aria-label="头像位置" :model-value="data.layout.header.avatar" @change="patchHeader({ avatar: $event })">
+            <el-option label="左侧" value="start" /><el-option label="右侧" value="end" /><el-option label="不显示" value="none" />
+          </el-select>
+        </label>
+        <label class="layout-field"><span>标题</span>
+          <el-select aria-label="标题样式" :model-value="data.layout.heading" @change="patchLayout({ heading: $event })">
+            <el-option label="下划线" value="underline" /><el-option label="强调色" value="accent" /><el-option label="纯文字" value="plain" />
+          </el-select>
+        </label>
+        <label class="layout-field"><span>纸色</span>
+          <el-select aria-label="纸色" :model-value="data.layout.paper" @change="patchLayout({ paper: $event })">
+            <el-option label="浅色" value="light" /><el-option label="深色" value="dark" />
+          </el-select>
+        </label>
+      </template>
+    </section>
     <!-- 主题色 -->
     <div class="form-item">
       <label class="block text-sm font-medium text-gray-700 mb-2">主题颜色</label>
@@ -135,7 +194,9 @@
 import { computed, inject, onMounted, ref } from 'vue';
 import { ElMessage } from 'element-plus';
 import { storeToRefs } from 'pinia';
+import type { LayoutHeader, LayoutRecipe } from '@/types/layout-template';
 import { useResumeStore } from '@/stores/resume';
+import { recipeForResume } from '@/utils/layout-template';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 import { MIN_FONT_SIZE } from '@/utils/pageFit';
 import { useOnePageFit } from '@/composables/useOnePageFit';
@@ -197,6 +258,45 @@ const updateColor = (color: string | null) => {
 const handleUpdate = () => {
   resumeStore.scheduleSave();
 };
+
+const sectionChoices = computed(() => (data.value.sectionOrder || []).map((id) => ({
+  id,
+  label: data.value.sectionTitles?.[id]
+    || data.value.customBlocks.find((block) => block.id === id)?.title
+    || id,
+})));
+
+function customizeLayout() {
+  resumeStore.updateLayout(recipeForResume({ ...data.value, layout: undefined }));
+}
+
+function clearLayout() {
+  resumeStore.setTemplate(data.value.layout?.seedId || 'modern');
+}
+
+function patchLayout(patch: Partial<LayoutRecipe>) {
+  const recipe = recipeForResume(data.value);
+  const next = { ...recipe, ...patch };
+  if (patch.paper && patch.paper !== recipe.paper) {
+    next.tokens = {
+      ...recipe.tokens,
+      ink: patch.paper === 'dark' ? '#d7dee6' : '#1f2937',
+      muted: patch.paper === 'dark' ? '#9aa6b2' : '#64748b',
+    };
+  }
+  resumeStore.updateLayout(next);
+}
+
+function patchHeader(patch: Partial<LayoutHeader>) {
+  const recipe = recipeForResume(data.value);
+  patchLayout({ header: { ...recipe.header, ...patch } });
+}
+
+function toggleSidebarSection(id: string, checked: string | number | boolean) {
+  const current = recipeForResume(data.value).sidebarSections;
+  const sidebarSections = checked ? [...new Set([...current, id])] : current.filter((item) => item !== id);
+  patchLayout({ sidebarSections });
+}
 </script>
 
 <style scoped>
@@ -251,4 +351,6 @@ const handleUpdate = () => {
 
 .fit-panel__actions { justify-content: flex-start; margin-top: var(--ui-space-3); }
 .fit-panel__alert { margin-top: var(--ui-space-3); }
+.layout-field { display: flex; flex-direction: column; gap: 6px; margin-top: var(--ui-space-3); min-width: 0; }
+.layout-field legend, .layout-field > span { color: var(--ui-text-secondary); font-size: var(--ui-font-sm); }
 </style>

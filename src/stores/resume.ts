@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia';
+import type { LayoutRecipe, LayoutTemplate } from '@/types/layout-template';
 import type { ResumeData, BasicInfo, Experience, Education, Skill, CustomBlock, Project, ThemeConfig, CustomItem } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { generateId } from '@/utils/helpers';
+import { applyLayoutToResume, readLayoutRecipe } from '@/utils/layout-template';
 import { createDefaultResumeData, normalizeResumeData } from '@/utils/resumeData';
 import { cloneResume, rememberResumeSnapshot } from '@/utils/resumeSnapshot';
 import { assertProposalBaseline, parseChangeProposal, previewProposal } from '@/services/ai/changeProposal';
@@ -394,10 +396,35 @@ export const useResumeStore = defineStore('resume', {
       this.activeSection = id;
     },
 
-    // 切换模板
+    // 切换模板。内置模板和自定义版式互斥：切回内置 id 必须清掉嵌入版式，否则旧配方会一直盖住组件。
     setTemplate(templateId: string) {
       this.rememberChange();
       this.data.templateId = templateId;
+      delete this.data.layout;
+      this.saveImmediately();
+    },
+
+    /** 只改当前简历的版式，不改正文。字号和强调色仍以套用后的 theme 为准。 */
+    updateLayout(recipe: LayoutRecipe) {
+      const layout = readLayoutRecipe(recipe);
+      if (!layout) throw new Error('这份版式无法使用。请检查栏数、颜色和模块分区。');
+      this.rememberChange();
+      this.data.layout = layout;
+      this.saveImmediately();
+    },
+
+    /** 套用模板库里的版式：替换排版和主题，保留正文、顺序、隐藏模块和岗位信息。 */
+    applyLayout(template: LayoutTemplate) {
+      this.rememberChange();
+      const current = this.data;
+      const next = applyLayoutToResume(current, template);
+      this.data = {
+        ...next,
+        id: current.id,
+        title: current.title,
+        createdAt: current.createdAt,
+        updatedAt: new Date().toISOString(),
+      };
       this.saveImmediately();
     },
 

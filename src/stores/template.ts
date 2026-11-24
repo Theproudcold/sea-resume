@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import type { CustomResumeTemplate } from '@/types/custom-template';
+import type { LayoutTemplate } from '@/types/layout-template';
 import type { ResumeData, TemplateMetadata } from '@/types/resume';
 import {
   deleteCustomTemplate,
@@ -8,9 +9,20 @@ import {
   saveCustomTemplate,
 } from '@/services/templates/CustomTemplateRepository';
 import {
+  deleteLayoutTemplate,
+  listLayoutTemplates,
+  renameLayoutTemplate,
+  saveLayoutTemplate,
+} from '@/services/templates/LayoutTemplateRepository';
+import {
   buildCustomTemplateFromResume,
   customTemplateToMetadata,
 } from '@/utils/custom-template';
+import {
+  buildLayoutTemplate,
+  layoutTemplateToMetadata,
+  recipeFromCurrent,
+} from '@/utils/layout-template';
 
 export const builtinTemplates: TemplateMetadata[] = [
   {
@@ -73,6 +85,7 @@ export const useTemplateStore = defineStore('template', {
   state: () => ({
     builtinTemplates,
     customTemplates: [] as CustomResumeTemplate[],
+    layoutTemplates: [] as LayoutTemplate[],
     currentTemplateId: 'modern',
     loaded: false,
   }),
@@ -80,6 +93,7 @@ export const useTemplateStore = defineStore('template', {
   getters: {
     templates(state): TemplateMetadata[] {
       return [
+        ...state.layoutTemplates.map(layoutTemplateToMetadata),
         ...state.customTemplates.map(customTemplateToMetadata),
         ...state.builtinTemplates,
       ];
@@ -96,7 +110,41 @@ export const useTemplateStore = defineStore('template', {
 
     loadCustomTemplates() {
       this.customTemplates = listCustomTemplates();
+      // 版式库损坏只影响版式，不让已经读出的内容模板一起消失。
+      try {
+        this.layoutTemplates = listLayoutTemplates();
+      } catch (error) {
+        this.layoutTemplates = [];
+        this.loaded = true;
+        throw error;
+      }
       this.loaded = true;
+    },
+
+    saveCurrentLayout(resume: ResumeData, input: { name: string; description?: string }): LayoutTemplate {
+      const template = buildLayoutTemplate(recipeFromCurrent(resume), input);
+      this.layoutTemplates = saveLayoutTemplate(template);
+      this.loaded = true;
+      return template;
+    },
+
+    importLayout(input: { name: string; description?: string; recipe: LayoutTemplate['recipe'] }): LayoutTemplate {
+      const template = buildLayoutTemplate(input.recipe, input);
+      this.layoutTemplates = saveLayoutTemplate(template);
+      this.loaded = true;
+      return template;
+    },
+
+    renameLayoutTemplate(id: string, name: string) {
+      this.layoutTemplates = renameLayoutTemplate(id, name);
+    },
+
+    deleteLayoutTemplate(id: string) {
+      this.layoutTemplates = deleteLayoutTemplate(id);
+    },
+
+    findLayoutTemplate(id: string): LayoutTemplate | undefined {
+      return this.layoutTemplates.find((template) => template.id === id);
     },
 
     saveCurrentResumeAsTemplate(

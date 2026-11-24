@@ -51,6 +51,7 @@
                   <el-dropdown-item command="shortcuts"><el-icon><Key /></el-icon>快捷键</el-dropdown-item>
                   <el-dropdown-item command="fullscreen"><el-icon><FullScreen /></el-icon>全屏预览</el-dropdown-item>
                   <el-dropdown-item command="save-template" :disabled="privacyMode"><el-icon><Collection /></el-icon>存为模板</el-dropdown-item>
+                  <el-dropdown-item command="save-layout" :disabled="privacyMode"><el-icon><Collection /></el-icon>存为版式</el-dropdown-item>
                   <el-dropdown-item v-if="aiUndoSnapshot" command="undo-ai"><el-icon><RefreshLeft /></el-icon>撤销 AI 修改</el-dropdown-item>
                   <el-dropdown-item command="import" divided><el-icon><Upload /></el-icon>导入简历备份（JSON）</el-dropdown-item>
                   <el-dropdown-item command="reset" divided class="danger-menu-item"><el-icon><RefreshRight /></el-icon>重置当前简历</el-dropdown-item>
@@ -183,6 +184,14 @@
         @update:visible="showSaveTemplate = $event"
         @save="saveCurrentAsTemplate"
       />
+      <SaveAsTemplateDialog
+        mode="layout"
+        :visible="showSaveLayout"
+        :default-name="`${data.title || '我的简历'}版式`"
+        :saving="savingTemplate"
+        @update:visible="showSaveLayout = $event"
+        @save="saveCurrentLayout"
+      />
       <el-dialog v-model="showShortcutHelp" title="编辑快捷键" width="var(--ui-dialog-width-sm)" align-center>
         <ul class="shortcut-list">
           <li><kbd>Ctrl / ⌘ + S</kbd><span>立即保存</span></li>
@@ -207,7 +216,7 @@ import { useResumeStore } from '@/stores/resume';
 import { useTemplateStore } from '@/stores/template';
 import { useWorkbenchStore } from '@/stores/workbench';
 import SaveAsTemplateDialog from '@/components/template-gallery/SaveAsTemplateDialog.vue';
-import { getTemplateComponent } from '@/components/preview/template-registry';
+import { resolveTemplateView } from '@/components/preview/template-registry';
 import { exportToImage } from '@/utils/export-image';
 import { exportPreviewToPDF, exportToPDF } from '@/utils/export-pdf';
 import { exportToJSON, importFromJSON } from '@/utils/export-json';
@@ -283,6 +292,7 @@ const privacyMode = ref(false);
 const showQualityPanel = ref(false);
 const showShortcutHelp = ref(false);
 const showSaveTemplate = ref(false);
+const showSaveLayout = ref(false);
 const savingTemplate = ref(false);
 
 const unsubscribePreviewNavigation = resumeStore.$onAction(({ name }) => {
@@ -322,9 +332,7 @@ function handleAiSettingsSaved() {
 }
 
 
-const currentTemplate = computed(() => {
-  return getTemplateComponent(data.value.templateId);
-});
+const currentTemplate = computed(() => resolveTemplateView(previewData.value));
 
 // 三栏容器只在简历加载完成后挂载，因此用 ref 监听宽度变化。
 let disconnectContainerObserver: (() => void) | null = null;
@@ -525,6 +533,7 @@ const handleHeaderMenuCommand = (command: string) => {
   else if (command === 'fullscreen') showFullscreen.value = true;
   else if (command === 'templates') goToTemplates();
   else if (command === 'save-template' && !privacyMode.value) showSaveTemplate.value = true;
+  else if (command === 'save-layout' && !privacyMode.value) showSaveLayout.value = true;
   else if (command === 'undo-ai') void undoAiChanges();
   else if (command === 'import' || command === 'reset') void handleCommand(command);
 };
@@ -537,6 +546,21 @@ const saveCurrentAsTemplate = async (payload: { name: string; description: strin
     templateStore.saveCurrentResumeAsTemplate(data.value, payload);
     showSaveTemplate.value = false;
     ElMessage.success('已存为模板，可在模板库的「我的」分类中使用');
+  } catch (error) {
+    ElMessage.error(describeError(error));
+  } finally {
+    savingTemplate.value = false;
+  }
+};
+
+const saveCurrentLayout = async (payload: { name: string; description: string }) => {
+  if (savingTemplate.value) return;
+  savingTemplate.value = true;
+  try {
+    await resumeStore.flushSave();
+    templateStore.saveCurrentLayout(data.value, payload);
+    showSaveLayout.value = false;
+    ElMessage.success('已存为版式。套用时只改排版，不替换简历内容。');
   } catch (error) {
     ElMessage.error(describeError(error));
   } finally {

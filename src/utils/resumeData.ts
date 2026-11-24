@@ -2,6 +2,7 @@ import type { BasicInfo, ResumeData, ThemeConfig } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
 import { parseAvatarShape } from '@/utils/avatarShape';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
+import { readLayoutRecipe } from '@/utils/layout-template';
 
 const DEFAULT_BASIC: BasicInfo = {
   name: '',
@@ -78,6 +79,8 @@ export function normalizeResumeData(source: unknown): ResumeData {
   if (!isRecord(source)) return defaults;
 
   const input = source as Partial<ResumeData> & Record<string, unknown>;
+  const { layout: rawLayout, ...inputWithoutLayout } = input;
+  const layout = readLayoutRecipe(rawLayout);
   const theme: Record<string, unknown> = isRecord(input.theme) ? input.theme : {};
   const basic: Record<string, unknown> = isRecord(input.basic) ? input.basic : {};
   const margins: Record<string, unknown> = isRecord(theme.moduleMargins) ? theme.moduleMargins : {};
@@ -86,7 +89,7 @@ export function normalizeResumeData(source: unknown): ResumeData {
 
   return {
     ...defaults,
-    ...input,
+    ...inputWithoutLayout,
     id: asString(input.id, defaults.id),
     title: asString(input.title, defaults.title),
     basic: {
@@ -128,5 +131,6 @@ export function normalizeResumeData(source: unknown): ResumeData {
     sectionTitles: { ...defaults.sectionTitles, ...(titles as Record<string, string>) },
     createdAt: asString(input.createdAt, defaults.createdAt),
     updatedAt: asString(input.updatedAt, defaults.updatedAt),
+    ...(layout ? { layout } : {}),
   };
 }

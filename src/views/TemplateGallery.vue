@@ -13,6 +13,10 @@
           @update:search="search = $event"
           @update:sort="sortBy = $event"
         />
+        <div class="template-gallery__import">
+          <el-button @click="importLayoutFile">导入版式</el-button>
+          <input ref="layoutFileInput" class="template-gallery__file" type="file" accept="application/json,.json" @change="readLayoutFile" />
+        </div>
 
         <div v-if="displayTemplates.length" class="template-gallery__grid">
           <TemplateCard
@@ -25,8 +29,9 @@
             :disabled="usingTemplate"
             @select="selectTemplate(template.id)"
             @preview="openPreview(template.id)"
-            @rename="renameCustomTemplate(template.id)"
-            @remove="removeCustomTemplate(template.id)"
+            @rename="renameStoredTemplate(template)"
+            @remove="removeStoredTemplate(template)"
+            @export="exportLayoutTemplate(template.id)"
           />
         </div>
 
@@ -68,6 +73,8 @@ import TemplateGalleryToolbar from '@/components/template-gallery/TemplateGaller
 import TemplatePreviewDialog from '@/components/template-gallery/TemplatePreviewDialog.vue';
 import type { TemplateMetadata } from '@/types/resume';
 import { resumeFromCustomTemplate } from '@/utils/custom-template';
+import { applyLayoutToResume, parseLayoutTemplateFile, serializeLayoutTemplate } from '@/utils/layout-template';
+import { createDefaultResumeData } from '@/utils/resumeData';
 import { buildTemplateResumeTitle, filterTemplates, sortTemplates, type TemplateSortKey } from '@/utils/template-gallery';
 import { getTemplateUsageMap, markTemplateUsed } from '@/utils/template-usage';
 import { describeError } from '@/utils/globalErrorReporting';
@@ -82,6 +89,7 @@ const { data } = storeToRefs(resumeStore);
 const { templates } = storeToRefs(templateStore);
 
 const previewVisible = ref(false);
+const layoutFileInput = ref<HTMLInputElement | null>(null);
 const usingTemplate = ref(false);
 let disposed = false;
 let replacementConfirmationPending = false;
@@ -106,20 +114,29 @@ const activeResumeId = computed(() =>
 const canApplyToCurrent = computed(() => Boolean(activeResumeId.value));
 
 const cardPreviewData = (template: TemplateMetadata) => {
-  if (template.source !== 'custom') {
-    return { ...demoResumeData, templateId: template.id };
+  if (template.source === 'layout') {
+    const layout = templateStore.findLayoutTemplate(template.id);
+    return layout
+      ? { ...demoResumeData, templateId: `layout:${layout.id}`, layout: layout.recipe }
+      : { ...demoResumeData, templateId: 'modern' };
   }
-  const custom = templateStore.findCustomTemplate(template.id);
-  return custom ? resumeFromCustomTemplate(custom) : { ...demoResumeData, templateId: 'modern' };
+  if (template.source === 'custom') {
+    const custom = templateStore.findCustomTemplate(template.id);
+    return custom ? resumeFromCustomTemplate(custom) : { ...demoResumeData, templateId: 'modern' };
+  }
+  return { ...demoResumeData, templateId: template.id, layout: undefined };
 };
 
 const previewData = computed(() => {
   const template = selectedTemplate.value;
   if (!template) return { ...demoResumeData };
-  if (template.source !== 'custom' && activeResumeId.value && data.value.id === activeResumeId.value) {
-    return { ...data.value, templateId: template.id };
+  const currentReady = Boolean(activeResumeId.value) && data.value.id === activeResumeId.value;
+  if (!currentReady || template.source === 'custom') return cardPreviewData(template);
+  if (template.source === 'layout') {
+    const layout = templateStore.findLayoutTemplate(template.id);
+    return layout ? { ...data.value, templateId: `layout:${layout.id}`, layout: layout.recipe } : cardPreviewData(template);
   }
-  return cardPreviewData(template);
+  return { ...data.value, templateId: template.id, layout: undefined };
 });
 
 const selectedTemplate = computed(
@@ -190,16 +207,13 @@ const createResumeFromTemplate = async () => {
   try {
     const template = selectedTemplate.value;
     const custom = template.source === 'custom' ? templateStore.findCustomTemplate(template.id) : undefined;
+    const layout = template.source === 'layout' ? templateStore.findLayoutTemplate(template.id) : undefined;
+    const title = buildTemplateResumeTitle(template.name, new Date());
     const newId = custom
-      ? await workbenchStore.createResumeFromData(
-        resumeFromCustomTemplate(custom),
-        buildTemplateResumeTitle(template.name, new Date()),
-        custom.baseTemplateId,
-      )
-      : await workbenchStore.createResume(
-        buildTemplateResumeTitle(template.name, new Date()),
-        template.id,
-      );
+      ? await workbenchStore.createResumeFromData(resumeFromCustomTemplate(custom), title, custom.baseTemplateId)
+      : layout
+        ? await workbenchStore.createResumeFromData(applyLayoutToResume(createDefaultResumeData(), layout), title, `layout:${layout.id}`)
+        : await workbenchStore.createResume(title, template.id);
     markTemplateUsed(template.id);
     syncUsageMap();
     closeDialogs();
@@ -227,7 +241,21 @@ const applyTemplateToCurrent = async () => {
     }
     if (!isCurrentTarget()) return;
     const custom = template.source === 'custom' ? templateStore.findCustomTemplate(template.id) : undefined;
-    if (custom) {
+    const layout = template.source === 'layout' ? templateStore.findLayoutTemplate(template.id) : undefined;
+    if (layout) {
+      replacementConfirmationPending = true;
+      try {
+        await ElMessageBox.confirm(
+          `「${template.name}」只更换当前简历的排版和主题，不替换已填写的内容。`,
+          '套用这个版式？',
+          { confirmButtonText: '套用版式', cancelButtonText: '取消', type: 'warning' },
+        );
+      } finally {
+        replacementConfirmationPending = false;
+      }
+      if (!isCurrentTarget()) return;
+      resumeStore.applyLayout(layout);
+    } else if (custom) {
       replacementConfirmationPending = true;
       try {
         await ElMessageBox.confirm(
@@ -254,6 +282,16 @@ const applyTemplateToCurrent = async () => {
   } finally {
     usingTemplate.value = false;
   }
+};
+
+const renameStoredTemplate = async (template: TemplateMetadata) => {
+  if (template.source === 'layout') return renameLayoutTemplate(template.id);
+  return renameCustomTemplate(template.id);
+};
+
+const removeStoredTemplate = async (template: TemplateMetadata) => {
+  if (template.source === 'layout') return removeLayoutTemplate(template.id);
+  return removeCustomTemplate(template.id);
 };
 
 const renameCustomTemplate = async (templateId: string) => {
@@ -292,6 +330,70 @@ const removeCustomTemplate = async (templateId: string) => {
   }
 };
 
+const renameLayoutTemplate = async (templateId: string) => {
+  const template = templateStore.findLayoutTemplate(templateId);
+  if (!template) return;
+  try {
+    const { value } = await ElMessageBox.prompt('给这个版式起个新名字。', '重命名版式', {
+      inputValue: template.name,
+      inputValidator: (input) => input.trim() ? true : '请填写版式名称',
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+    });
+    templateStore.renameLayoutTemplate(templateId, value);
+    ElMessage.success('版式已重命名');
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
+    ElMessage.error(describeError(error));
+  }
+};
+
+const removeLayoutTemplate = async (templateId: string) => {
+  const template = templateStore.findLayoutTemplate(templateId);
+  if (!template) return;
+  try {
+    await ElMessageBox.confirm(
+      `删除「${template.name}」后，已经套用它的简历仍按当时保存的版式显示。`,
+      '删除自定义版式',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+    );
+    templateStore.deleteLayoutTemplate(templateId);
+    if (selectedTemplateId.value === templateId) closeDialogs();
+    ElMessage.success('版式已删除');
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return;
+    ElMessage.error(describeError(error));
+  }
+};
+
+const exportLayoutTemplate = (templateId: string) => {
+  const template = templateStore.findLayoutTemplate(templateId);
+  if (!template) return;
+  const file = new Blob([JSON.stringify(serializeLayoutTemplate(template), null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(file);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${template.name}.sea-resume-layout.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+const importLayoutFile = () => layoutFileInput.value?.click();
+
+const readLayoutFile = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    const parsed = parseLayoutTemplateFile(JSON.parse(await file.text()) as unknown);
+    templateStore.importLayout(parsed);
+    ElMessage.success('版式已导入');
+  } catch (error) {
+    ElMessage.error(describeError(error));
+  }
+};
+
 const handleBack = () => {
   if (activeResumeId.value) {
     router.push(`/editor/${activeResumeId.value}`);
@@ -325,6 +427,9 @@ const handleBack = () => {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--space-lg);
 }
+
+.template-gallery__import { display: flex; justify-content: flex-end; }
+.template-gallery__file { display: none; }
 
 .template-gallery__empty {
   padding: var(--space-2xl) 0;
