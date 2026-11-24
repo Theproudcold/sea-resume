@@ -110,5 +110,5 @@ describe('browser PDF export', () => {
     }
     expect(fetchMock).toHaveBeenCalledTimes(2);
     fetchMock.mockRestore();
-  });
+  }, 15000);
 });

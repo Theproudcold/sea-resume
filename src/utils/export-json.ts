@@ -2,6 +2,7 @@ import type { ResumeData } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
 import { parseAvatarShape } from '@/utils/avatarShape';
 import { validateJsonImportFileSize } from '@/utils/importLimits';
+import { isLayoutTemplateId, readLayoutRecipe } from '@/utils/layout-template';
 import { sanitizeRichTextHtml, sanitizeMarkdownUrl } from '@/utils/markdown/markdownSafety';
 
 export { MAX_JSON_IMPORT_FILE_SIZE, validateJsonImportFileSize } from '@/utils/importLimits';
@@ -57,9 +58,14 @@ export function validateResumeData(input: unknown): ResumeData {
   const margins = isRecord(theme.moduleMargins) ? theme.moduleMargins : {};
   const titles = isRecord(input.sectionTitles) ? input.sectionTitles : {};
   const now = new Date().toISOString();
-  const templateId = text(input.templateId, 'templateId', 'modern');
+  const requestedTemplateId = text(input.templateId, 'templateId', 'modern');
+  const layout = readLayoutRecipe(input.layout);
+  const builtinTemplateIds = ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'];
+  const templateId = layout && isLayoutTemplateId(requestedTemplateId)
+    ? requestedTemplateId
+    : builtinTemplateIds.includes(requestedTemplateId) ? requestedTemplateId : 'modern';
 
-  return {
+  const resume = {
     ...input,
     id: text(input.id, 'id', generateId()),
     title: text(input.title, 'title', '导入的简历'),
@@ -128,7 +134,7 @@ export function validateResumeData(input: unknown): ResumeData {
         order: typeof item.order === 'number' ? item.order : 0,
       };
     }),
-    templateId: ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'].includes(templateId) ? templateId : 'modern',
+    templateId,
     theme: {
       color: text(theme.color, 'theme.color', '#2563eb'), fontFamily: text(theme.fontFamily, 'theme.fontFamily', 'sans-serif'),
       fontSize: typeof theme.fontSize === 'number' ? theme.fontSize : 14,
@@ -154,6 +160,9 @@ export function validateResumeData(input: unknown): ResumeData {
     createdAt: text(input.createdAt, 'createdAt', now),
     updatedAt: text(input.updatedAt, 'updatedAt', now),
   } as ResumeData;
+  if (layout) resume.layout = layout;
+  else delete resume.layout;
+  return resume;
 }
 
 /**

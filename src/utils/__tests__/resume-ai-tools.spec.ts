@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
+import { builtinToRecipe } from '@/utils/layout-template';
 import { applyResumeAiOperations, parseResumeAiDraft } from '@/services/ai/resumeTools';
 
 const resume = parseResumeMarkdown(`# Mei\n\n## 工作经历\n### Example | Engineer | 2022.01 — 至今\n- Build tools`).resume;
@@ -19,6 +20,21 @@ describe('resume AI tools', () => {
     const draft = parseResumeAiDraft({ operations: [{ type: 'set_template', templateId: 'ai-agent' }] });
     const updated = applyResumeAiOperations(resume, draft.operations);
     expect(updated.templateId).toBe('ai-agent');
+  });
+
+  it('applies a declarative layout and clears it when switching back to a built-in template', () => {
+    const layout = builtinToRecipe('tech', { ...resume.theme, fontSize: 16, color: '#112233' });
+    const updated = applyResumeAiOperations(resume, [{ type: 'set_layout', layout }]);
+    expect(updated.layout?.paper).toBe('dark');
+    expect(updated.theme).toMatchObject({ fontSize: 16, color: '#112233' });
+    expect(updated.basic).toEqual(resume.basic);
+    expect(resume.layout).toBeUndefined();
+
+    const cleared = applyResumeAiOperations(updated, [{ type: 'set_template', templateId: 'modern' }]);
+    expect(cleared.templateId).toBe('modern');
+    expect(cleared.layout).toBeUndefined();
+    expect(() => parseResumeAiDraft({ operations: [{ type: 'set_layout', layout: { ...layout, css: 'body{color:red}' } }] })).toThrow('版式');
+    expect(parseResumeAiDraft({ operations: [{ type: 'set_layout', layout: null }] }).operations[0]).toEqual({ type: 'set_layout', layout: null });
   });
 
   it('applies edits to a clone and rejects missing targets and unsafe links', () => {

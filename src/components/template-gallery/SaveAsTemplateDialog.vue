@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="visible"
-    title="存为模板"
+    :title="mode === 'layout' ? '存为版式' : '存为模板'"
     width="var(--ui-dialog-width-sm)"
     align-center
     class="save-template-dialog-shell"
@@ -9,7 +9,9 @@
   >
     <div class="save-template">
       <p class="save-template__desc">
-        保存当前简历的内容、版式和主题。模板只保存在这台浏览器，不会改动正在编辑的简历。
+        {{ mode === 'layout'
+          ? '只保存栏数、页眉、标题和纸色，不保存姓名、经历等个人内容。版式只保存在这台浏览器。'
+          : '保存当前简历的内容、版式和主题。模板只保存在这台浏览器，不会改动正在编辑的简历。' }}
       </p>
       <label class="save-template__field">
         <span>模板名称</span>
@@ -34,7 +36,7 @@
     </div>
     <template #footer>
       <div class="app-dialog-actions">
-        <el-button type="primary" :loading="saving" @click="submit">保存模板</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">{{ mode === 'layout' ? '保存版式' : '保存模板' }}</el-button>
         <el-button :disabled="saving" @click="emit('update:visible', false)">取消</el-button>
       </div>
     </template>
@@ -44,11 +46,12 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   visible: boolean;
   defaultName: string;
   saving: boolean;
-}>();
+  mode?: 'content' | 'layout';
+}>(), { mode: 'content' });
 
 const emit = defineEmits<{
   'update:visible': [value: boolean];

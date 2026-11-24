@@ -29,7 +29,7 @@
       </div>
     </div>
     <template #footer>
-      <p v-if="canApplyToCurrent" class="preview-dialog__hint">{{ template?.source === 'custom' ? '此模板包含已保存的简历内容，使用时会替换当前内容。' : '只更换模板，已填写的内容保持不变。' }}</p>
+      <p v-if="canApplyToCurrent" class="preview-dialog__hint">{{ template?.source === 'custom' ? '此模板包含已保存的简历内容，使用时会替换当前内容。' : template?.source === 'layout' ? '只更换排版和主题，已填写的内容保持不变。' : '只更换模板，已填写的内容保持不变。' }}</p>
       <div class="app-dialog-actions preview-dialog__actions">
         <el-button :disabled="loading" @click="$emit('update:visible', false)">返回模板库</el-button>
         <el-button :type="canApplyToCurrent ? 'default' : 'primary'" :loading="loading && !canApplyToCurrent" :disabled="loading" @click="$emit('create')">用此模板新建</el-button>
@@ -42,7 +42,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import type { ResumeData, TemplateMetadata } from '@/types/resume';
-import { getTemplateComponent } from '@/components/preview/template-registry';
+import { resolveTemplateView } from '@/components/preview/template-registry';
 
 const props = defineProps<{
   visible: boolean;
@@ -71,10 +71,7 @@ watch(canvas, (element) => {
 }, { flush: 'post' });
 onBeforeUnmount(() => resizeObserver?.disconnect());
 
-const templateComponent = computed(() => {
-  if (!props.template) return null;
-  return getTemplateComponent(props.previewData.templateId || props.template.baseTemplateId || props.template.id);
-});
+const templateComponent = computed(() => props.template ? resolveTemplateView(props.previewData) : null);
 </script>
 
 <style scoped>

@@ -21,10 +21,11 @@
         </el-tag>
       </div>
       <div class="template-card__actions">
-        <el-button v-if="template.source !== 'custom'" type="primary" :loading="loading" :disabled="disabled" @click="$emit('select')">{{ canApplyToCurrent ? '使用此模板' : '用此模板新建' }}</el-button>
+        <el-button v-if="template.source !== 'custom'" type="primary" :loading="loading" :disabled="disabled" @click="$emit('select')">{{ canApplyToCurrent ? (template.source === 'layout' ? '套用版式' : '使用此模板') : '用此模板新建' }}</el-button>
         <el-button :type="template.source === 'custom' ? 'primary' : 'default'" :disabled="disabled" @click="$emit('preview')">{{ template.source === 'custom' ? '预览并使用' : '预览' }}</el-button>
-        <details v-if="template.source === 'custom'" class="template-card__manage">
-          <summary>管理模板</summary>
+        <details v-if="template.source === 'custom' || template.source === 'layout'" class="template-card__manage">
+          <summary>{{ template.source === 'layout' ? '管理版式' : '管理模板' }}</summary>
+          <el-button v-if="template.source === 'layout'" text :disabled="disabled" @click="$emit('export')">导出</el-button>
           <el-button text :disabled="disabled" @click="$emit('rename')">重命名</el-button>
           <el-button text type="danger" :disabled="disabled" @click="$emit('remove')">删除</el-button>
         </details>
@@ -50,6 +51,7 @@ defineEmits<{
   select: [];
   rename: [];
   remove: [];
+  export: [];
 }>();
 </script>
 

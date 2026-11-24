@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { templateDemoData } from '@/data/template-demo';
+import { builtinToRecipe } from '@/utils/layout-template';
 import type { ResumeData } from '@/types/resume';
 import { validateResumeData } from '@/utils/export-json';
 import {
@@ -71,6 +72,16 @@ describe('full backup data layer', () => {
     // 类型错误仍是结构损坏，照旧拒绝。
     tampered.resumes[0]!.basic.avatarShape = 42;
     expect(() => parseFullBackup(JSON.stringify(tampered))).toThrow(/avatarShape/);
+  });
+
+  it('round-trips a layout recipe and rejects an unknown layout version', () => {
+    const resume = makeResume('resume-layout', 'Layout');
+    resume.layout = builtinToRecipe('tech', resume.theme);
+    expect(parseFullBackup(serializeFullBackup([resume])).resumes[0]?.layout?.paper).toBe('dark');
+
+    const tampered = JSON.parse(serializeFullBackup([resume])) as { resumes: Array<{ layout: { schemaVersion: number } }> };
+    tampered.resumes[0]!.layout.schemaVersion = 2;
+    expect(() => parseFullBackup(JSON.stringify(tampered))).toThrow(/layout/);
   });
 
   it('rejects malformed, incomplete, and unsupported backup data', () => {

@@ -1,5 +1,7 @@
 import type { Column, Content, Node as PdfNode, NodeQueries, TDocumentDefinitions } from 'pdfmake/interfaces';
+import type { LayoutRecipe } from '@/types/layout-template';
 import type { ResumeData } from '@/types/resume';
+import { readLayoutRecipe, splitSections } from '@/utils/layout-template';
 import { buildResumeSections, type PdfResumeSection } from './sections';
 import { getPdfTemplateLayout, type PdfTemplateLayout } from './template-layouts';
 import { richTextToPdfContent } from './richText';
@@ -122,8 +124,99 @@ function createProfessionalColumns(
   };
 }
 
+function recipeHeading(section: PdfResumeSection, recipe: LayoutRecipe, accent: string, ink: string, topMargin: number): Content {
+  const color = recipe.heading === 'accent' ? accent : ink;
+  return {
+    text: section.title,
+    style: 'sectionHeader',
+    color,
+    margin: [0, topMargin, 0, 5],
+    ...(recipe.heading === 'underline' ? { decoration: 'underline' as const, decorationColor: accent, decorationStyle: 'solid' as const } : {}),
+  };
+}
+
+function recipeSectionStack(sections: PdfResumeSection[], recipe: LayoutRecipe, accent: string, ink: string, topMargin: number): Content[] {
+  return sections.flatMap((section) => [recipeHeading(section, recipe, accent, ink, topMargin), ...section.content]);
+}
+
+/** 自定义版式和 DOM 预览读同一份配方；没有配方的简历仍走原来的六套 PDF 版式。 */
+function createRecipePdfDefinition(data: ResumeData, recipe: LayoutRecipe, avatarDataUrl?: string): TDocumentDefinitions {
+  const accent = validColor(data.theme.color, recipe.tokens.accent);
+  const ink = validColor(recipe.tokens.ink, '#1f2937');
+  const muted = validColor(recipe.tokens.muted, '#64748b');
+  const dark = recipe.paper === 'dark';
+  const headerText = recipe.header.fill === 'accent' ? '#ffffff' : ink;
+  const sections = buildResumeSections(data);
+  const single = recipe.structure === 'single';
+  const columns = splitSections(recipe, sections.map((section) => section.id));
+  const byId = new Map(sections.map((section) => [section.id, section]));
+  const pick = (ids: string[]) => ids.flatMap((id) => byId.get(id) ? [byId.get(id)!] : []);
+  const margin = pxToPt(data.theme.pageMargins, 32) || DEFAULT_MARGIN;
+  const sectionGap = pxToPt(data.theme.moduleMargins.bottom, 12);
+  const contacts = contactRuns(data, headerText);
+  const summary = data.basic.summary && recipe.summaryPlacement !== 'hidden' ? richTextToPdfContent(data.basic.summary) : [];
+  const avatar: Column[] = avatarDataUrl && recipe.header.avatar !== 'none'
+    ? [{ image: avatarDataUrl, fit: [58, 58], alignment: 'center', margin: [4, 0, 4, 0] }]
+    : [];
+  const profile: Content[] = [
+    { text: data.basic.name || data.title || '简历', style: 'resumeName', color: headerText },
+    ...(data.basic.title ? [{ text: data.basic.title, style: 'resumeHeadline', color: headerText } as Content] : []),
+    ...((single || recipe.contactsPlacement === 'header') && contacts.length ? [{ text: contacts, style: 'contactLine', margin: [0, 5, 0, 0] } as Content] : []),
+  ];
+  const profileColumn: Column = { width: '*', stack: profile };
+  const headerColumns = recipe.header.avatar === 'start' ? [...avatar, profileColumn] : [profileColumn, ...avatar];
+  const content: Content[] = [{
+    columns: headerColumns,
+    columnGap: 14,
+    margin: recipe.header.fill === 'accent' ? [12, 12, 12, 14] : [0, 0, 0, 13],
+    ...(recipe.header.fill === 'accent' ? { fillColor: accent, color: headerText } : {}),
+  }];
+  const main = recipeSectionStack(pick(single ? columns.main : columns.main), recipe, accent, ink, sectionGap);
+  if (!single && recipe.structure !== 'single') {
+    const sidebarSections = pick(columns.sidebar);
+    const sidebar: Content[] = [
+      ...(recipe.summaryPlacement === 'sidebar' ? summary : []),
+      ...(recipe.contactsPlacement === 'sidebar' && contacts.length ? [{ text: contacts, style: 'sidebarContact', margin: [0, 0, 0, 8] } as Content] : []),
+      ...recipeSectionStack(sidebarSections, recipe, accent, ink, sectionGap),
+    ];
+    const sidebarColumn: Column = { width: `${recipe.sidebarWidth}%`, stack: sidebar };
+    const mainColumn: Column = { width: '*', stack: [...(recipe.summaryPlacement === 'main' ? summary : []), ...main] };
+    content.push({
+      columns: recipe.structure === 'sidebar-right' ? [mainColumn, sidebarColumn] : [sidebarColumn, mainColumn],
+      columnGap: 18,
+    });
+  } else {
+    if (recipe.summaryPlacement !== 'hidden') content.push(...summary);
+    content.push(...main);
+  }
+  const fontSize = Math.max(7, Math.min(18, pxToPt(data.theme.fontSize, 10) || 10));
+  const lineHeight = Math.max(1, Math.min(2, Number(data.theme.lineHeight) || 1.35));
+  return {
+    pageSize: 'A4',
+    pageMargins: [margin, margin, margin, margin],
+    ...(dark ? { background: { canvas: [{ type: 'rect', x: 0, y: 0, w: 595.28, h: 841.89, color: '#18232d' }] } } : {}),
+    info: { title: `${data.basic.name || data.title || '简历'} - 简历`, author: data.basic.name || '', subject: '简历' },
+    defaultStyle: { font: 'NotoSansSC', fontSize, color: ink, lineHeight },
+    styles: {
+      resumeName: { fontSize: 22, bold: true, margin: [0, 0, 0, 2] },
+      resumeHeadline: { fontSize: 11, color: recipe.header.fill === 'accent' ? '#ffffff' : muted, margin: [0, 0, 0, 1] },
+      contactLine: { fontSize: 8, lineHeight: 1.2 },
+      sidebarContact: { fontSize: 7.5, lineHeight: 1.3, color: ink },
+      sectionHeader: { fontSize: 11, bold: true, color: accent },
+      entryTitle: { fontSize, bold: true, color: ink },
+      entryDate: { fontSize: Math.max(7, fontSize - 1), color: muted, alignment: 'right' },
+      entrySubtitle: { fontSize: Math.max(7, fontSize - 0.5), color: muted },
+      bodyText: { fontSize, lineHeight, color: ink },
+      richList: { fontSize, lineHeight, margin: [8, 0, 0, 0], color: ink },
+    },
+    content,
+  };
+}
+
 /** Build a searchable A4 PDF definition directly from resume data, without rendering the Vue DOM. */
 export function createResumePdfDefinition(data: ResumeData, avatarDataUrl?: string): TDocumentDefinitions {
+  const recipe = readLayoutRecipe(data.layout);
+  if (recipe) return createRecipePdfDefinition(data, recipe, avatarDataUrl);
   const baseLayout = getPdfTemplateLayout(data.templateId);
   const layout: PdfTemplateLayout = {
     ...baseLayout,

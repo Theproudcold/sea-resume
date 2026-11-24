@@ -4,6 +4,7 @@ import { formatResumeDateRange } from '../dateFormat';
 import { createResumePdfDefinition } from '../createResumePdfDefinition';
 import { richTextToPdfContent } from '../richText';
 import { buildResumeSections } from '../sections';
+import { builtinToRecipe } from '@/utils/layout-template';
 import { getPdfTemplateLayout, pdfTemplateLayouts } from '../template-layouts';
 import type { ResumeData } from '@/types/resume';
 
@@ -105,5 +106,24 @@ describe('pdfmake resume definition', () => {
     expect(text).not.toContain(originalPhone);
     expect(data.basic.name).toBe(originalName);
     expect(data.basic.email).toBe(originalEmail);
+  });
+
+  it('reads a custom layout for columns, header fill and paper instead of the built-in template id', () => {
+    const data = cloneDemo();
+    data.templateId = 'modern';
+    data.theme = { ...data.theme, fontSize: 16, color: '#0f766e' };
+    const recipe = builtinToRecipe('professional', data.theme);
+    recipe.structure = 'sidebar-right';
+    recipe.header.fill = 'accent';
+    recipe.paper = 'dark';
+    data.layout = recipe;
+
+    const definition = createResumePdfDefinition(data);
+    const serialized = JSON.stringify(definition);
+    expect(serialized).toContain('32%');
+    expect(serialized).toContain('#0f766e');
+    expect(serialized).toContain('#18232d');
+    expect(textFrom(definition.content)).toContain('李晨阳');
+    expect(definition.defaultStyle).toMatchObject({ fontSize: 12 });
   });
 });

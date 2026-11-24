@@ -145,6 +145,8 @@ export interface ResumeData {
   projects: Project[];
   customBlocks: CustomBlock[];
   templateId: string;
+  /** 用户自定义版式。缺省时按 templateId 渲染内置模板，已有合法值时预览和 PDF 都以它为准。 */
+  layout?: import('@/types/layout-template').LayoutRecipe;
   jobTarget?: ResumeJobTarget;
   theme: ThemeConfig;
   sectionOrder: string[];
@@ -166,11 +168,11 @@ export interface TemplateMetadata {
   name: string;
   description: string;
   thumbnail?: string;
-  category: 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' | 'custom';
+  category: 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' | 'custom' | 'layout';
   categoryLabel: string;
   keywords: string[];
   recommendedOrder: number;
-  source?: 'builtin' | 'custom';
-  /** 自定义模板沿用的内置版式组件。 */
+  source?: 'builtin' | 'custom' | 'layout';
+  /** 自定义内容模板沿用的内置版式组件。版式模板不使用它。 */
   baseTemplateId?: string;
 }
