@@ -396,7 +396,7 @@ async function parseWithAi() {
       if (truncation) imported.warnings.push(truncation);
     }
     parsed.value = imported;
-    draftResume.value = JSON.parse(JSON.stringify(imported.resume)) as ResumeData;
+    draftResume.value = structuredClone(imported.resume);
     explanation.value = result.explanation;
     title.value = imported.sourceTitle;
     templateId.value = imported.resume.templateId || 'modern';

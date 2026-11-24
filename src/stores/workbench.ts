@@ -152,7 +152,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       const moduleMargins = source.theme?.moduleMargins || { top: 0, bottom: 24, left: 0, right: 0 };
       const layout = readLayoutRecipe(source.layout);
       const newResume: ResumeData = {
-        ...JSON.parse(JSON.stringify(source)) as ResumeData,
+        ...structuredClone(source),
         id,
         title: title.trim() || source.title || '导入的简历',
         templateId: layout && isSavedRecipeId(templateId) ? templateId : (isBuiltinLayoutId(templateId) ? templateId : 'modern'),
@@ -196,7 +196,7 @@ export const useWorkbenchStore = defineStore('workbench', {
         .filter((row) => !row.jobTarget && trackIdOf(row) === trackId)
         .reduce((max, row) => Math.max(max, versionNumberOf(row)), 0);
       const next: ResumeData = {
-        ...JSON.parse(JSON.stringify(source)) as ResumeData,
+        ...structuredClone(source),
         id: generateId(),
         trackId,
         versionNumber: Math.max(latest, versionNumberOf(source)) + 1,
@@ -219,7 +219,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       if (!source.jobTarget) throw new Error('只有岗位版本才能同步主干。');
       const now = new Date().toISOString();
       const next: ResumeData = {
-        ...JSON.parse(JSON.stringify(source)) as ResumeData,
+        ...structuredClone(source),
         id: generateId(),
         jobTarget: { ...source.jobTarget, baseVersion, rebasedFromId: source.id },
         createdAt: now,

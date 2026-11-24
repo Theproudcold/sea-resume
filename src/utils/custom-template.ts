@@ -1,3 +1,4 @@
+import { toRaw } from 'vue';
 import type { ResumeSnapshot } from '@/types/custom-template';
 import type { ResumeData, TemplateMetadata } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
@@ -91,7 +92,7 @@ export function resumeSnapshotToMetadata(template: ResumeSnapshot): TemplateMeta
 
 /** 用于预览或新建简历的独立副本，不与已保存的模板共享引用。 */
 export function resumeFromSnapshot(template: ResumeSnapshot): ResumeData {
-  const normalized = normalizeResumeData(JSON.parse(JSON.stringify(template.snapshot)) as ResumeData);
+  const normalized = normalizeResumeData(structuredClone(toRaw(template.snapshot)));
   delete normalized.jobTarget;
   if (!normalized.layout) {
     normalized.templateId = builtinTemplateId({

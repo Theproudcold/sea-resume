@@ -81,7 +81,7 @@ export function parseResumePatch(input: unknown, options?: { allowEmpty?: boolea
 
 /** Apply validated operations to a copy; failures never partially mutate the live Pinia store. */
 export function applyResumePatch(source: ResumeData, operations: ResumePatchOperation[]): ResumeData {
-  const resume = JSON.parse(JSON.stringify(source)) as ResumeData;
+  const resume = structuredClone(source);
   for (const operation of parseResumePatch({ operations }).operations) {
     switch (operation.type) {
       case 'set_basic': {
