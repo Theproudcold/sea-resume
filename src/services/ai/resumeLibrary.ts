@@ -18,6 +18,8 @@ export interface ResumeCatalog {
   remove: (id: string) => Promise<void>;
   /** The resume open in the editor must not be saved again after deletion. */
   discardOpen?: (id: string) => Promise<void>;
+  /** Navigate the browser into the visual editor for live preview of this resume. */
+  open?: (id: string) => Promise<void>;
   exportPdf?: (resume: ResumeData) => Promise<void>;
   interviews?: {
     list: () => Promise<InterviewSession[]>;
@@ -89,6 +91,12 @@ export function createResumeLibrary(catalog: ResumeCatalog) {
       await catalog.discardOpen?.(id);
       await catalog.remove(id);
       return { id, deleted: true };
+    },
+    async open(id: string): Promise<{ id: string; opened: true }> {
+      if (!await catalog.read(id)) throw new Error('没有这份简历。');
+      if (!catalog.open) throw new Error('当前页面不能打开编辑器预览。');
+      await catalog.open(id);
+      return { id, opened: true };
     },
     async exportPdf(id: string): Promise<{ id: string; downloaded: true }> {
       const resume = await catalog.read(id);

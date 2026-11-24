@@ -6,7 +6,10 @@ import ElementPlus, { ElRadioGroup } from 'element-plus';
 import AiAssistantPanel from '../AiAssistantPanel.vue';
 import { clearAiModelSettings, saveAiModelSettings } from '@/services/ai/AiSettings';
 import { requestResumeAiDraft } from '@/services/ai/quickEdit';
+import { useMcpBridge } from '@/services/ai/useMcpBridge';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
+
+vi.mock('vue-router', () => ({ useRouter: () => ({ currentRoute: { value: { path: '/editor/1' } }, push: vi.fn() }) }));
 
 vi.mock('@/services/ai/quickEdit', () => ({ requestResumeAiDraft: vi.fn() }));
 let panel: VueWrapper;
@@ -81,5 +84,17 @@ describe('AI assistant quick editing UX', () => {
     await flushPromises();
     expect(panel.text()).not.toContain('过期结果');
     expect(panel.get('.request-button').text()).toBe('生成修改建议');
+  });
+
+  it('当外部 MCP 已连接时提示无需在此配置 API Key，消除内置助手与外部 Agent 混淆', async () => {
+    const mcp = useMcpBridge();
+    mcp.linkState.value = 'connected';
+    try {
+      await render();
+      expect(panel.text()).toContain('外部 MCP 已连接');
+      expect(panel.text()).toContain('无需在此配置 API Key');
+    } finally {
+      mcp.linkState.value = '';
+    }
   });
 });

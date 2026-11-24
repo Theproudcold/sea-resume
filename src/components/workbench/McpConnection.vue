@@ -1,9 +1,9 @@
 <template>
-  <el-button text @click="open = true">外部 AI<span v-if="statusSuffix">{{ statusSuffix }}</span></el-button>
+  <el-button :text="!link" :link="link" @click="open = true">外部 AI<span v-if="statusSuffix">{{ statusSuffix }}</span></el-button>
   <el-dialog v-model="open" title="连接外部 Agent" width="min(640px, calc(100vw - 24px))" align-center append-to-body modal-class="mcp-connection-overlay">
     <section class="mcp-connection" aria-labelledby="mcp-connection-title">
       <div class="mcp-connection__heading">
-        <p id="mcp-connection-title">启用后可以管理全部简历、导出 PDF，并读取或开始模拟面试。简历写回会立即保存；开始面试会使用设置里的模型。</p>
+        <p id="mcp-connection-title">启用后外部 Agent（CLI / IDE 插件 / MCP 客户端）可直接管理全部简历、打开实时预览、导出 PDF，并读取或开始模拟面试。使用外部 Agent 无需配置网页「AI 简历助手」的 API Key；仅开始模拟面试会用到网页模型设置。</p>
         <el-tag :type="linkTag.type">{{ linkTag.label }}</el-tag>
       </div>
       <div class="mcp-connection__actions">
@@ -25,9 +25,10 @@
       <p v-if="configTarget">运行后，把终端打印的配置合并进 {{ configTarget }}</p>
       <p v-if="clientNote">{{ clientNote }}</p>
       <pre class="mcp-command" aria-label="接入命令" tabindex="0">{{ setupCommand }}</pre>
-      <p v-if="linkState === 'waiting'">页面已就绪，但尚未连接本机 relay。请先运行上面的命令，并允许浏览器访问本地网络。</p>
-      <p v-else-if="linkState === 'connected'">本机 relay 已连接。先让 CLI 调用 sea_resume_list，再按 id 读取或修改。</p>
-      <p v-else-if="linkState === 'reconnecting'">正在重试连接本机 relay。请确认命令仍在运行。</p>
+      <p v-if="linkState === 'waiting'">页面已就绪，但尚未连接本机 relay。请先在终端或客户端完成接入并重启，同时允许浏览器访问本地网络。</p>
+      <p v-else-if="linkState === 'connected'">本机 relay 已连接。外部 Agent 已可调用 sea_resume_list、sea_resume_create、sea_resume_open 等工具，无需在网页里另配 API Key。</p>
+      <p v-else-if="linkState === 'rejected'">本机 relay 拒绝了当前页面（{{ origin }}）。请确认 MCP 配置里的 --widget-origin 与当前地址一致并重启客户端。</p>
+      <p v-else-if="linkState === 'reconnecting'">正在重试连接本机 relay。请确认客户端 MCP 服务仍在运行。</p>
       <p>{{ clientReload }}</p>
       <el-alert v-if="errorMessage" type="error" :closable="false" :title="errorMessage" show-icon />
     </section>
@@ -41,22 +42,37 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
-import { relayAgentPrompt, relayClients, relayConfigTarget, relaySetupCommand, type RelayClient, type RelayShell } from '@/services/ai/externalAiBridge';
+import { detectRelayShell, relayAgentPrompt, relayClients, relayConfigTarget, relaySetupCommand, type RelayClient, type RelayShell } from '@/services/ai/externalAiBridge';
 import { useMcpBridge } from '@/services/ai/useMcpBridge';
 import HarnessIcon from './HarnessIcon.vue';
+
+defineProps<{ link?: boolean }>();
+
+const MCP_CLIENT_STORAGE_KEY = 'sea-resume_mcp-client';
+function loadSavedClient(): RelayClient {
+  try {
+    const saved = localStorage.getItem(MCP_CLIENT_STORAGE_KEY);
+    if (saved && relayClients.some((item) => item.id === saved)) return saved as RelayClient;
+  } catch { /* 存储不可用时回退默认值 */ }
+  return 'codex';
+}
 
 const { linkState, started, connecting, errorMessage, connect, disconnect } = useMcpBridge();
 const open = ref(false);
 const statusSuffix = computed(() => {
   if (linkState.value === 'connected') return ' · 已连接';
   if (linkState.value === 'waiting') return ' · 等待';
+  if (linkState.value === 'rejected') return ' · 来源受限';
   if (linkState.value === 'reconnecting') return ' · 重试';
   return '';
 });
-const client = ref<RelayClient>('codex');
-const shell = ref<RelayShell>('posix');
+const client = ref<RelayClient>(loadSavedClient());
+watch(client, (value) => {
+  try { localStorage.setItem(MCP_CLIENT_STORAGE_KEY, value); } catch { /* 忽略受限存储 */ }
+});
+const shell = ref<RelayShell>(detectRelayShell());
 const origin = location.origin;
 const baseUrl = import.meta.env.BASE_URL;
 const setupCommand = computed(() => relaySetupCommand(client.value, origin, baseUrl, shell.value));
@@ -67,6 +83,7 @@ const clientNote = computed(() => selectedClient.value?.note ?? '');
 const clientReload = computed(() => selectedClient.value?.reload ?? '');
 const linkTag = computed(() => {
   if (linkState.value === 'connected') return { type: 'success' as const, label: '本机 relay 已连接' };
+  if (linkState.value === 'rejected') return { type: 'danger' as const, label: '来源未获放行' };
   if (linkState.value === 'reconnecting') return { type: 'danger' as const, label: '正在重试连接本机 relay' };
   if (linkState.value === 'waiting') return { type: 'warning' as const, label: '尚未连接本机 relay' };
   return { type: 'info' as const, label: '桥接未启动' };

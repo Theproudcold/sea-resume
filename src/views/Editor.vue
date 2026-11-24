@@ -38,6 +38,7 @@
             </div>
             <div class="editor-toolbar__group" role="group" aria-label="去向">
               <el-button link :disabled="privacyMode" @click="showAiAssistant = true">AI 助手</el-button>
+              <McpConnection v-if="!privacyMode" link />
               <el-button link :disabled="privacyMode" @click="router.push({ path: '/interview/new', query: { resumeId: data.id } })">模拟面试</el-button>
               <el-button link @click="goToTemplates">更换模板</el-button>
             </div>
@@ -222,6 +223,7 @@ import { exportPreviewToPDF, exportToPDF } from '@/utils/export-pdf';
 import { exportToJSON, importFromJSON } from '@/utils/export-json';
 import { resumeToMarkdown, downloadMarkdown } from '@/utils/markdown/exportResumeMarkdown';
 import AppHeader from '@/components/common/AppHeader.vue';
+import McpConnection from '@/components/workbench/McpConnection.vue';
 import PanelSplitter from '@/components/common/PanelSplitter.vue';
 import EditorPanel from '@/components/editor/EditorPanel.vue';
 import PreviewPanel from '@/components/preview/PreviewPanel.vue';

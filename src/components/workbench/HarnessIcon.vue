@@ -27,9 +27,13 @@ const props = defineProps<{ id: RelayClient }>();
  * Color marks and Magpie's PNG logos stay images.
  * Mono marks are inlined: Pi's even-odd hole becomes a solid square when the same file is used as a CSS mask.
  */
+const mcpJson = '<svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="4" cy="4" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="12" cy="4" r="2" stroke="currentColor" stroke-width="1.5"/><circle cx="8" cy="12" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M5.6 5.2L7 10.2M10.4 5.2L9 10.2M6 4h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+
 const marks: Record<RelayClient, { src?: string; raw?: string }> = {
   codex: { src: codex },
+  'codex-config': { src: codex },
   claude: { src: claude },
+  'mcp-json': { raw: mcpJson },
   pi: { raw: pi },
   zcode: { src: zcode },
   dsh: { src: deepseek },

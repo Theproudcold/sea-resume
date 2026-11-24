@@ -167,12 +167,14 @@ A4 是定尺纸张、预览是连续长图，等分必然把正好压线的文�
 
 ### 14. 外部 MCP 的「已启动」不等于「已连接」
 
-`startExternalAiBridge` 返回时，页面只是加载完同源宿主和上游 embed，状态是 `waiting`。
-`connected` 只来自上游 widget 在 `hello/accepted` 后发出的 `sea-resume.relay` 消息；
-连接关闭或进入两分钟一次的休眠探测时是 `reconnecting`。宿主页只接受自己那个隐藏 frame、
-且来源等于本站的消息。停止桥接必须同时拆掉 frame 和这条监听，不能让旧连接继续改新会话的状态。
+`startExternalAiBridge` 返回时，若尚未收到握手通知，状态是 `waiting`。
+上游 `embed.js` 在隐藏 `host` iframe 内还会再创建一层 `iframe[data-webmcp-relay]`（`blob:` widget），
+因此 widget 调用 `window.parent.postMessage` 的接收者是 `host.contentWindow` 而非顶层 `window`。
+`startExternalAiBridge` 直接监听 `host.contentWindow`，且只接受来自 `hostDocument.querySelector('iframe[data-webmcp-relay]').contentWindow`、
+来源等于本站的 `sea-resume.relay` 消息：`connected` 来自 `hello/accepted`，`rejected` 来自 `hello/rejected`（如 `--widget-origin` 不匹配），
+连接关闭或进入两分钟一次的休眠探测时是 `reconnecting`。停止桥接必须同时拆掉 `host` frame 和这条监听，不能让旧连接继续改新会话的状态。
 
-MCP 连接挂在简历主页，离开页面后仍保持，直到用户停止。`sea_resume_list`、`get`、`set`、`create`、`delete` 操作当前存储里的全部简历。正在编辑的简历走 `importData`，其余直接 `saveResume` 并更新列表。删除正在编辑的简历时先 `discardOpenResume`，阻止自动保存把它写回。`sea_resume_export_pdf` 使用可搜索 PDF 并直接触发浏览器下载。面试工具只读写本机 AI 工作区记录；开始面试复用页面已配置的模型。文件交换仍使用草稿和人工确认。
+MCP 连接在主页与编辑器顶栏共享同一份单例状态，切换路由后仍保持，直到用户停止。`sea_resume_list`、`get`、`set`、`create`、`delete`、`open` 操作当前存储里的全部简历。`sea_resume_set` 要求传入完整结构；`sea_resume_create` 允许在空库或外部知识库场景只传核心字段，缺省章节、主题和条目 ID 由归一化补齐并经 `sanitizeResumeDataContent` 清洗。正在编辑的简历走 `importData`，其余直接 `saveResume` 并更新列表；删除时同步调用 `removeMeta`，删除正在编辑的简历前先 `discardOpenResume` 阻止自动保存写回。`sea_resume_open` 将浏览器导航到 `/editor/:id` 供实时可视化预览。`sea_resume_export_pdf` 使用可搜索 PDF 并直接触发浏览器下载。面试工具只读写本机 AI 工作区记录；开始面试复用页面已配置的模型。外部 MCP 与网页内置「AI 简历助手」互相独立，不需要在网页里配置 API Key。文件交换仍使用草稿和人工确认。
 
 ### 15. 本地目录授权只能在用户手势里申请
 
