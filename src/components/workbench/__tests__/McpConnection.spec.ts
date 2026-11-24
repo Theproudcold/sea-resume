@@ -21,7 +21,11 @@ const DialogStub = defineComponent({
   props: { modelValue: Boolean },
   setup(props, { slots }) { return () => props.modelValue ? h('div', slots.default?.()) : null; },
 });
-const stubs = { 'el-alert': Passthrough, 'el-tag': Passthrough, 'el-button': ButtonStub, 'el-dialog': DialogStub, 'el-radio-group': Passthrough, 'el-radio-button': Passthrough };
+const OptionStub = defineComponent({
+  props: { label: String },
+  setup(props, { slots }) { return () => h('div', slots.default?.() ?? props.label); },
+});
+const stubs = { 'el-alert': Passthrough, 'el-tag': Passthrough, 'el-button': ButtonStub, 'el-dialog': DialogStub, 'el-radio-group': Passthrough, 'el-radio-button': Passthrough, 'el-select': Passthrough, 'el-option': OptionStub };
 const baseUrl = import.meta.env.BASE_URL;
 
 beforeEach(() => { vi.resetModules(); bridge.startExternalAiBridge.mockReset(); });
@@ -39,6 +43,9 @@ describe('主页 MCP 连接', () => {
     expect(wrapper.text()).toBe('外部 AI');
     await button('外部 AI').trigger('click');
     expect(wrapper.text()).toContain('全部简历');
+    expect(wrapper.text()).toContain('Pi');
+    expect(wrapper.text()).toContain('ZCode');
+    expect(wrapper.text()).toContain('DeepSeek Harness');
     expect(wrapper.find('pre').text()).toContain(`${location.origin}${baseUrl}ai-relay/relay.mjs`);
     await button('启用 MCP 桥接').trigger('click');
     await flushPromises();
