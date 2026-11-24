@@ -5,6 +5,10 @@
       '--primary-color': data.theme?.color || '#243447',
       '--font-size': (data.theme?.fontSize || 13) + 'px',
       '--line-height': data.theme?.lineHeight || 1.45,
+      '--margin-top': (data.theme?.moduleMargins?.top ?? 0) + 'px',
+      '--margin-bottom': (data.theme?.moduleMargins?.bottom ?? 18) + 'px',
+      '--margin-left': (data.theme?.moduleMargins?.left ?? 0) + 'px',
+      '--margin-right': (data.theme?.moduleMargins?.right ?? 0) + 'px',
       '--section-gap': (data.theme?.moduleMargins?.bottom ?? 18) + 'px',
       padding: (data.theme?.pageMargins ?? 24) + 'px',
       fontFamily: data.theme?.fontFamily || 'var(--resume-font-family)',
@@ -43,7 +47,7 @@
               <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" />
               <span class="contact-copy"><span v-if="contact.label" class="contact-label">{{ contact.label }}：</span>{{ contact.value }}</span>
             </div>
-            <ResumeSmartFields :data="data" />
+            <ResumeSmartFields :data="data" class="contact-smart-fields" />
           </div>
         </div>
       </div>
@@ -289,6 +293,10 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
   gap: 6px;
 }
 
+.contact-smart-fields {
+  grid-column: 1 / -1;
+}
+
 .contact-item :deep(svg) {
   width: 13px;
   height: 13px;
@@ -317,8 +325,8 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 }
 
 .summary-block {
-  margin: 16px 0 4px;
-  padding: 0 0 5px;
+  margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
+  padding: 10px 0 5px;
   border-bottom: 1px solid var(--resume-rule);
   color: var(--resume-ink-body);
   cursor: pointer;
@@ -327,12 +335,12 @@ const setActiveSection = (id: string) => resumeStore.setActiveSection(id);
 .resume-sections {
   display: flex;
   flex-direction: column;
-  gap: var(--section-gap);
-  padding-top: 16px;
+  padding-top: 10px;
 }
 
 .resume-section {
   min-width: 0;
+  margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
   cursor: pointer;
   scroll-margin-top: 12px;
   break-inside: auto;

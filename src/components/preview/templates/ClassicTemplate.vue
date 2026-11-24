@@ -5,6 +5,10 @@
       '--primary-color': data.theme?.color || '#111827',
       '--font-size': (data.theme?.fontSize || 13) + 'px',
       '--line-height': data.theme?.lineHeight || 1.5,
+      '--margin-top': (data.theme?.moduleMargins?.top ?? 0) + 'px',
+      '--margin-bottom': (data.theme?.moduleMargins?.bottom ?? 18) + 'px',
+      '--margin-left': (data.theme?.moduleMargins?.left ?? 0) + 'px',
+      '--margin-right': (data.theme?.moduleMargins?.right ?? 0) + 'px',
       '--spacing': (data.theme?.moduleMargins?.bottom ?? 18) + 'px',
       padding: (data.theme?.pageMargins ?? 28) + 'px',
       fontSize: 'var(--font-size)',
@@ -21,8 +25,11 @@
         :style="{ borderRadius: avatarBorderRadius(data.basic.avatarShape) }"
       />
       <h1 class="classic-name">{{ data.basic.name || '您的姓名' }}</h1>
-      <p v-if="data.basic.title" class="classic-role">{{ data.basic.title }}</p>
-      <div class="classic-contacts">
+      <div v-if="data.basic.title || hasSmartFields" class="classic-subline">
+        <span v-if="data.basic.title" class="classic-role">{{ data.basic.title }}</span>
+        <ResumeSmartFields :data="data" align="center" inline class="classic-smart-fields" />
+      </div>
+      <div v-if="hasAnyContact" class="classic-contacts">
         <span v-if="data.basic.location" class="contact-piece">
           <ContactIcon v-if="data.theme?.displayIcons !== false" type="location" :icon="data.basic.iconOverrides?.location" />
           <span>{{ data.basic.location }}</span>
@@ -43,7 +50,6 @@
           <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" />
           <span><template v-if="contact.label">{{ contact.label }}：</template>{{ contact.value }}</span>
         </span>
-        <ResumeSmartFields :data="data" />
       </div>
     </header>
 
@@ -156,12 +162,14 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import draggable from 'vuedraggable';
 import ContactIcon from '@/components/common/ContactIcon.vue';
 import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import { useResumeTemplate } from '@/composables/useResumeTemplate';
 import type { ResumeData } from '@/types/resume';
 import { avatarBorderRadius } from '@/utils/avatarShape';
+import { getResumeSmartFields } from '@/utils/resumeSmartFields';
 
 const props = defineProps<{ data: ResumeData }>();
 
@@ -181,6 +189,19 @@ const {
   formatDateRange,
   setActiveSection,
 } = useResumeTemplate(props, { defaultDateFormat: 'YYYY.MM' });
+
+const hasSmartFields = computed(() => {
+  const smart = getResumeSmartFields(props.data);
+  return smart.age !== null || Boolean(smart.workExperience);
+});
+
+const hasAnyContact = computed(() => Boolean(
+  props.data.basic.location
+  || props.data.basic.phone
+  || props.data.basic.email
+  || props.data.basic.website
+  || visibleCustomContacts.value.length > 0,
+));
 </script>
 
 <style scoped>
@@ -193,7 +214,7 @@ const {
 
 .classic-header {
   text-align: center;
-  padding-bottom: 14px;
+  padding-bottom: 16px;
   border-bottom: 1.5px solid var(--resume-ink-strong);
   margin-bottom: 16px;
   cursor: pointer;
@@ -205,10 +226,11 @@ const {
   object-fit: cover;
   display: block;
   margin: 0 auto 10px;
+  border: 1px solid var(--resume-rule);
 }
 
 .classic-name {
-  margin: 0 0 4px;
+  margin: 0 0 6px;
   font-family: "Songti SC", "Noto Serif SC", Georgia, "Times New Roman", serif;
   font-size: 26px;
   font-weight: 700;
@@ -217,10 +239,26 @@ const {
   line-height: 1.25;
 }
 
-.classic-role {
+.classic-subline {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 0;
   margin: 0 0 8px;
   font-size: calc(var(--font-size) + 0.5px);
   color: var(--resume-ink-body);
+}
+
+.classic-role {
+  font-weight: 500;
+  color: var(--resume-ink-heading);
+}
+
+.classic-role + .classic-smart-fields::before {
+  content: '·';
+  margin: 0 8px;
+  color: var(--resume-ink-soft);
 }
 
 .classic-contacts {
@@ -228,22 +266,23 @@ const {
   flex-wrap: wrap;
   justify-content: center;
   align-items: center;
-  gap: 4px 0;
-  font-size: 0.9em;
+  gap: 5px 0;
+  font-size: 0.92em;
   color: var(--resume-ink-body);
 }
 
 .contact-piece {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   overflow-wrap: anywhere;
 }
 
 .contact-piece + .contact-piece::before {
   content: "|";
-  margin: 0 8px;
+  margin: 0 10px;
   color: var(--resume-ink-soft);
+  opacity: 0.7;
 }
 
 .contact-piece :deep(svg) {
@@ -269,16 +308,12 @@ const {
 .classic-sections {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing);
 }
 
 .classic-section {
+  margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
   cursor: pointer;
   scroll-margin-top: 12px;
-}
-
-.classic-section + .classic-sections {
-  margin-top: var(--spacing);
 }
 
 .section-heading {

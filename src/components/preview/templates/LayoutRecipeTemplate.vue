@@ -5,11 +5,11 @@
       <div class="identity">
         <h1>{{ data.basic.name || '您的姓名' }}</h1>
         <p v-if="data.basic.title" class="headline">{{ data.basic.title }}</p>
-        <div v-if="contactsInHeader" class="contacts">
+        <div v-if="contactsInHeader && (contacts.length || hasSmartFields)" class="contacts">
           <template v-for="contact in contacts" :key="contact.key">
             <span><ContactIcon v-if="showIcons" :type="contact.type" :icon="contact.icon" />{{ contact.text }}</span>
           </template>
-          <ResumeSmartFields :data="data" />
+          <ResumeSmartFields :data="data" :align="recipe.header.align === 'center' ? 'center' : 'start'" inline />
         </div>
       </div>
       <img v-if="avatarLast" :src="data.basic.avatar" alt="" class="avatar" :style="avatarStyle" />
@@ -21,10 +21,11 @@
           <h2>个人简介</h2>
           <div class="rich-text" v-html="data.basic.summary" />
         </section>
-        <section v-if="!contactsInHeader && contacts.length" class="summary" data-section="contacts">
+        <section v-if="!contactsInHeader && (contacts.length || hasSmartFields)" class="summary" data-section="contacts">
           <h2>联系方式</h2>
           <div class="contacts contacts--stack">
             <span v-for="contact in contacts" :key="contact.key"><ContactIcon v-if="showIcons" :type="contact.type" :icon="contact.icon" />{{ contact.text }}</span>
+            <ResumeSmartFields :data="data" />
           </div>
         </section>
         <draggable :model-value="sidebarIds" :item-key="sectionKey" handle=".section-title" :animation="200" @update:model-value="reorder(sidebarIds, $event)">
@@ -56,6 +57,7 @@ import type { ResumeData } from '@/types/resume';
 import ContactIcon from '@/components/common/ContactIcon.vue';
 import ResumeSmartFields from '@/components/preview/ResumeSmartFields.vue';
 import { avatarBorderRadius } from '@/utils/avatarShape';
+import { getResumeSmartFields } from '@/utils/resumeSmartFields';
 import { builtinToRecipe, readLayoutRecipe, reorderColumn, splitSections } from '@/utils/layout-template';
 import { useResumeStore } from '@/stores/resume';
 import LayoutSection from './LayoutSection.vue';
@@ -74,6 +76,10 @@ const contactsInHeader = computed(() => single.value || recipe.value.contactsPla
 const showIcons = computed(() => props.data.theme?.displayIcons !== false);
 const avatarFirst = computed(() => !!props.data.basic.avatar && recipe.value.header.avatar === 'start');
 const avatarLast = computed(() => !!props.data.basic.avatar && recipe.value.header.avatar === 'end');
+const hasSmartFields = computed(() => {
+  const smart = getResumeSmartFields(props.data);
+  return smart.age !== null || Boolean(smart.workExperience);
+});
 
 const contacts = computed(() => {
   const basic = props.data.basic;
@@ -99,6 +105,10 @@ const sheetStyle = computed(() => {
     '--sheet': dark ? '#18232d' : '#ffffff',
     '--font-size': `${theme?.fontSize || tokens.fontSize}px`,
     '--line-height': theme?.lineHeight || tokens.lineHeight,
+    '--margin-top': `${theme?.moduleMargins?.top ?? tokens.moduleMargins.top}px`,
+    '--margin-bottom': `${theme?.moduleMargins?.bottom ?? tokens.moduleMargins.bottom}px`,
+    '--margin-left': `${theme?.moduleMargins?.left ?? tokens.moduleMargins.left}px`,
+    '--margin-right': `${theme?.moduleMargins?.right ?? tokens.moduleMargins.right}px`,
     '--section-gap': `${theme?.moduleMargins?.bottom ?? tokens.moduleMargins.bottom}px`,
     '--page-margin': `${theme?.pageMargins ?? tokens.pageMargins}px`,
     padding: 'var(--page-margin)',
@@ -145,12 +155,12 @@ function reorder(column: string[], next: string[]) {
 .sheet-body.is-single { display: block; }
 .sidebar, .main { min-width: 0; }
 .main { flex: 1; }
-.summary { margin-bottom: var(--section-gap); }
+.summary { margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left); }
 .summary h2, :deep(.section-title) { margin: 0 0 0.45em; color: var(--ink); font-size: 1.05em; font-weight: 650; line-height: 1.3; }
 :deep(.heading-underline), .summary h2 { border-bottom: 1.5px solid var(--accent); padding-bottom: 0.2em; }
 :deep(.heading-accent) { color: var(--accent); border-bottom: 0; }
 :deep(.heading-plain) { border-bottom: 0; }
-:deep(.layout-section) { margin-bottom: var(--section-gap); }
+:deep(.layout-section) { margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left); }
 :deep(.entry) { display: flex; justify-content: space-between; gap: 12px; }
 :deep(.entry p), :deep(.rich-text) { margin: 0.2em 0 0; }
 :deep(.when) { color: var(--muted); white-space: nowrap; }

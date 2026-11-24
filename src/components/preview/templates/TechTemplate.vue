@@ -1,9 +1,9 @@
 <template>
   <div class="tech-template min-h-full bg-gray-900 text-gray-100" data-resume-paper="fixed" :style="{
-    '--margin-top': (data.theme?.moduleMargins?.top || 0) + 'px',
-    '--margin-bottom': (data.theme?.moduleMargins?.bottom || 24) + 'px',
-    '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
-    '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
+    '--margin-top': (data.theme?.moduleMargins?.top ?? 0) + 'px',
+    '--margin-bottom': (data.theme?.moduleMargins?.bottom ?? 24) + 'px',
+    '--margin-left': (data.theme?.moduleMargins?.left ?? 0) + 'px',
+    '--margin-right': (data.theme?.moduleMargins?.right ?? 0) + 'px',
     padding: (data.theme?.pageMargins !== undefined ? data.theme.pageMargins : 24) + 'px',
     fontFamily: data.theme?.fontFamily || 'var(--resume-font-family)',
     fontSize: (data.theme?.fontSize || 14) + 'px',
@@ -39,12 +39,12 @@
           <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" />
           <span class="truncate"><span v-if="contact.label">{{ contact.label }}：</span>{{ contact.value }}</span>
         </span>
-        <ResumeSmartFields :data="data" />
+        <ResumeSmartFields :data="data" inline />
       </div>
       </div>
     </header>
 
-    <div class="space-y-6">
+    <div>
       <!-- 个人简介 -->
       <section 
         v-if="data.basic.summary"
@@ -347,6 +347,7 @@ const setActiveSection = (id: string) => {
 }
 
 .tech-block {
+  margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
   border-radius: 6px;
   padding: 2px;
 }

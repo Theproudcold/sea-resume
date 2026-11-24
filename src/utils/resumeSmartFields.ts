@@ -5,8 +5,12 @@ export interface ResumeSmartFields {
   workExperience: string | null;
 }
 
-function parseYearMonth(value: string): number | null {
-  const match = value.match(/^(\d{4})[./-](\d{1,2})$/);
+const PRESENT_TOKENS = new Set(['present', 'current', 'now', '至今', '现在', '目前']);
+
+function parseYearMonth(value: string | undefined): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(\d{4})\s*(?:[./-]|年)\s*(\d{1,2})(?:(?:[./-]\d{1,2})|月(?:\s*\d{1,2}日?)?)?$/);
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
@@ -14,9 +18,13 @@ function parseYearMonth(value: string): number | null {
   return year * 12 + month - 1;
 }
 
+function isPresentDate(value: string | undefined): boolean {
+  return Boolean(value && PRESENT_TOKENS.has(value.trim().toLowerCase()));
+}
+
 export function calculateAge(birthDate: string | undefined, today = new Date()): number | null {
   if (!birthDate) return null;
-  const match = birthDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const match = birthDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
   const year = Number(match[1]);
   const month = Number(match[2]);
@@ -28,12 +36,13 @@ export function calculateAge(birthDate: string | undefined, today = new Date()):
   return age >= 0 ? age : null;
 }
 
-/** Counts distinct employed calendar months, merging overlaps and never guessing year-only dates. */
+/** 合并重叠的可见工作经历月份（不猜测纯年份）；满一年仅显示年份，不足一年显示月份。 */
 export function calculateWorkExperience(experiences: ResumeData['experiences'], today = new Date()): string | null {
   const currentMonth = today.getFullYear() * 12 + today.getMonth();
   const intervals = experiences.flatMap((experience) => {
+    if (experience.visible === false) return [];
     const start = parseYearMonth(experience.startDate);
-    const end = experience.endDate === 'present' ? currentMonth : parseYearMonth(experience.endDate);
+    const end = isPresentDate(experience.endDate) ? currentMonth : parseYearMonth(experience.endDate);
     return start !== null && end !== null && end >= start ? [{ start, end }] : [];
   }).sort((a, b) => a.start - b.start);
 
@@ -50,11 +59,10 @@ export function calculateWorkExperience(experiences: ResumeData['experiences'], 
     }
   }
   totalMonths += end - start + 1;
-  const years = Math.floor(totalMonths / 12);
-  const months = totalMonths % 12;
-  if (years && months) return `${years} 年 ${months} 个月`;
-  if (years) return `${years} 年`;
-  return `${months} 个月`;
+  if (totalMonths >= 12) {
+    return `${Math.floor(totalMonths / 12)} 年`;
+  }
+  return `${totalMonths} 个月`;
 }
 
 export function getResumeSmartFields(resume: ResumeData, today = new Date()): ResumeSmartFields {
