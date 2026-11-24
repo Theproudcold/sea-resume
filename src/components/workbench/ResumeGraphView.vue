@@ -10,84 +10,64 @@
         有 {{ graph.uncertain.length }} 个版本的先后顺序是推测的：它们是同一个岗位的旧版本，没有记录同步来源。
       </p>
 
-      <div class="graph-list" role="list">
-        <div
-          v-for="(row, index) in graph.rows"
-          :key="row.id"
-          :class="['graph-row', { 'is-selected': row.id === selectedId, 'is-behind': !!row.behind }]"
-          role="listitem"
-          data-testid="graph-row"
-          :data-id="row.id"
+      <div class="graph-list" role="list" :style="{ '--rail-width': `${railWidth}px` }">
+        <!-- 一整张等高 SVG：连线一次画完，跨越任意多行也不会在行边界断开 -->
+        <svg
+          class="graph-rail"
+          :width="railWidth"
+          :height="totalHeight"
+          aria-hidden="true"
+          data-testid="graph-rail"
         >
-          <!-- 左侧窄轨道：只画关系，不放文字 -->
-          <svg
-            class="graph-rail"
-            :width="railWidth"
-            :height="ROW_HEIGHT"
-            :aria-hidden="true"
-            data-testid="graph-rail"
-          >
-            <path
-              v-for="(seg, segIndex) in railPathsAbove(index)"
-              :key="`a-${segIndex}`"
-              :d="seg.d"
-              :stroke="seg.color"
-              :class="['rail-line', `rail-${seg.kind}`]"
-              fill="none"
-              data-testid="graph-edge"
-              data-side="above"
-            />
-            <path
-              v-for="(seg, segIndex) in railPathsBelow(index)"
-              :key="`b-${segIndex}`"
-              :d="seg.d"
-              :stroke="seg.color"
-              :class="['rail-line', `rail-${seg.kind}`]"
-              fill="none"
-              data-testid="graph-edge"
-              data-side="below"
-            />
-            <!-- 贯穿本行的轨道线：让跨多行的关系在中间不断开 -->
-            <line
-              v-for="lane in graph.rows[index]!.passThrough"
-              :key="`p-${lane}`"
-              :x1="laneX(lane)" y1="0"
-              :x2="laneX(lane)" :y2="ROW_HEIGHT"
-              :stroke="LANE_COLORS[lane % LANE_COLORS.length]"
-              class="rail-line"
-              data-testid="graph-pass"
-            />
-            <!-- 节点落在自己的列上 -->
-            <circle
-              :cx="RAIL_PAD + row.lane * LANE_STEP"
-              :cy="ROW_HEIGHT / 2"
-              :r="row.behind ? 5 : 4"
-              :fill="row.behind ? row.color : 'var(--color-paper, #fff)'"
-              :stroke="row.color"
-              :class="['rail-dot', { 'is-behind': !!row.behind, 'is-orphan': !!row.orphan }]"
-              data-testid="graph-dot"
-            />
-          </svg>
+          <path
+            v-for="(seg, segIndex) in railSegments"
+            :key="segIndex"
+            :d="seg.d"
+            :stroke="seg.color"
+            :class="['rail-line', `rail-${seg.kind}`, { 'is-long': seg.span > 1 && seg.crosses }]"
+            fill="none"
+            data-testid="graph-edge"
+          />
+          <circle
+            v-for="dot in dots"
+            :key="dot.id"
+            :cx="dot.x"
+            :cy="dot.y"
+            :r="dot.r"
+            :fill="dot.fill"
+            :stroke="dot.color"
+            :class="['rail-dot', { 'is-behind': dot.behind, 'is-orphan': dot.orphan }]"
+            data-testid="graph-dot"
+          />
+        </svg>
 
-          <!-- 右侧信息行 -->
-          <button
-            type="button"
-            class="graph-info"
-            :aria-label="rowAria(row)"
-            data-testid="graph-node"
-            @click="choose(row.id)"
+        <div class="graph-rows">
+          <div
+            v-for="(row, index) in graph.rows"
+            :key="row.id"
+            :class="['graph-row', { 'is-selected': row.id === selectedId, 'is-behind': !!row.behind }]"
+            role="listitem"
+            data-testid="graph-row"
           >
-            <span class="info-main">
-              <span class="info-title">{{ row.title }}</span>
-              <span v-if="row.kind === 'branch'" class="info-job">{{ [row.company, row.position].filter(Boolean).join(' · ') || '未填岗位' }}</span>
-            </span>
-            <span class="info-meta">
-              <span class="info-version" :style="{ color: row.color }">{{ row.versionLabel }}</span>
-              <span v-if="row.behind" class="info-behind" data-testid="graph-behind">· 主干有新版 v{{ row.behind.latestVersion }}</span>
-              <span v-if="row.orphan" class="info-orphan">· 找不到主干</span>
-              <span class="info-time">{{ formatTime(row.id) }}</span>
-            </span>
-          </button>
+            <button
+              type="button"
+              class="graph-info"
+              :aria-label="rowAria(row)"
+              data-testid="graph-node"
+              @click="choose(row.id)"
+            >
+              <span class="info-main">
+                <span class="info-title">{{ row.title }}</span>
+                <span v-if="row.kind === 'branch'" class="info-job">{{ [row.company, row.position].filter(Boolean).join(' · ') || '未填岗位' }}</span>
+              </span>
+              <span class="info-meta">
+                <span class="info-version" :style="{ color: row.color }">{{ row.versionLabel }}</span>
+                <span v-if="row.behind" class="info-behind" data-testid="graph-behind">· 主干有新版 v{{ row.behind.latestVersion }}</span>
+                <span v-if="row.orphan" class="info-orphan">· 找不到主干</span>
+                <span class="info-time">{{ formatTime(row.id) }}</span>
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -133,6 +113,9 @@ const railWidth = computed(() => {
   return Math.max(RAIL_MIN_WIDTH, RAIL_PAD + lastLane * LANE_STEP + DOT_RADIUS + RAIL_PAD);
 });
 
+/** 整张图的高度 = 行数 × 行高。 */
+const totalHeight = computed(() => Math.max(1, graph.value.rows.length) * ROW_HEIGHT);
+
 /** 行在行内列表里的序号 → 时间，用于右侧显示。 */
 const timeById = computed(() => new Map(props.resumes.map((row) => [row.id, row.updatedAt])));
 
@@ -147,54 +130,96 @@ function laneX(lane: number): number {
   return RAIL_PAD + lane * LANE_STEP;
 }
 
-/**
- * 上半段的线：从本行顶部进入节点。
- *
- * 连线来自它上方的另一行（peerRow < 本行），所以从画布顶端竖直进入，
- * 跨度超过一列时用带圆角的折线，视觉上与 Git 客户端一致。
- */
-function railPathsAbove(index: number): Array<{ d: string; color: string; kind: string }> {
-  const row = graph.value.rows[index]!;
-  const cy = ROW_HEIGHT / 2;
-  return row.edgesAbove.map((edge) => {
-    const startX = laneX(edge.fromLane);
-    const endX = laneX(edge.toLane);
-    const color = LANE_COLORS[edge.fromLane % LANE_COLORS.length]!;
-    return { d: cornerPath(startX, 0, endX, cy), color, kind: edge.kind };
-  });
+/** 第 index 行的圆心 y。 */
+function rowCenterY(index: number): number {
+  return index * ROW_HEIGHT + ROW_HEIGHT / 2;
+}
+
+interface RailSegment {
+  d: string;
+  color: string;
+  kind: string;
+  /** 跨越的行数。 */
+  span: number;
+  /** 是否跨列：跨列的线才会从别的行背后穿过，同列的竖直主干不算。 */
+  crosses: boolean;
 }
 
 /**
- * 下半段只沿本行的列竖直离开。
+ * 所有连线。用整图坐标画，一条关系就是一根完整的线，跨越多少行都不会断。
  *
- * 折进目标列的弯留在目标那一行的上半段。如果这里就折过去，
- * 线会在行缝处换列，中间行的贯穿线还停在原来的列上。
+ * 走法：从起点行圆心出发，竖直走到两行之间的缝，在缝里横移，再竖直进入终点行圆心。
+ * 竖直段落在各自所在列上，所以中间行的衔接处天然对齐。
  */
-function railPathsBelow(index: number): Array<{ d: string; color: string; kind: string }> {
-  const row = graph.value.rows[index]!;
-  const cy = ROW_HEIGHT / 2;
-  return row.edgesBelow.map((edge) => {
-    const x = laneX(edge.fromLane);
-    const color = LANE_COLORS[edge.fromLane % LANE_COLORS.length]!;
-    return { d: `M ${x} ${cy} L ${x} ${ROW_HEIGHT}`, color, kind: edge.kind };
-  });
-}
+const railSegments = computed<RailSegment[]>(() => {
+  const rows = graph.value.rows;
+  const rowIndexOf = new Map(rows.map((row, index) => [row.id, index]));
+  const segments: RailSegment[] = [];
+  for (const link of graph.value.links) {
+    const fromIndex = rowIndexOf.get(link.from);
+    const toIndex = rowIndexOf.get(link.to);
+    if (fromIndex === undefined || toIndex === undefined) continue;
+    const fromRow = rows[fromIndex]!;
+    const toRow = rows[toIndex]!;
+    const x1 = laneX(fromRow.lane);
+    const x2 = laneX(toRow.lane);
+    const y1 = rowCenterY(fromIndex);
+    const y2 = rowCenterY(toIndex);
+    // 跨越超过一行时，横移放在中点附近的行缝里，看起来是一条连贯的斜过渡。
+    const upperIndex = Math.min(fromIndex, toIndex);
+    const lowerIndex = Math.max(fromIndex, toIndex);
+    const gapY = (lowerIndex - upperIndex) === 1
+      ? (y1 + y2) / 2
+      : ROW_HEIGHT * Math.floor((upperIndex + lowerIndex) / 2 + 1) - 0;
+    const dir = Math.sign(toIndex - fromIndex);
+    const color = LANE_COLORS[fromRow.lane % LANE_COLORS.length]!;
+    segments.push({
+      d: linkPath(x1, y1, x2, y2, gapY, dir),
+      color,
+      kind: link.kind,
+      span: Math.abs(fromIndex - toIndex),
+      crosses: x1 !== x2,
+    });
+  }
+  return segments;
+});
 
-/** 两点之间带圆角的折线：先竖直，再横移，再竖直。 */
-function cornerPath(x1: number, y1: number, x2: number, y2: number): string {
+/**
+ * 生成一条连接线的路径：竖直 → 圆角横移 → 竖直。
+ *
+ * 横移发生在 gapY 那条行缝上，两端仍是竖直段，因此与相邻行的线自然接续。
+ */
+function linkPath(x1: number, y1: number, x2: number, y2: number, gapY: number, dir: number): string {
+  // 同一列：一条竖直的完整线段，贯穿两端（包含中间经过的所有行）。
+  // 之前这里会绕到 gapY 再回来，跨行时看不出是同一根线。
   if (x1 === x2) return `M ${x1} ${y1} L ${x2} ${y2}`;
-  const radius = Math.min(Math.abs(x2 - x1) / 2, (y2 - y1) / 2);
-  const midY = (y1 + y2) / 2;
-  const dir = x2 > x1 ? 1 : -1;
+  const radius = Math.min(Math.abs(x2 - x1) / 2, 8);
+  const before = gapY - radius * Math.sign(dir || 1) * -1;
+  void before;
+  const midDir = x2 > x1 ? 1 : -1;
   return [
     `M ${x1} ${y1}`,
-    `L ${x1} ${midY - radius}`,
-    `Q ${x1} ${midY} ${x1 + dir * radius} ${midY}`,
-    `L ${x2 - dir * radius} ${midY}`,
-    `Q ${x2} ${midY} ${x2} ${midY + radius}`,
+    `L ${x1} ${gapY - radius}`,
+    `Q ${x1} ${gapY} ${x1 + midDir * radius} ${gapY}`,
+    `L ${x2 - midDir * radius} ${gapY}`,
+    `Q ${x2} ${gapY} ${x2} ${gapY + radius}`,
     `L ${x2} ${y2}`,
   ].join(' ');
 }
+
+/** 所有节点圆点，用整图坐标。 */
+const dots = computed(() =>
+  graph.value.rows.map((row, index) => ({
+    id: row.id,
+    x: laneX(row.lane),
+    y: rowCenterY(index),
+    r: row.behind ? 5 : 4,
+    color: row.color,
+    fill: row.behind ? row.color : 'var(--color-paper)',
+    behind: Boolean(row.behind),
+    orphan: Boolean(row.orphan),
+  })),
+);
 
 function rowAria(row: GraphRow): string {
   const parts = [row.title, row.kind === 'master' ? `主干 ${row.versionLabel}` : `岗位 ${row.versionLabel}`];
@@ -216,18 +241,38 @@ defineExpose({ graph });
 .resume-graph { display: grid; gap: var(--space-xs); }
 .graph-empty, .graph-note { margin: 0; font-size: var(--font-xs); color: var(--color-muted); }
 
-.graph-list { border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-s); overflow: hidden; }
+.graph-list {
+  position: relative;
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+  /* 左侧留给整张轨道图，右侧是信息行 */
+  padding-left: var(--rail-width, 24px);
+}
 
-.graph-row { display: flex; align-items: stretch; border-bottom: var(--rule-hair) solid var(--color-rule); background: var(--color-paper); }
-.graph-row:last-child { border-bottom: none; }
-.graph-row:hover { background: var(--color-paper-3, var(--color-accent-wash)); }
-.graph-row.is-selected { background: var(--color-accent-wash); }
+/* 轨道图覆盖整个列表高度，绝对定位以免挤占行布局 */
+.graph-rail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  pointer-events: none;
+}
 
-.graph-rail { flex: 0 0 auto; display: block; }
+.graph-rows { position: relative; }
+
 .rail-line { stroke-width: 2; }
+/* 跨越 2 行以上的线要从中间那几行的右侧内容背后穿过，画粗一点、淡一点，
+   视觉上读作「在背后」而不是断掉。 */
+.rail-line.is-long { stroke-width: 3.5; opacity: .55; stroke-linecap: round; }
 .rail-line.rail-rebase { stroke-dasharray: 4 3; }
 .rail-dot { stroke-width: 2; }
 .rail-dot.is-orphan { stroke-dasharray: 2 2; opacity: .6; }
+
+.graph-row { display: flex; align-items: stretch; height: 52px; border-bottom: var(--rule-hair) solid var(--color-rule); background: var(--color-paper); }
+.graph-row:last-child { border-bottom: none; }
+.graph-row:hover { background: var(--color-paper-3, var(--color-accent-wash)); }
+.graph-row.is-selected { background: var(--color-accent-wash); }
 
 .graph-info {
   flex: 1;

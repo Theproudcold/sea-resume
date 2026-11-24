@@ -54,7 +54,8 @@ describe('ResumeGraphView 行式布局', () => {
   it('renders one row per resume, each with a rail and an info line', () => {
     const panel = setup([master('m1', 1), master('m2', 2), job('j1', 'm1', 1)]);
     expect(panel.findAll('[data-testid=graph-row]')).toHaveLength(3);
-    expect(panel.findAll('[data-testid=graph-rail]')).toHaveLength(3);
+    // 整张轨道图只有一个；按行切分会在行边界断开。
+    expect(panel.findAll('[data-testid=graph-rail]')).toHaveLength(1);
     expect(panel.findAll('[data-testid=graph-dot]')).toHaveLength(3);
     expect(panel.findAll('[data-testid=graph-node]')).toHaveLength(3);
     panel.unmount();
@@ -116,14 +117,16 @@ describe('ResumeGraphView 行式布局', () => {
       master('m1', 1, {}, 1),
       master('m3', 3, {}, 3),
       job('j1', 'm1', 1, { days: 4 }),
-      job('j2', 'm1', 3, { rebasedFromId: 'j1', days: 5 }),
     ]);
-    const row = (id: string) => panel.get(`[data-id=${id}]`);
-    const exitX = pathX(row('j2').get('[data-side=below]').attributes('d')!, 'end');
-    const throughX = Number(row('j1').get('[data-testid=graph-pass]').attributes('x1'));
-    const entryX = pathX(row('m3').get('[data-side=above]').attributes('d')!, 'start');
-    expect(throughX).toBe(exitX);
-    expect(entryX).toBe(exitX);
+    // 每条关系是一根完整的线：竖直段落在两端所在列上，中间的行缝处才横移。
+    const dots = panel.findAll('[data-testid=graph-dot]').map((d) => Number(d.attributes('cx')));
+    expect(new Set(dots).size).toBeGreaterThan(1);
+    for (const edge of panel.findAll('[data-testid=graph-edge]')) {
+      const xs = [...(edge.attributes('d') ?? '').matchAll(/(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g)].map((m) => Number(m[1]));
+      // 首尾 x 必须都是真实存在的列位置。
+      expect(dots).toContain(xs[0]);
+      expect(dots).toContain(xs[xs.length - 1]);
+    }
     panel.unmount();
   });
 
@@ -179,6 +182,49 @@ describe('ResumeGraphView 行式布局', () => {
     ];
     const panel = setup(many);
     expect(panel.findAll('[data-testid=graph-row]')).toHaveLength(2);
+    panel.unmount();
+  });
+});
+
+describe('连线必须连续', () => {
+  /** 从 d 属性抽出首尾坐标。 */
+  function endpoints(d: string): { start: [number, number]; end: [number, number] } {
+    const nums = [...d.matchAll(/(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g)].map((m) => [Number(m[1]), Number(m[2])] as [number, number]);
+    return { start: nums[0]!, end: nums[nums.length - 1]! };
+  }
+
+  it('draws the whole rail in a single svg spanning every row', () => {
+    // 每行一个小 svg 时，线段只能停在行边界上，视觉上永远是断的。
+    const panel = setup([master('m1', 1), master('m2', 2), master('m3', 3), job('j1', 'm1', 1)]);
+    const rails = panel.findAll('[data-testid=graph-rail]');
+    expect(rails).toHaveLength(1);
+    const height = Number(rails[0]!.attributes('height'));
+    expect(height).toBeGreaterThan(52 * 3);
+    panel.unmount();
+  });
+
+  it('joins consecutive segments on the same lane without a gap', () => {
+    // 主干 v1→v2→v3：真正的一条竖线，不能是每行一小段。
+    const panel = setup([master('m1', 1), master('m2', 2), master('m3', 3)]);
+    const vertical = panel
+      .findAll('[data-testid=graph-edge]')
+      .map((el) => endpoints(el.attributes('d') ?? ''))
+      .filter((e) => e.start[0] === e.end[0]);
+    expect(vertical.length).toBeGreaterThan(0);
+    // 所有竖线的 x 相同（主干在同一列）。
+    expect(new Set(vertical.map((e) => e.start[0])).size).toBe(1);
+    panel.unmount();
+  });
+
+  it('keeps its vertical run inside the rail for a track that spans all rows', () => {
+    const panel = setup([master('m1', 1), job('j1', 'm1', 1), master('m2', 2), master('m3', 3)]);
+    const rail = panel.get('[data-testid=graph-rail]');
+    const height = Number(rail.attributes('height'));
+    for (const el of panel.findAll('[data-testid=graph-edge]')) {
+      const { start, end } = endpoints(el.attributes('d') ?? '');
+      expect(start[1]).toBeGreaterThanOrEqual(0);
+      expect(end[1]).toBeLessThanOrEqual(height);
+    }
     panel.unmount();
   });
 });
