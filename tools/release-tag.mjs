@@ -49,7 +49,8 @@ function main() {
   if (tag !== `v${version}`) {
     problems.push(`tag ${tag} 与 package.json 版本 v${version} 不一致。`);
   }
-  if (!changelog.includes(`## [${tag.slice(1)}]`)) {
+  // tag 格式不对时 `## [${version}]` 会拼出无意义的条目名，只报格式错误。
+  if (TAG_PATTERN.test(tag) && !changelog.includes(`## [${tag.slice(1)}]`)) {
     problems.push(`CHANGELOG.md 缺少 [${tag.slice(1)}] 条目。`);
   }
 
