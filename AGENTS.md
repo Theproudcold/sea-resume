@@ -2,24 +2,26 @@
 
 ## Git 工作规范
 
+完整流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。下面只保留执行时必须遵守的约束；与该文件冲突时以它为准。
+
 ### 分支模型
-- `master`：稳定可发布分支，任何时刻都应可构建、可发布。只接受来自 `dev` 的合并与 `hotfix/*` 的紧急修复，不要在 `master` 上直接开发；推送 `master` 会触发 GitHub Pages 部署（`.github/workflows/deploy-pages.yml`）。
-- `dev`：开发集成分支。所有新功能、新特性、重构、普通修复先合入 `dev`，在 `dev` 上验证通过后再并入 `master`。
+- `master`：稳定可发布的主分支，任何时刻都应可构建、可发布。只接受来自 `dev` 的发布 PR 与 `hotfix/*` 的紧急修复 PR，不要在 `master` 上直接开发或直接推送；推送 `master` 会触发 GitHub Pages 部署（`.github/workflows/deploy-pages.yml`）。
+- `dev`：开发集成分支。所有新功能、新特性、重构、普通修复先用 PR 合入 `dev`，在 `dev` 上验证通过后再用 PR 并入 `master`。不要直接推送 `dev`。
 - 功能分支：一律从 `dev` 切出，命名为 `<type>/<简短说明>`，`type` 与提交信息的语义类型一致，说明用小写短横线连接的英文短语，例如 `feat/ai-relay`、`fix/pdf-font-subset`、`refactor/template-store`。
-- `hotfix/*`：线上紧急问题从 `master` 切出，修复后先合回 `master`，再同步回 `dev`，避免修复在开发分支上丢失。
+- `hotfix/*`：线上紧急问题从 `master` 切出，先用 PR 合回 `master`，再用 PR 同步回 `dev`，避免修复在开发分支上丢失。
 
 ### 开发流程
 1. 同步基线：`git switch dev && git pull --ff-only`
 2. 新建分支：`git switch -c feat/xxx`，不要在 `master` 或 `dev` 上直接改代码
 3. 小步提交，提交信息遵守下面的「Git 提交信息」一节
 4. 自测：`pnpm verify`（依次运行完整测试、类型检查和生产构建；Node ≥ 22.13.0、pnpm 10.30.2）
-5. 合并前先对齐基线：`git fetch origin && git rebase origin/dev`，冲突在功能分支内解决
-6. 合入 `dev` 并推送：`git switch dev && git merge --no-ff feat/xxx`
-7. 发布：`dev` 验证通过后 `git switch master && git merge --no-ff dev && git push`，推送即部署
+5. 开 PR 前先对齐基线：`git fetch origin && git rebase origin/dev`，冲突在功能分支内解决
+6. 推送功能分支并向 `dev` 开 Pull Request；等待 `Tests and build` 通过后，用 merge commit 合入。不要本地 `git merge` 后再推送 `dev`
+7. 发布：`dev` 验证通过后开 `dev` → `master` 的 Pull Request，用 merge commit 合入；合入即推送并部署
 
 ### 合并与历史
-- 合入 `dev`、`master` 使用 `git merge --no-ff` 生成合并提交，保留特性边界；合并提交信息写作 `merge(中文范围): 中文说明`。
-- `master` 与 `dev` 禁止 `git push --force`，禁止改写已推送历史；功能分支整理历史前，先确认提交尚未推送。
+- 合入 `dev`、`master` 走 Pull Request，并使用 merge commit（相当于 `--no-ff`）保留特性边界；不要用 Squash 或 Rebase 合并。合并提交信息写作 `merge(中文范围): 中文说明`。
+- `master` 与 `dev` 禁止直接推送、禁止 `git push --force`、禁止删除分支。功能分支整理历史前，先确认提交尚未推送。
 - 分支合并后及时删除（本地与远端），保持分支列表干净。
 - 并行开发使用 `git worktree`（例如 `.worktrees/<分支名>`），不要在同一工作区反复切换分支。
 
@@ -37,7 +39,7 @@
 - `provide/inject`、事件和 ref 的接线必须在真实父组件上验证。不能只靠 `global.provide`、stub 或源码字符串断言证明页面可用；DOM 尺寸、字体、输入法还需浏览器验证。
 - 数据转换用同一个样本贯穿解析 → 消费/渲染，覆盖隐藏且非空、未知/可选字段、截断警告；Markdown 是可见内容交换格式，不是全字段备份。
 - 重构只搬实现、不夹带行为修改；能力扩展、纠错、测试提速分别保留可验证边界。不得为提速删除唯一的真实正确性验证，也不以测试数量代替覆盖证明。
-- 合并前对最终内容运行 `pnpm verify`；部署 workflow 同样运行它。CI 文件不等于远端分支保护：管理员需另行启用 required checks 与受保护分支，未启用时不要声称已禁止绕过。
+- 合入前对最终内容运行 `pnpm verify`；部署 workflow 同样运行它。`master` / `dev` 的分支保护要求走 PR、禁止强推与删除，并把 `Tests and build` 作为必须通过的检查；保护是仓库设置，不随文件提交自动生效。管理员仍可绕过，未核实仓库设置时不要声称已禁止绕过。
 
 ## CodeGraph（代码知识图谱）
 - 本仓库已建立 CodeGraph 索引（根目录存在 `.codegraph/`），保存文件后约 1 秒自动同步，不需要手动 `codegraph sync`。

@@ -44,7 +44,7 @@ pnpm verify
 - [Quality workflow](<../.github/workflows/quality.yml>) 在向 `dev` / `master` 提 PR、推送 `dev`、手动触发时运行 `pnpm verify`。
 - [Pages workflow](<../.github/workflows/deploy-pages.yml>) 在实际部署 checkout 上重新运行 `pnpm verify`，失败不能上传/部署该产物；并不依赖另一条 workflow 的旧结果。
 - 本地使用与 CI 一致的 Node ≥ 22.13.0、pnpm 10.30.2；CI 固定 Node 22.13.0，锁文件安装。
-- 仓库管理员需在远端为 `dev` / `master` 配置 PR 与 required check `Tests and build`，禁用 force push，并审视管理员 bypass。**本次只新增配置文件，没有修改远端保护设置，也未推送。**
+- `dev` / `master` 的分支保护要求走 Pull Request、禁止强制推送与删除分支，并把 `Tests and build` 作为必须通过的检查；不强制人工审批人数。保护是仓库设置，不随文件提交自动生效，管理员仍可绕过。是否生效以仓库 Branches 设置为准，未核实不要声称已禁止绕过。流程见 [CONTRIBUTING.md](<../CONTRIBUTING.md>)。
 - 这套检查能拦截已编码的回归，不能保证所有浏览器路径可用。提交时依 [PR 模板](<../.github/pull_request_template.md>) 记录手工验证与未覆盖项。
 
 ## 后续复盘如何避免假结论

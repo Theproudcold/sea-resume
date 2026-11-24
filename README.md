@@ -156,6 +156,9 @@ pnpm dev
 | `pnpm preview` | 本地预览生产构建 |
 | `pnpm test` | 执行 Vitest 测试 |
 | `pnpm test:watch` | 以监听模式运行测试 |
+| `pnpm verify` | 依次运行完整测试、类型检查和生产构建 |
+
+新功能从 `dev` 切出功能分支，用 Pull Request 合入；`master` 是可发布主分支，只接受来自 `dev` 的发布 PR。分支、提交信息与合并方式见 [贡献规范](CONTRIBUTING.md)。
 
 ```sh
 pnpm build
