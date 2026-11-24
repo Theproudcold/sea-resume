@@ -1,12 +1,13 @@
 /**
- * 编辑器三栏布局的纯计算与持久化规则。
+ * 编辑器窗口的三栏（模块导航 / 编辑区 / 预览区），不是简历版式。
+ * 简历版式是 ResumeData.layout（LayoutRecipe）。
+ * 存储键仍是 sea-resume-editor-layout，已经记住的栏宽不会丢。
  *
- * 三栏分别是「模块导航 / 编辑区 / 预览区」。宽度由用户拖拽决定，但
- * 右侧预览要尽可能保持 A4 实际尺寸：空间不足时先压缩、再按「模块导航 →
- * 编辑区」的顺序自动折叠；窗口恢复宽度后自动展开。
+ * 宽度由用户拖拽决定，但右侧预览要尽可能保持 A4 实际尺寸：空间不足时先压缩、
+ * 再按「模块导航 → 编辑区」的顺序自动折叠；窗口恢复宽度后自动展开。
  */
 
-export const EDITOR_LAYOUT_STORAGE_KEY = 'sea-resume-editor-layout';
+export const EDITOR_CHROME_STORAGE_KEY = 'sea-resume-editor-layout';
 
 export const SIDEBAR_WIDTH_MIN = 168;
 export const SIDEBAR_WIDTH_MAX = 360;
@@ -25,7 +26,7 @@ export const A4_WIDTH_PX = 794;
 export const PREVIEW_GUTTER_PX = 52;
 export const PREVIEW_MIN_WIDTH = A4_WIDTH_PX + PREVIEW_GUTTER_PX;
 
-export interface EditorLayoutPreference {
+export interface EditorChromePreference {
   sidebarWidth: number;
   editorWidth: number;
   sidebarCollapsed: boolean;
@@ -33,7 +34,7 @@ export interface EditorLayoutPreference {
   previewCollapsed: boolean;
 }
 
-export const DEFAULT_EDITOR_LAYOUT: EditorLayoutPreference = {
+export const DEFAULT_EDITOR_CHROME: EditorChromePreference = {
   sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
   editorWidth: EDITOR_WIDTH_DEFAULT,
   sidebarCollapsed: false,
@@ -41,7 +42,7 @@ export const DEFAULT_EDITOR_LAYOUT: EditorLayoutPreference = {
   previewCollapsed: false,
 };
 
-export type EditorLayoutPane = 'sidebar' | 'editor' | 'preview';
+export type EditorChromePane = 'sidebar' | 'editor' | 'preview';
 
 export function clampNumber(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min;
@@ -52,8 +53,8 @@ function readBoolean(value: unknown, fallback: boolean) {
   return typeof value === 'boolean' ? value : fallback;
 }
 
-export function sanitizeEditorLayout(raw: unknown): EditorLayoutPreference {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ...DEFAULT_EDITOR_LAYOUT };
+export function sanitizeEditorChrome(raw: unknown): EditorChromePreference {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { ...DEFAULT_EDITOR_CHROME };
   const record = raw as Record<string, unknown>;
   return {
     sidebarWidth: clampNumber(Number(record.sidebarWidth), SIDEBAR_WIDTH_MIN, SIDEBAR_WIDTH_MAX),
@@ -64,29 +65,29 @@ export function sanitizeEditorLayout(raw: unknown): EditorLayoutPreference {
   };
 }
 
-export function readStoredEditorLayout(storage: Storage | undefined = globalThis.localStorage): EditorLayoutPreference {
-  if (!storage) return { ...DEFAULT_EDITOR_LAYOUT };
+export function readStoredEditorChrome(storage: Storage | undefined = globalThis.localStorage): EditorChromePreference {
+  if (!storage) return { ...DEFAULT_EDITOR_CHROME };
   try {
-    const raw = storage.getItem(EDITOR_LAYOUT_STORAGE_KEY);
-    return raw ? sanitizeEditorLayout(JSON.parse(raw)) : { ...DEFAULT_EDITOR_LAYOUT };
+    const raw = storage.getItem(EDITOR_CHROME_STORAGE_KEY);
+    return raw ? sanitizeEditorChrome(JSON.parse(raw)) : { ...DEFAULT_EDITOR_CHROME };
   } catch {
-    return { ...DEFAULT_EDITOR_LAYOUT };
+    return { ...DEFAULT_EDITOR_CHROME };
   }
 }
 
-export function writeStoredEditorLayout(
-  preference: EditorLayoutPreference,
+export function writeStoredEditorChrome(
+  preference: EditorChromePreference,
   storage: Storage | undefined = globalThis.localStorage,
 ) {
   if (!storage) return;
   try {
-    storage.setItem(EDITOR_LAYOUT_STORAGE_KEY, JSON.stringify(preference));
+    storage.setItem(EDITOR_CHROME_STORAGE_KEY, JSON.stringify(preference));
   } catch {
     // 隐私模式或配额不足时保持当前会话内的布局即可。
   }
 }
 
-export interface EditorLayoutRequest {
+export interface EditorChromeRequest {
   /** 三栏容器的可用宽度；0 表示尚未测量，此时不做自动折叠。 */
   containerWidth: number;
   sidebarWidth: number;
@@ -101,7 +102,7 @@ export interface EditorLayoutRequest {
   splitterWidth?: number;
 }
 
-export interface EditorLayoutPlan {
+export interface EditorChromePlan {
   sidebarWidth: number;
   editorWidth: number;
   sidebarVisible: boolean;
@@ -115,7 +116,7 @@ export interface EditorLayoutPlan {
   autoCollapsedEditor: boolean;
 }
 
-export function planEditorLayout({
+export function planEditorChrome({
   containerWidth,
   sidebarWidth,
   editorWidth,
@@ -126,7 +127,7 @@ export function planEditorLayout({
   protectEditor = false,
   previewMinWidth = PREVIEW_MIN_WIDTH,
   splitterWidth = PANEL_SPLITTER_WIDTH,
-}: EditorLayoutRequest): EditorLayoutPlan {
+}: EditorChromeRequest): EditorChromePlan {
   let sidebar = clampNumber(Math.round(sidebarWidth), SIDEBAR_WIDTH_MIN, SIDEBAR_WIDTH_MAX);
   let editor = clampNumber(Math.round(editorWidth), EDITOR_WIDTH_MIN, EDITOR_WIDTH_MAX);
   let showSidebar = sidebarVisible;

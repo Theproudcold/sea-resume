@@ -6,8 +6,8 @@ import type {
   LayoutRecipe,
   LayoutSeedId,
   LayoutStructure,
-  LayoutTemplate,
-  LayoutTemplateFile,
+  SavedRecipe,
+  SavedRecipeFile,
   LayoutTokens,
 } from '@/types/layout-template';
 import { LAYOUT_SCHEMA_VERSION } from '@/types/layout-template';
@@ -175,11 +175,11 @@ export function readLayoutRecipe(value: unknown): LayoutRecipe | null {
   };
 }
 
-export function layoutTemplateId(id: string): string {
+export function savedRecipeId(id: string): string {
   return `${LAYOUT_TEMPLATE_PREFIX}${id}`;
 }
 
-export function isLayoutTemplateId(value: string): boolean {
+export function isSavedRecipeId(value: string): boolean {
   return value.startsWith(LAYOUT_TEMPLATE_PREFIX) && value.length > LAYOUT_TEMPLATE_PREFIX.length;
 }
 
@@ -317,7 +317,7 @@ export function recipeFromCurrent(resume: ResumeData): LayoutRecipe {
   return layoutWithVisibleTheme(recipeForResume(resume), resume.theme);
 }
 
-/** 保留版式自己的墨色，只把当前主题里看得见的字号、边距和强调色盖进去。 */
+/** 保留版式自己的墨色，只把当前主题里看得见的字号、边距和强调色盖进去。预览读 theme，不读这里写回去的 tokens。 */
 export function layoutWithVisibleTheme(recipe: LayoutRecipe, theme: ThemeConfig): LayoutRecipe {
   const visible = tokensFromTheme(theme, recipe.paper, theme.color);
   return {
@@ -364,15 +364,15 @@ export function normalizeLayoutDescription(description?: string): string {
   return trimmed;
 }
 
-export function buildLayoutTemplate(
+export function buildSavedRecipe(
   recipe: LayoutRecipe,
   input: { name: string; description?: string },
   options: { id?: string; now?: number } = {},
-): LayoutTemplate {
+): SavedRecipe {
   const stored = readLayoutRecipe(recipe);
   if (!stored) throw new Error('这份版式无法保存。请检查栏数、颜色和模块分区。');
   const now = options.now ?? Date.now();
-  const template: LayoutTemplate = {
+  const template: SavedRecipe = {
     id: options.id ?? generateId(),
     name: normalizeLayoutName(input.name),
     description: normalizeLayoutDescription(input.description),
@@ -386,7 +386,7 @@ export function buildLayoutTemplate(
   return template;
 }
 
-export function layoutTemplateToMetadata(template: LayoutTemplate) {
+export function savedRecipeToMetadata(template: SavedRecipe) {
   const structureLabel: Record<LayoutStructure, string> = {
     single: '单栏',
     'sidebar-left': '左侧栏',
@@ -405,18 +405,18 @@ export function layoutTemplateToMetadata(template: LayoutTemplate) {
 }
 
 /** 套用只换排版和主题。正文、顺序、隐藏模块、标题和岗位信息由调用方保留。 */
-export function applyLayoutToResume(resume: ResumeData, template: LayoutTemplate): ResumeData {
+export function applyLayoutToResume(resume: ResumeData, template: SavedRecipe): ResumeData {
   const recipe = readLayoutRecipe(template.recipe);
   if (!recipe) throw new Error('这份版式已损坏，不能使用。');
   return {
     ...resume,
-    templateId: layoutTemplateId(template.id),
+    templateId: savedRecipeId(template.id),
     layout: recipe,
     theme: themeFromRecipe(recipe),
   };
 }
 
-export function serializeLayoutTemplate(template: LayoutTemplate): LayoutTemplateFile {
+export function serializeSavedRecipe(template: SavedRecipe): SavedRecipeFile {
   const recipe = readLayoutRecipe(template.recipe);
   if (!recipe) throw new Error('这份版式已损坏，不能导出。');
   return {
@@ -429,7 +429,7 @@ export function serializeLayoutTemplate(template: LayoutTemplate): LayoutTemplat
 }
 
 /** 未知 kind 或不是版本 1，整份拒绝，不降级。导入得到的 id 由调用方新生成。 */
-export function parseLayoutTemplateFile(value: unknown): { name: string; description: string; recipe: LayoutRecipe } {
+export function parseSavedRecipeFile(value: unknown): { name: string; description: string; recipe: LayoutRecipe } {
   if (!isRecord(value)) throw new Error('版式文件不是有效的 JSON 对象。');
   if (value.kind !== LAYOUT_FILE_KIND) throw new Error('这不是海简历的版式文件。');
   if (value.schemaVersion !== LAYOUT_SCHEMA_VERSION) throw new Error('这份版式文件的版本不受支持。');

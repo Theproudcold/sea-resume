@@ -43,10 +43,12 @@ function writeTimeoutMessage(fileName: string): string {
 }
 
 /**
- * 本地文件系统适配器
- * 使用 File System Access API
+ * 用户授权的本地目录。
+ * 目录句柄放在 IndexedDB（sea-resume-fs），简历正文写在选中的文件夹里。
+ * 读取同时认旧的 index.json 和新的 manifest.json；写入只更新 manifest，旧文件留着。
+ * 配置里的类型值仍是 file_system。
  */
-export class FileSystemAdapter implements IStorageAdapter {
+export class DirectoryAdapter implements IStorageAdapter {
   readonly type: StorageType = 'file_system';
   private directoryHandle: FileSystemDirectoryHandle | null = null;
   private db: IDBPDatabase<FileSystemDB> | null = null;
@@ -249,18 +251,6 @@ export class FileSystemAdapter implements IStorageAdapter {
       console.error(`删除简历 ${id} 失败:`, error);
       throw error;
     }
-  }
-
-  /**
-   * 导出简历为 JSON Blob
-   */
-  async export(id: string): Promise<Blob> {
-    const data = await this.read(id);
-    if (!data) {
-      throw new Error(`简历 ${id} 不存在`);
-    }
-    const jsonStr = JSON.stringify(data, null, 2);
-    return new Blob([jsonStr], { type: 'application/json' });
   }
 
   private async readManifest(): Promise<ResumeMeta[] | null> {

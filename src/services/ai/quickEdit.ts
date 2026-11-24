@@ -1,14 +1,14 @@
 /**
  * 「快捷修改」功能：按用户一句话要求生成一批字段级改动草稿。
  *
- * 只和同目录的 transport 打交道；调用方拿到的是 `ResumeAiDraft`，
- * 还需要经 changeProposal 校验基线后才会写进简历。
+ * 只和同目录的 transport 打交道；调用方拿到的是 `ResumePatch`，
+ * 还需要经 externalProposal 校验基线后才会写进简历。
  */
-import type { AiProviderConfig, ResumeAiDraft } from '@/types/ai';
+import type { AiProviderConfig, ResumePatch } from '@/types/ai';
 import type { ResumeData } from '@/types/resume';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 import { QUICK_LAYOUT_GUIDANCE, layoutEditBasis } from './layoutPrompt';
-import { parseResumeAiDraft } from './resumeTools';
+import { parseResumePatch } from './resumePatch';
 import { buildResumeContext } from './resumeContext';
 import { aiEndpoint as apiEndpoint, requestAiJson, type AiRequestOptions } from './transport';
 import { aiAuthorizationHeaders, normalizeAiProviderOptions, type AiProviderOptions } from './AiSettings';
@@ -60,7 +60,7 @@ export async function listProviderModels(baseUrl: string, apiKey = '', options: 
     window.clearTimeout(timer);
   }
 }
-export async function requestResumeAiDraft(config: AiProviderConfig, resume: ResumeData, instruction: string, options: AiRequestOptions = {}): Promise<ResumeAiDraft> {
+export async function requestResumeAiDraft(config: AiProviderConfig, resume: ResumeData, instruction: string, options: AiRequestOptions = {}): Promise<ResumePatch> {
   if (!instruction.trim()) throw new Error('请先描述希望 AI 执行的修改。');
   const result = await requestAiJson(config, SYSTEM_PROMPT, {
     request: instruction.trim(),
@@ -69,5 +69,5 @@ export async function requestResumeAiDraft(config: AiProviderConfig, resume: Res
     sectionOrder: resume.sectionOrder,
     ...layoutEditBasis(resume),
   }, options);
-  return parseResumeAiDraft(result, { allowEmpty: true });
+  return parseResumePatch(result, { allowEmpty: true });
 }

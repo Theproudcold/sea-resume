@@ -11,7 +11,7 @@ export type AvatarShape = 'circle' | 'square';
 
 export interface BasicInfo {
   name: string;
-  title: string;          // 求职意向
+  title: string;          // 求职意向。简历名称是 ResumeData.title，两者不是同一个字段。
   email: string;
   phone: string;
   location?: string;
@@ -83,7 +83,7 @@ export interface CustomBlock {
   title: string;
   type: 'text' | 'list'; 
   content: string | CustomItem[];
-  order: number;
+  order: number; // 读盘时对齐到 sectionOrder 的下标。显示顺序以 sectionOrder 为准。
 }
 
 export interface CustomItem {
@@ -100,8 +100,8 @@ export interface ResumeMeta {
   id: string;
   title: string;           // 简历名称
   templateId: string;
-  createdAt: number;       // 时间戳
-  updatedAt: number;       // 时间戳
+  createdAt: number;       // 毫秒时间戳。正文 ResumeData.createdAt 是 ISO 字符串。
+  updatedAt: number;       // 毫秒时间戳。正文 ResumeData.updatedAt 是 ISO 字符串。
   thumbnail?: string;      // 缩略图 Base64（可选）
   isSynced?: boolean;      // 同步状态标记
   /** 岗位版本索引：带上它就能不读取简历正文直接列出岗位版本历史。 */

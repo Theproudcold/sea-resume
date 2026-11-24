@@ -3,7 +3,30 @@ import { INTERVIEW_WEAKNESS_TAGS, type InterviewSession, type InterviewSettings,
 import { requestAiJson, type AiRequestOptions } from './transport';
 import { contextItemIds, contextSources } from './resumeContext';
 import { aiRecord, aiString, aiList, aiStrings, aiEnum, aiReferences } from './aiOutputValidation';
-import { observationTagLabel } from '@/utils/interviewWeakness';
+import { observationTagLabel, isValidInterviewFocus } from '@/utils/interviewWeakness';
+
+const INTERVIEW_QUESTION_LIMITS = [5, 8, 12];
+const INTERVIEW_MODES = ['training', 'real'];
+const INTERVIEW_DIRECTIONS = ['综合', '项目深挖', '岗位专业', '行为面试'];
+
+/** 面试设置不合法时返回 true。题量、模式和方向在类型里是收窄的，这里挡住运行时塞进来的值。 */
+export function invalidInterviewSettings(settings: {
+  mainQuestionLimit: number;
+  mode: string;
+  direction: string;
+  jd: string;
+  targetRole: string;
+  level: string;
+  focus?: InterviewSettings['focus'];
+}): boolean {
+  return !INTERVIEW_QUESTION_LIMITS.includes(settings.mainQuestionLimit)
+    || !INTERVIEW_MODES.includes(settings.mode)
+    || !INTERVIEW_DIRECTIONS.includes(settings.direction)
+    || settings.jd.length > 15000
+    || settings.targetRole.length > 200
+    || settings.level.length > 200
+    || (settings.focus !== undefined && !isValidInterviewFocus(settings.focus));
+}
 
 function record(value: unknown, keys: string[]): Record<string, unknown> {
   const obj = aiRecord(value);

@@ -40,7 +40,7 @@ beforeEach(() => {
   delete query.resumeId;
   push.mockReset();
   useResumeStore().$patch({ data: { ...structuredClone(templateDemoData), id: 'current' } });
-  vi.spyOn(useTemplateStore(), 'loadCustomTemplates').mockImplementation(() => {});
+  vi.spyOn(useTemplateStore(), 'loadTemplateLibrary').mockImplementation(() => {});
   vi.spyOn(useWorkbenchStore(), 'createResume').mockResolvedValue('new-resume');
   vi.spyOn(useResumeStore(), 'setTemplate').mockImplementation(() => {});
   vi.spyOn(useResumeStore(), 'applyTemplateSnapshot').mockImplementation(() => {});
@@ -52,7 +52,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 function addCustomTemplate() {
-  useTemplateStore().customTemplates = [{
+  useTemplateStore().resumeSnapshots = [{
     id: 'custom-template', name: '我的模板', description: '已保存的内容', baseTemplateId: 'modern',
     createdAt: 1, updatedAt: 1, snapshot: structuredClone(templateDemoData),
   }];
@@ -70,7 +70,7 @@ describe('TemplateGallery actions', () => {
 
   it('applies a saved layout without replacing the current resume content', async () => {
     query.resumeId = 'current';
-    useTemplateStore().layoutTemplates = [{
+    useTemplateStore().savedRecipes = [{
       id: 'layout-1',
       name: '双栏',
       description: '只改排版',

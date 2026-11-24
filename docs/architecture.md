@@ -4,6 +4,18 @@
 
 如果某条约定失效了，请直接改这份文档——它比代码更容易保持诚实。
 
+## 名词
+
+同一份简历上有三样容易叫混的东西：
+
+- **内置模板**：`templateId` 为 `modern` 这类值，对应 `components/preview/templates` 里的 Vue 组件。
+- **版式配方**：`ResumeData.layout`，类型 `LayoutRecipe`。有合法配方时，预览和可搜索 PDF 以它的结构为准，不再按 `templateId` 找组件。
+- **模板库**：`SavedRecipe` 只保存配方，存在 `sea-resume_layout-templates`。套用后简历的 `templateId` 仍会写成 `layout:<id>`，那是库记录的指针，不是组件名。`ResumeSnapshot` 保存整份简历，存在 `sea-resume_custom-templates`。
+
+编辑器三栏是窗口布局，代码在 `editorChrome.ts` / `useEditorChrome.ts`。存储键仍是 `sea-resume-editor-layout`。它和简历版式无关。
+
+字号、边距、强调色的读取来源是 `theme`。配方里的 `tokens` 只在套用和另存时写回 `theme`。
+
 ## 数据流总览
 
 ```
@@ -16,7 +28,7 @@
    views/Editor.vue   │ stores/resume.ts          │─▶│ services/storage/        │
                       │  data: ResumeData（活草稿）│  │  StorageManager（单例）   │
                       └──────────────────────────┘  │   ├ LocalStorageAdapter  │
-                                                    │   └ FileSystemAdapter    │
+                                                    │   └ DirectoryAdapter    │
    预览 ─────────────▶ components/preview/*.vue     └─────────────────────────┘
 ```
 
@@ -32,7 +44,7 @@
 `storageManager.saveResume(data)` 会自己从正文派生 `ResumeMeta`（`metaFromResume`）。
 **不要手工拼 `ResumeMeta` 再调 `save(data, meta)`**——列表只读索引、不读正文，漏掉一个索引字段（例如岗位版本信息）就会变成「只有某个入口才出现的缺陷」。
 
-`save(data, meta)` 保留给存储迁移使用：迁移必须原样搬运源索引，不能按正文重新推导。
+`save(data, meta)` 保留给存储迁移使用：迁移必须原样搬运源索引，不能按正文重新推导。磁盘上多出来的旧键跟着对象走，不在迁移时剔除。
 
 ### 2. 写入后不需要整表重读
 
@@ -41,16 +53,19 @@
 
 ### 3. 读盘一定经过归一化
 
-`StorageManager.read()` 内部调 `normalizeResumeData`，保证历史数据缺字段时也拿到完整结构。
-如果你绕过 `storageManager` 直接读存储，就绕过了这层保护。
+`StorageManager.read()` 走 `parseResume(data, 'read')`。缺字段补默认，并把 `customBlocks.order` 对齐到 `sectionOrder`。
+导入 JSON 走 `parseResume(data, 'import')`：字段不对就拒绝，会进 HTML 的正文在这一步清洗。
+`sanitizeResumeDataContent` 只洗 URL 和富文本，不补结构。绕过 `storageManager` 直接读存储，就绕过了读盘这条保护。
 
 ### 4. 编辑中的简历可能正在被写入
 
-`resumeStore.autoSave` 有两级定时（500ms 防抖 / 2000ms 上限）并串行化成队列：
+`resumeStore` 的写入只有三档，不要再加第四个入口：
 
-- `scheduleSave()` 只安排，不等待
-- `autoSave(background)` 真正写盘；后台写会被更新的写取代
-- `flushSave()` 是屏障，用于 **离开页面前** 和 **导出前**
+- `scheduleSave()`：文本输入。500ms 防抖，最迟 2000ms
+- `saveImmediately()`：增删、排序、显隐。后台写，可以被更新的写取代
+- `flushSave()`：离开页面、导出、切换简历前的屏障，等到已经开始的写入结束
+
+`autoSave` 把这三档串成队列。后台写可以被更新的写取代，不能取消已经开始的那一次。
 
 **任何要读稳定数据的操作（导出、备份、切简历）都必须先 `flushSave()`**，否则会读到未落盘的旧数据。
 
@@ -142,8 +157,8 @@ MCP 连接挂在简历主页，离开页面后仍保持，直到用户停止。`
 
 | 位置 | 说明 |
 | --- | --- |
-| `ResumeData.sectionOrder` + `sectionTitles` + `customBlocks[].title` | 模块顺序、可见性与标题分散在三处，`sectionTitles` 用同一索引签名混装标准模块与自定义模块 ID。归一化入口是 `normalizeResumeData`，重构请从那里切入。 |
-| `FileSystemAdapter` | 同时支持当前 manifest 布局与旧版单文件索引，首次写入时把旧布局复制成新布局（旧文件保留）。 |
+| `sectionOrder` + `sectionTitles` + `customBlocks` | 磁盘上仍是这三处。阅读顺序和显示名从 `src/resume/sections.ts` 投影：`orderedSectionIds`、`sectionDisplayTitle`。自定义模块的显示名以 `customBlocks.title` 为准。 |
+| `DirectoryAdapter` | 同时支持当前 manifest 布局与旧版单文件索引，首次写入时把旧布局复制成新布局（旧文件保留）。 |
 | `utils/capture-colors.ts` | 为绕开 html2canvas 不支持 `oklch()/oklab()` 而手写的颜色转换，只在导出 PDF / 图片时使用。 |
 | `utils/` 目录 | 混装了通用工具、领域规则、浏览器桥接与导出实现，按「是否含业务知识」拆分是后续工作。 |
 
@@ -157,4 +172,4 @@ pnpm build    # vue-tsc -b && vite build
 改动存储、保存时序或编辑器布局前，先读对应的测试：
 `src/stores/__tests__/resume-save-scheduler.spec.ts`、
 `src/components/editor/__tests__/EditorPersistence.spec.ts`、
-`src/utils/__tests__/editorLayout.spec.ts`。
+`src/utils/__tests__/editorChrome.spec.ts`。

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useResumeStore } from '@/stores/resume';
-import { applyLayoutToResume, buildLayoutTemplate, builtinToRecipe } from '@/utils/layout-template';
+import { applyLayoutToResume, buildSavedRecipe, builtinToRecipe } from '@/utils/layout-template';
 
 describe('resume layout application', () => {
   beforeEach(() => setActivePinia(createPinia()));
@@ -11,7 +11,7 @@ describe('resume layout application', () => {
     store.data.basic.name = '林夏';
     store.data.sectionOrder = ['skills', 'experience'];
     store.data.hiddenSections = ['education'];
-    const template = buildLayoutTemplate(
+    const template = buildSavedRecipe(
       builtinToRecipe('professional', { ...store.data.theme, color: '#243447' }),
       { name: '双栏' },
       { id: 'pro' },
@@ -45,6 +45,6 @@ describe('resume layout application', () => {
     store.updateTheme({ fontSize: 13 });
     expect(store.data.theme.fontSize).toBe(13);
     expect(store.data.layout?.sidebarSections).toEqual(layout.sidebarSections);
-    expect(applyLayoutToResume(store.data, buildLayoutTemplate(layout, { name: '再套一次' }, { id: 'again' })).basic).toEqual(store.data.basic);
+    expect(applyLayoutToResume(store.data, buildSavedRecipe(layout, { name: '再套一次' }, { id: 'again' })).basic).toEqual(store.data.basic);
   });
 });

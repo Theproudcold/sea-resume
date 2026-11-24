@@ -9,8 +9,8 @@ import { createMemoryHistory, createRouter, RouterView } from 'vue-router';
 import { ElDropdown, ElMessage } from 'element-plus';
 import Editor from '@/views/Editor.vue';
 import { useResumeStore } from '@/stores/resume';
-import { resetEditorLayoutState, useEditorLayout } from '@/composables/useEditorLayout';
-import { SIDEBAR_WIDTH_DEFAULT } from '@/utils/editorLayout';
+import { resetEditorChromeState, useEditorChrome } from '@/composables/useEditorChrome';
+import { SIDEBAR_WIDTH_DEFAULT } from '@/utils/editorChrome';
 import { storageManager } from '@/services/storage/StorageManager';
 
 const exportProbe = vi.hoisted(() => ({ previewVisible: false }));
@@ -83,7 +83,7 @@ function layoutKey(wrapper: VueWrapper, label: string) {
 
 afterEach(() => {
   ElMessage.closeAll();
-  resetEditorLayoutState();
+  resetEditorChromeState();
   mountedEditor = undefined;
   vi.restoreAllMocks();
   vi.clearAllMocks();
@@ -124,18 +124,18 @@ describe('编辑器布局控制', () => {
     await layoutKey(wrapper, '预览区').trigger('click');
     await nextTick();
     expect(isPreviewVisible()).toBe(false);
-    expect(useEditorLayout().preference.value.previewCollapsed).toBe(true);
+    expect(useEditorChrome().preference.value.previewCollapsed).toBe(true);
 
     await layoutKey(wrapper, '预览区').trigger('click');
     await nextTick();
     expect(isPreviewVisible()).toBe(true);
-    expect(useEditorLayout().preference.value.previewCollapsed).toBe(false);
+    expect(useEditorChrome().preference.value.previewCollapsed).toBe(false);
     wrapper.unmount();
   });
 
   it('恢复默认布局还原默认栏宽与折叠', async () => {
     const { wrapper } = await mountEditor();
-    const { togglePane, preference, resolved } = useEditorLayout();
+    const { togglePane, preference, resolved } = useEditorChrome();
     togglePane('sidebar');
     await nextTick();
     expect(resolved.value.sidebarVisible).toBe(false);

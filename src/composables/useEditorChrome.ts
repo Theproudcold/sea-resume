@@ -1,21 +1,21 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import {
-  DEFAULT_EDITOR_LAYOUT,
+  DEFAULT_EDITOR_CHROME,
   EDITOR_WIDTH_MIN,
   clampNumber,
   maxEditorDragWidth,
-  planEditorLayout,
-  readStoredEditorLayout,
+  planEditorChrome,
+  readStoredEditorChrome,
   tradeSidebarWidth,
-  writeStoredEditorLayout,
-  type EditorLayoutPane,
-  type EditorLayoutPreference,
-} from '@/utils/editorLayout';
+  writeStoredEditorChrome,
+  type EditorChromePane,
+  type EditorChromePreference,
+} from '@/utils/editorChrome';
 
 const COMPACT_QUERY = '(max-width: 1024px)';
 
 /** 三栏布局是会话级偏好：编辑器各组件共享同一份状态。 */
-const preference = ref<EditorLayoutPreference>(readStoredEditorLayout());
+const preference = ref<EditorChromePreference>(readStoredEditorChrome());
 const containerWidth = ref(0);
 const compact = ref(false);
 /** 用户在空间不足时手动展开的栏目：不再自动折叠，预览暂时横向滚动。 */
@@ -32,22 +32,22 @@ function ensureCompactQuery() {
   });
 }
 
-function setPreference(patch: Partial<EditorLayoutPreference>) {
+function setPreference(patch: Partial<EditorChromePreference>) {
   preference.value = { ...preference.value, ...patch };
-  writeStoredEditorLayout(preference.value);
+  writeStoredEditorChrome(preference.value);
 }
 
-export interface EditorLayoutApi {
-  preference: Ref<EditorLayoutPreference>;
+export interface EditorChromeApi {
+  preference: Ref<EditorChromePreference>;
   compact: Ref<boolean>;
   containerWidth: Ref<number>;
   /** 解析后的有效布局：宽度、可见性、编辑区容器宽度与自动折叠标记。 */
-  resolved: ComputedRef<ReturnType<typeof planEditorLayout>>;
+  resolved: ComputedRef<ReturnType<typeof planEditorChrome>>;
   /** 编辑区拖拽上限。 */
   maxEditorWidth: ComputedRef<number>;
-  paneVisible: (pane: EditorLayoutPane) => boolean;
-  canToggle: (pane: EditorLayoutPane) => boolean;
-  togglePane: (pane: EditorLayoutPane) => void;
+  paneVisible: (pane: EditorChromePane) => boolean;
+  canToggle: (pane: EditorChromePane) => boolean;
+  togglePane: (pane: EditorChromePane) => void;
   /** 仅切换预览可见性，用于导出 / 打印前临时显示画布。 */
   setPreviewVisible: (visible: boolean) => void;
   resizeSidebar: (delta: number) => void;
@@ -57,7 +57,7 @@ export interface EditorLayoutApi {
   observeContainer: (element: HTMLElement | null) => () => void;
 }
 
-export function useEditorLayout(): EditorLayoutApi {
+export function useEditorChrome(): EditorChromeApi {
   ensureCompactQuery();
 
   const request = computed(() => ({
@@ -75,9 +75,9 @@ export function useEditorLayout(): EditorLayoutApi {
   const resolved = computed(() => {
     if (compact.value) {
       // 窄屏由「编辑 / 预览」Tab 决定显示哪一栏，桌面端的折叠状态不生效。
-      return planEditorLayout({ ...request.value, sidebarVisible: true, editorVisible: true, previewVisible: true });
+      return planEditorChrome({ ...request.value, sidebarVisible: true, editorVisible: true, previewVisible: true });
     }
-    return planEditorLayout(request.value);
+    return planEditorChrome(request.value);
   });
 
   /** 编辑区分隔条可拖到的最大宽度（给预览保留一段可用宽度）。 */
@@ -87,14 +87,14 @@ export function useEditorLayout(): EditorLayoutApi {
     previewVisible: resolved.value.previewVisible,
   }));
 
-  const paneVisible = (pane: EditorLayoutPane) => {
+  const paneVisible = (pane: EditorChromePane) => {
     const plan = resolved.value;
     if (pane === 'sidebar') return plan.sidebarVisible;
     if (pane === 'editor') return plan.editorVisible;
     return plan.previewVisible;
   };
 
-  const canToggle = (pane: EditorLayoutPane) => {
+  const canToggle = (pane: EditorChromePane) => {
     if (compact.value) return false;
     const plan = resolved.value;
     if (pane === 'sidebar') return !plan.sidebarVisible || plan.editorVisible || plan.previewVisible;
@@ -102,7 +102,7 @@ export function useEditorLayout(): EditorLayoutApi {
     return !plan.previewVisible || plan.sidebarVisible || plan.editorVisible;
   };
 
-  const togglePane = (pane: EditorLayoutPane) => {
+  const togglePane = (pane: EditorChromePane) => {
     if (!canToggle(pane)) return;
     const visible = paneVisible(pane);
     if (pane === 'preview') {
@@ -119,7 +119,7 @@ export function useEditorLayout(): EditorLayoutApi {
     const otherSidebarVisible = resolved.value.sidebarVisible;
     const otherEditorVisible = resolved.value.editorVisible;
     // 手动展开：先按 A4 优先试算能给到的宽度，确实放不下才让预览横向滚动。
-    const candidate = planEditorLayout({
+    const candidate = planEditorChrome({
       ...request.value,
       sidebarVisible: pane === 'sidebar' || otherSidebarVisible,
       editorVisible: pane === 'editor' || otherEditorVisible,
@@ -169,7 +169,7 @@ export function useEditorLayout(): EditorLayoutApi {
 
   const resetLayout = () => {
     pinned.value = { sidebar: false, editor: false };
-    setPreference({ ...DEFAULT_EDITOR_LAYOUT });
+    setPreference({ ...DEFAULT_EDITOR_CHROME });
   };
 
   const observeContainer = (element: HTMLElement | null) => {
@@ -206,8 +206,8 @@ export function useEditorLayout(): EditorLayoutApi {
 }
 
 /** 仅供测试使用：把布局偏好与容器宽度恢复到默认。 */
-export function resetEditorLayoutState() {
+export function resetEditorChromeState() {
   pinned.value = { sidebar: false, editor: false };
   containerWidth.value = 0;
-  setPreference({ ...DEFAULT_EDITOR_LAYOUT });
+  setPreference({ ...DEFAULT_EDITOR_CHROME });
 }
