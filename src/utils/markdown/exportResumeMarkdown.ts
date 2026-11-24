@@ -1,4 +1,5 @@
 import type { CustomBlock, ResumeData } from '@/types/resume';
+import { orderedSectionIds, sectionDisplayTitle } from '@/resume/sections';
 
 function isVisible<T extends { visible?: boolean }>(item: T): boolean {
   return item.visible !== false;
@@ -64,44 +65,44 @@ export function resumeToMarkdown(resume: ResumeData): string {
   }
   if (resume.basic.summary) lines.push('', '## 个人简介', '', htmlToMarkdown(resume.basic.summary));
 
-  // Hidden entries and hidden sections stay in the JSON copy but never reach the shared Markdown.
   const experiences = resume.experiences.filter(isVisible);
-  if (experiences.length && !isSectionHidden(resume, 'experience')) {
-    lines.push('', `## ${resume.sectionTitles.experience || '工作经历'}`);
-    for (const item of experiences) {
-      lines.push('', `### ${[item.company, item.position].filter(Boolean).join(' | ')}${item.startDate || item.endDate ? ` | ${dateRange(item.startDate, item.endDate)}` : ''}`);
-      if (item.description) lines.push('', htmlToMarkdown(item.description));
-      if (item.highlights?.length) lines.push('', ...item.highlights.map((highlight) => `- ${highlight}`));
-    }
-  }
   const projects = resume.projects.filter(isVisible);
-  if (projects.length && !isSectionHidden(resume, 'projects')) {
-    lines.push('', `## ${resume.sectionTitles.projects || '项目经验'}`);
-    for (const item of projects) {
-      lines.push('', `### ${[item.name, item.role].filter(Boolean).join(' | ')}${item.startDate || item.endDate ? ` | ${dateRange(item.startDate, item.endDate)}` : ''}`);
-      if (item.link) lines.push('', `链接：[${item.link}](${item.link})`);
-      if (item.techStack?.length) lines.push('', `技术栈：${item.techStack.join('、')}`);
-      if (item.description) lines.push('', htmlToMarkdown(item.description));
-    }
-  }
   const education = resume.education.filter(isVisible);
-  if (education.length && !isSectionHidden(resume, 'education')) {
-    lines.push('', `## ${resume.sectionTitles.education || '教育背景'}`);
-    for (const item of education) {
-      lines.push('', `### ${[item.school, item.degree, item.major].filter(Boolean).join(' | ')}${item.startDate || item.endDate ? ` | ${dateRange(item.startDate, item.endDate)}` : ''}`);
-      if (item.gpa) lines.push('', `GPA：${item.gpa}`);
-    }
-  }
   const skills = resume.skills.filter(isVisible);
-  if (skills.length && !isSectionHidden(resume, 'skills')) {
-    lines.push('', `## ${resume.sectionTitles.skills || '技能证书'}`);
-    for (const item of skills) lines.push('', `### ${item.category}`, '', ...item.items.map((skill) => `- ${skill}`));
-  }
-  for (const block of [...resume.customBlocks].sort((a, b) => a.order - b.order)) {
-    if (isSectionHidden(resume, block.id)) continue;
-    const content = renderCustomBlock(block);
-    if (!content) continue;
-    lines.push('', `## ${block.title}`, '', content);
+  for (const id of orderedSectionIds(resume)) {
+    if (isSectionHidden(resume, id)) continue;
+    const title = sectionDisplayTitle(resume, id);
+    if (id === 'experience' && experiences.length) {
+      lines.push('', `## ${title}`);
+      for (const item of experiences) {
+        lines.push('', `### ${[item.company, item.position].filter(Boolean).join(' | ')}${item.startDate || item.endDate ? ` | ${dateRange(item.startDate, item.endDate)}` : ''}`);
+        if (item.description) lines.push('', htmlToMarkdown(item.description));
+        if (item.highlights?.length) lines.push('', ...item.highlights.map((highlight) => `- ${highlight}`));
+      }
+    } else if (id === 'projects' && projects.length) {
+      lines.push('', `## ${title}`);
+      for (const item of projects) {
+        lines.push('', `### ${[item.name, item.role].filter(Boolean).join(' | ')}${item.startDate || item.endDate ? ` | ${dateRange(item.startDate, item.endDate)}` : ''}`);
+        if (item.link) lines.push('', `链接：[${item.link}](${item.link})`);
+        if (item.techStack?.length) lines.push('', `技术栈：${item.techStack.join('、')}`);
+        if (item.description) lines.push('', htmlToMarkdown(item.description));
+      }
+    } else if (id === 'education' && education.length) {
+      lines.push('', `## ${title}`);
+      for (const item of education) {
+        lines.push('', `### ${[item.school, item.degree, item.major].filter(Boolean).join(' | ')}${item.startDate || item.endDate ? ` | ${dateRange(item.startDate, item.endDate)}` : ''}`);
+        if (item.gpa) lines.push('', `GPA：${item.gpa}`);
+      }
+    } else if (id === 'skills' && skills.length) {
+      lines.push('', `## ${title}`);
+      for (const item of skills) lines.push('', `### ${item.category}`, '', ...item.items.map((skill) => `- ${skill}`));
+    } else if (!['experience', 'projects', 'education', 'skills'].includes(id)) {
+      const block = resume.customBlocks.find((item) => item.id === id);
+      if (!block) continue;
+      const content = renderCustomBlock(block);
+      if (!content) continue;
+      lines.push('', `## ${title}`, '', content);
+    }
   }
   return `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trim()}\n`;
 }

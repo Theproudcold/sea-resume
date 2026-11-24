@@ -1,7 +1,9 @@
 import type { ResumeData } from '@/types/resume';
+import { withAlignedCustomBlockOrder } from '@/resume/sections';
 import { generateId } from '@/utils/helpers';
 import { parseAvatarShape } from '@/utils/avatarShape';
 import { validateJsonImportFileSize } from '@/utils/importLimits';
+import { isLayoutSeedId, isSavedRecipeId, readLayoutRecipe } from '@/utils/layout-template';
 import { sanitizeRichTextHtml, sanitizeMarkdownUrl } from '@/utils/markdown/markdownSafety';
 
 export { MAX_JSON_IMPORT_FILE_SIZE, validateJsonImportFileSize } from '@/utils/importLimits';
@@ -42,7 +44,7 @@ function normalizeRecords(value: unknown, field: string, required: string[]): Ar
   });
 }
 
-/** Validate and fill compatible defaults before restoring untrusted JSON data. */
+/** 校验并补上兼容的默认值。新代码从 parseResume(source, 'import') 进入。 */
 export function validateResumeData(input: unknown): ResumeData {
   if (!isRecord(input)) throw new Error('JSON 文件不是有效的简历对象。');
   if (!isRecord(input.basic)) throw new Error('JSON 简历缺少个人信息。');
@@ -57,9 +59,13 @@ export function validateResumeData(input: unknown): ResumeData {
   const margins = isRecord(theme.moduleMargins) ? theme.moduleMargins : {};
   const titles = isRecord(input.sectionTitles) ? input.sectionTitles : {};
   const now = new Date().toISOString();
-  const templateId = text(input.templateId, 'templateId', 'modern');
+  const requestedTemplateId = text(input.templateId, 'templateId', 'modern');
+  const layout = readLayoutRecipe(input.layout);
+  const templateId = layout && isSavedRecipeId(requestedTemplateId)
+    ? requestedTemplateId
+    : isLayoutSeedId(requestedTemplateId) ? requestedTemplateId : 'modern';
 
-  return {
+  const resume = {
     ...input,
     id: text(input.id, 'id', generateId()),
     title: text(input.title, 'title', '导入的简历'),
@@ -128,7 +134,7 @@ export function validateResumeData(input: unknown): ResumeData {
         order: typeof item.order === 'number' ? item.order : 0,
       };
     }),
-    templateId: ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'].includes(templateId) ? templateId : 'modern',
+    templateId,
     theme: {
       color: text(theme.color, 'theme.color', '#2563eb'), fontFamily: text(theme.fontFamily, 'theme.fontFamily', 'sans-serif'),
       fontSize: typeof theme.fontSize === 'number' ? theme.fontSize : 14,
@@ -154,6 +160,9 @@ export function validateResumeData(input: unknown): ResumeData {
     createdAt: text(input.createdAt, 'createdAt', now),
     updatedAt: text(input.updatedAt, 'updatedAt', now),
   } as ResumeData;
+  if (layout) resume.layout = layout;
+  else delete resume.layout;
+  return withAlignedCustomBlockOrder(resume);
 }
 
 /**

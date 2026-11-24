@@ -2,6 +2,7 @@ import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 import { relayAssets } from './build/relayAssets'
+import { appVersion } from './build/appVersion'
 
 // https://vite.dev/config/
 const repositoryName = process.env.GITHUB_REPOSITORY?.split('/').pop()
@@ -14,12 +15,12 @@ const defaultBase =
 
 export default defineConfig({
   base: process.env.VITE_BASE_PATH || defaultBase,
-  plugins: [vue(), relayAssets()],
+  plugins: [vue(), relayAssets(), appVersion()],
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['src/test/setup.ts'],
-    include: ['src/**/*.{spec,test}.{ts,tsx}'],
+    include: ['src/**/*.{spec,test}.{ts,tsx}', 'build/**/*.{spec,test}.{ts,tsx}', 'tools/**/*.spec.ts'],
     exclude: ['node_modules/**', 'dist/**', '.worktrees/**', '.pnpm-store/**'],
   },
   resolve: {

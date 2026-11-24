@@ -64,15 +64,21 @@ describe('版本历史哈希', () => {
     expect(second).not.toBe(first);
   });
 
-  it('materializes a snapshot with the current identity and clears a removed avatar', () => {
+  it('materializes a snapshot with the current identity, track metadata and clears a removed avatar', () => {
     const current = createDefaultResumeData();
     current.id = 'current-id';
     current.createdAt = '2020-01-01T00:00:00.000Z';
+    current.trackId = 'master-track-1';
+    current.versionNumber = 3;
     current.basic.avatar = 'data:image/png;base64,AAAA';
     const snapshot = toResumeSnapshot(current).snapshot;
+    expect('trackId' in snapshot).toBe(false);
+    expect('versionNumber' in snapshot).toBe(false);
     const restored = materializeSnapshot(snapshot, current, null);
     expect(restored.id).toBe('current-id');
     expect(restored.createdAt).toBe('2020-01-01T00:00:00.000Z');
+    expect(restored.trackId).toBe('master-track-1');
+    expect(restored.versionNumber).toBe(3);
     expect(restored.basic.avatar).toBeUndefined();
     expect(restored.basic.name).toBe(current.basic.name);
   });

@@ -125,4 +125,16 @@ describe('SettingsCenter', () => {
     expect(navButton(wrapper, '备份与恢复').attributes('aria-current')).toBe('page');
   });
 
+  it('shows the version injected at build time instead of a hardcoded number', async () => {
+    vi.stubGlobal('__APP_VERSION__', '9.9.9');
+    try {
+      const wrapper = mountCenter({ initialSection: 'about' });
+      await flushPromises();
+      const version = wrapper.find('.about-card');
+      expect(version.text()).toContain('版本 9.9.9');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
 });

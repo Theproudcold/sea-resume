@@ -1,9 +1,9 @@
 import type { ResumeData } from '@/types/resume';
 import type { AiResumeContext } from './resumeContext';
-import { assertExternalOperations, assertProposalBaseline, externalContext, EXTERNAL_EDIT_SCHEMA, parseChangeProposal, previewProposal, type ResumeChangeProposal } from './changeProposal';
+import { assertExternalOperations, assertExternalBaseline, externalContext, EXTERNAL_EDIT_SCHEMA, parseExternalProposal, previewExternalProposal, type EditProposal } from './externalProposal';
 
 export type ProposalStatus = 'pending' | 'applying' | 'applied' | 'rejected' | 'conflict';
-export interface ExternalProposal { proposal: ResumeChangeProposal; status: ProposalStatus; error: string }
+export interface ExternalProposal { proposal: EditProposal; status: ProposalStatus; error: string }
 const SESSION_MS = 30 * 60_000;
 /** In-memory only: no credentials, contexts or bridge permissions survive a reload. */
 export class ExternalAiSession {
@@ -13,8 +13,8 @@ export class ExternalAiSession {
   private generation = 0;
   private grants = new Map<string, AiResumeContext>();
   private readonly readResume: () => ResumeData;
-  private readonly saveProposal: (proposal: ResumeChangeProposal, assertAuthorized: () => void) => Promise<void>;
-  constructor(readResume: () => ResumeData, saveProposal: (proposal: ResumeChangeProposal, assertAuthorized: () => void) => Promise<void>) {
+  private readonly saveProposal: (proposal: EditProposal, assertAuthorized: () => void) => Promise<void>;
+  constructor(readResume: () => ResumeData, saveProposal: (proposal: EditProposal, assertAuthorized: () => void) => Promise<void>) {
     this.readResume = readResume;
     this.saveProposal = saveProposal;
   }
@@ -49,7 +49,7 @@ export class ExternalAiSession {
   getSchema() { this.assertAuthorized(); return EXTERNAL_EDIT_SCHEMA; }
   async propose(input: unknown) {
     const generation = this.assertAuthorized();
-    const proposal = parseChangeProposal(input);
+    const proposal = parseExternalProposal(input);
     const existing = this.entries.find(entry => entry.proposal.proposalId === proposal.proposalId);
     if (existing) {
       if (JSON.stringify(existing.proposal) !== JSON.stringify(proposal)) throw new Error('草稿 ID 已被其他内容使用。');
@@ -60,9 +60,9 @@ export class ExternalAiSession {
     if (!context) throw new Error('请先读取／导出本次授权的简历上下文。');
     assertExternalOperations(context, proposal.operations);
     const current = this.readResume();
-    await assertProposalBaseline(current, proposal);
+    await assertExternalBaseline(current, proposal);
     this.assertGeneration(generation);
-    previewProposal(current, proposal);
+    previewExternalProposal(current, proposal);
     // Concurrent submissions can finish hashing in the same turn.
     const duplicate = this.entries.find(entry => entry.proposal.proposalId === proposal.proposalId);
     if (duplicate) {
@@ -84,14 +84,13 @@ export class ExternalAiSession {
     const entry = this.entries.find(entry => entry.proposal.proposalId === proposalId);
     if (entry?.status === 'pending' || entry?.status === 'conflict') entry.status = 'rejected';
   }
-  /** Deliberately NOT exposed by the MCP tool registry. */
   async approve(proposalId: string): Promise<void> {
     const generation = this.assertAuthorized();
     const entry = this.entries.find(entry => entry.proposal.proposalId === proposalId);
     if (!entry || entry.status !== 'pending') throw new Error('草稿不处于待确认状态。');
     entry.status = 'applying';
     try {
-      await assertProposalBaseline(this.readResume(), entry.proposal);
+      await assertExternalBaseline(this.readResume(), entry.proposal);
       this.assertGeneration(generation);
     } catch (error) {
       entry.status = 'conflict';

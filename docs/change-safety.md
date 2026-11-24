@@ -1,6 +1,6 @@
 # 变更安全：用契约阻止同类返工
 
-本文件给 [协作规则](<../AGENTS.md>) 提供最小验证矩阵；数据流的唯一说明仍是 [架构与隐性契约](<architecture.md>)，不再复制一套架构。来源与反例见 [2026-11-18 复盘](<tech-summaries/2026-11-18-three-day-retrospective.md>)。
+本文件给 [协作规则](<../AGENTS.md>) 提供最小验证矩阵；数据流的唯一说明仍是 [架构与隐性契约](<architecture.md>)，不再复制一套架构。来源与反例见 [2026-11-18 复盘](<tech-summaries/2026-11-18-three-day-retrospective.md>) 与 [2026-11-24 三十天复盘](<tech-summaries/2026-11-24-thirty-day-retrospective.md>)。
 
 ## 一次变更的完成条件
 
@@ -19,7 +19,11 @@
 | 页数、适配、组件通信 | 真实编辑器父组件连接；首次 `pending`、已有页数但 `pending=true`、隐藏恢复、主预览/全屏隔离；逐帧推进与早停；真实浏览器字体完成后复验 | 单独挂载 ThemeEditor 并 `global.provide` 只能证明消费者；jsdom 不证明真实 A4 尺寸 |
 | 存储、撤销、草稿生命周期 | 只用 `saveResume` 派生索引；导出/切换前 `flushSave`；失败期间继续编辑；旧请求在关闭/切换后返回；清单与正文一致 | mock 成功返回，不证明保存串行化、权限手势或真实磁盘行为 |
 | 版本历史、快照与镜像 | 哈希忽略身份/时间戳/头像；空提交被拒绝；保存失败不提交；恢复新增提交且保留旧提交；标签与裁剪；镜像失败不影响正文；删除/清空级联 | 只测仓库读写，不证明编辑器离开/关闭/定时检查点接线；只测内存仓库，不证明 IndexedDB 事务与目录权限 |
+| 外部 MCP 连接 | 资源加载后仍是等待；只接受本 frame、本站来源的握手；停止后不再接收；真实浏览器核对本地网络许可 | iframe 的 `onload` 不证明本机 relay 已连接，CLI 工具列表才证明客户端已加载 |
 | 字体/PDF 与测试提速 | 将缓存调用计数与真实字体/字形正确性分开；至少保留真实资产路径验证；CJK 间距用能使旧实现失败的样本，并保留拉丁空格对照 | 单个 mock 子集复用可以测缓存调用次数，不能证明新字符或不同字重的字形内容 |
+| 预览与导出（html2canvas） | 切点同时避开浏览器行盒和渲染器字形下沉；`lab()` / `lch()` / `color-mix()` 落到 sRGB 像素；截图矮于当前内容时中止并报错。常数旁边留下实测差值 | 浏览器里行是完整的，不证明导出页缝没有字尾；`fillStyle` 回读仍可能是原来的颜色函数；jsdom 不证明 3.5px 量级 |
+| 共享样式覆盖组件库 | `.el-dialog.is-align-center` 的 `margin: auto` 必须排在 `margin: 0 auto` 之后；对话框内取景框用 `min(100%, 上限)`，不写死大于内容盒的宽度 | 只在一个视口看过一个弹窗，不能证明其余 `align-center` 弹窗和窄屏；源码顺序反了，测试必须失败 |
+| 路径、发版校验 | relay 等站点 URL 用 `import.meta.env.BASE_URL` 拼接；非法 tag 只报格式（以及与 `package.json` 的不一致），不另报由该 tag 拼出的 CHANGELOG 条目 | 根路径 `http://localhost:3000/ai-relay/...` 在本地可能通过，GitHub Pages 的 `/sea-resume/` 会让 Quality 和部署一起失败 |
 | UI 文案、CSS、组件注册、输入法 | 实际应用插件入口、主要/空/失败/处理中状态；中文候选确认不提交；桌面/窄屏与浅/深色关键路径 | 测试安装完整组件库，不能证明应用按需注册完整；源码文本匹配不证明可点击和可见 |
 
 ## 已有与新增自动化入口
@@ -36,6 +40,9 @@ pnpm exec vitest run src/composables/__tests__/useOnePageFit.spec.ts src/compone
 
 # 最终门禁：完整测试 → vue-tsc → 生产构建（测试失败即停止）
 pnpm verify
+
+# 共享弹窗顺序、取景框宽度、非法 tag 不再派生更新日志错误
+pnpm exec vitest run src/styles/__tests__/shared-chrome.spec.ts tools/release-tag.spec.ts src/components/ai/__tests__/relay-base-url-lock.spec.ts
 ```
 
 新增模板会随 [模板注册表](<../src/components/preview/template-registry.ts>) 自动进入 [导入渲染契约测试](<../src/components/preview/__tests__/import-template-contract.spec.ts>)。它验证内容语义，不锁定排版截图；GPA 仅约束已有展示能力的 AI Agent 模板，不凭测试给其他模板扩需求。

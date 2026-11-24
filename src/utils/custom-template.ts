@@ -1,9 +1,14 @@
-import type { CustomResumeTemplate } from '@/types/custom-template';
+import { toRaw } from 'vue';
+import type { ResumeSnapshot } from '@/types/custom-template';
 import type { ResumeData, TemplateMetadata } from '@/types/resume';
 import { generateId } from '@/utils/helpers';
+import { readLayoutRecipe } from '@/utils/layout-template';
 import { normalizeResumeData } from '@/utils/resumeData';
 
-export const BUILTIN_LAYOUT_IDS = ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent'] as const;
+export const BUILTIN_LAYOUT_IDS = [
+  'modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent',
+  'classic', 'editorial', 'engineer', 'executive', 'campus',
+] as const;
 export type BuiltinLayoutId = (typeof BUILTIN_LAYOUT_IDS)[number];
 
 export const CUSTOM_TEMPLATE_NAME_MAX = 40;
@@ -17,7 +22,7 @@ export function isBuiltinLayoutId(value: string): value is BuiltinLayoutId {
 }
 
 /** 自定义模板沿用内置版式组件；无法识别时回退到现代简约。 */
-export function resolveLayoutTemplateId(template: { id: string; baseTemplateId?: string }): BuiltinLayoutId {
+export function builtinTemplateId(template: { id: string; baseTemplateId?: string }): BuiltinLayoutId {
   const candidate = template.baseTemplateId || template.id;
   return isBuiltinLayoutId(candidate) ? candidate : 'modern';
 }
@@ -41,20 +46,23 @@ export function normalizeTemplateDescription(description?: string): string {
   return trimmed || DEFAULT_DESCRIPTION;
 }
 
-export function buildCustomTemplateFromResume(
+export function buildResumeSnapshot(
   resume: ResumeData,
   input: { name: string; description?: string },
   options: { id?: string; now?: number } = {},
-): CustomResumeTemplate {
+): ResumeSnapshot {
   const name = normalizeTemplateName(input.name);
   const description = normalizeTemplateDescription(input.description);
   const snapshot = JSON.parse(JSON.stringify(resume)) as ResumeData;
   delete snapshot.jobTarget;
-  const baseTemplateId = resolveLayoutTemplateId({ id: snapshot.templateId });
-  snapshot.templateId = baseTemplateId;
+  const layout = readLayoutRecipe(snapshot.layout);
+  const baseTemplateId = layout?.seedId ?? builtinTemplateId({ id: snapshot.templateId });
+  if (layout) snapshot.layout = layout;
+  else delete snapshot.layout;
+  if (!layout) snapshot.templateId = baseTemplateId;
 
   const now = options.now ?? Date.now();
-  const template: CustomResumeTemplate = {
+  const template: ResumeSnapshot = {
     id: options.id ?? generateId(),
     name,
     description,
@@ -71,7 +79,7 @@ export function buildCustomTemplateFromResume(
   return template;
 }
 
-export function customTemplateToMetadata(template: CustomResumeTemplate): TemplateMetadata {
+export function resumeSnapshotToMetadata(template: ResumeSnapshot): TemplateMetadata {
   return {
     id: template.id,
     name: template.name,
@@ -86,12 +94,14 @@ export function customTemplateToMetadata(template: CustomResumeTemplate): Templa
 }
 
 /** 用于预览或新建简历的独立副本，不与已保存的模板共享引用。 */
-export function resumeFromCustomTemplate(template: CustomResumeTemplate): ResumeData {
-  const normalized = normalizeResumeData(JSON.parse(JSON.stringify(template.snapshot)) as ResumeData);
+export function resumeFromSnapshot(template: ResumeSnapshot): ResumeData {
+  const normalized = normalizeResumeData(structuredClone(toRaw(template.snapshot)));
   delete normalized.jobTarget;
-  normalized.templateId = resolveLayoutTemplateId({
-    id: normalized.templateId,
-    baseTemplateId: template.baseTemplateId,
-  });
+  if (!normalized.layout) {
+    normalized.templateId = builtinTemplateId({
+      id: normalized.templateId,
+      baseTemplateId: template.baseTemplateId,
+    });
+  }
   return normalized;
 }

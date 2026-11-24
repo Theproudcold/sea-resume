@@ -20,7 +20,10 @@
 
       <!-- 信息 -->
       <div class="info">
-        <h3 class="title">{{ resume.title }}</h3>
+        <h3 class="title">
+          {{ resume.title }}
+          <span v-if="versionLabel" class="version-tag" data-testid="resume-version-tag">{{ versionLabel }}</span>
+        </h3>
         <div class="meta">
           <span class="template">{{ templateName }}</span>
           <span class="date">{{ formattedDate }}</span>
@@ -50,6 +53,10 @@
               <el-icon><CopyDocument /></el-icon>
               复制
             </el-dropdown-item>
+            <el-dropdown-item v-if="!resume.jobTarget" command="newVersion" data-testid="resume-new-version">
+              <el-icon><Plus /></el-icon>
+              存为新版本
+            </el-dropdown-item>
             <el-dropdown-item command="delete" divided class="danger-menu-item">
               <el-icon><Delete /></el-icon>
               删除
@@ -63,7 +70,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { MoreFilled, EditPen, CopyDocument, Delete, ChatDotRound, Clock } from '@element-plus/icons-vue';
+import { MoreFilled, EditPen, CopyDocument, Delete, ChatDotRound, Clock, Plus } from '@element-plus/icons-vue';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import ResumeCoverPreview from './ResumeCoverPreview.vue';
@@ -83,6 +90,7 @@ const emit = defineEmits<{
   rename: [];
   history: [];
   duplicate: [];
+  newVersion: [];
   delete: [];
 }>();
 
@@ -110,6 +118,13 @@ watch(() => [props.resume.id, props.resume.updatedAt, coverVisible.value] as con
 
 onBeforeUnmount(() => {
   previewReadGeneration++;
+});
+
+/** 版本角标：岗位分支显示 v1..，主干只在第二版之后显示，避免单版简历全带 v1。 */
+const versionLabel = computed(() => {
+  const version = props.resume.versionNumber;
+  if (props.resume.jobTarget) return typeof version === 'number' && version > 1 ? `v${version}` : '';
+  return typeof version === 'number' && version > 1 ? `主干 v${version}` : '';
 });
 
 const templateName = computed(() =>
@@ -147,6 +162,9 @@ const handleCommand = (command: string) => {
     case 'duplicate':
       emit('duplicate');
       break;
+    case 'newVersion':
+      emit('newVersion');
+      break;
     case 'delete':
       emit('delete');
       break;
@@ -174,6 +192,18 @@ const handleCommand = (command: string) => {
   .resume-card:hover .thumbnail {
     border-color: var(--color-accent);
   }
+}
+
+.version-tag {
+  margin-left: var(--space-xs);
+  padding: 0 var(--space-xs);
+  border: var(--rule-hair) solid var(--color-rule);
+  border-radius: var(--radius-s);
+  color: var(--color-ink-muted, var(--color-rule-strong));
+  font-size: var(--font-2xs, 0.6875rem);
+  font-weight: 500;
+  vertical-align: middle;
+  white-space: nowrap;
 }
 
 .resume-card.is-selected {

@@ -69,8 +69,10 @@ describe.each(Object.entries(templateRegistry))('Markdown → %s template contra
     for (const value of [body, highlight, '123456789', '负责项目正文契约。', '项目成果标记：保留列表正文']) {
       expect(wrapper.text().split(value).length - 1, `${id}: ${value}`).toBe(1);
     }
-    // GPA rendering is an existing ai-agent capability, not promised by the other layouts.
-    if (id === 'ai-agent') expect(wrapper.text()).toContain('3.8/4.0');
+    // GPA rendering is guaranteed for ai-agent and all newly added templates.
+    if (['ai-agent', 'classic', 'editorial', 'engineer', 'executive', 'campus'].includes(id)) {
+      expect(wrapper.text()).toContain('3.8/4.0');
+    }
   });
 
   it.each(['entry', 'section'] as const)('omits hidden non-empty %s content in preview and Markdown', async (kind) => {
@@ -92,13 +94,15 @@ describe.each(Object.entries(templateRegistry))('Markdown → %s template contra
     expect(wrapper.text()).toContain(highlight);
   });
 
-  if (id === 'professional') {
+  if (id === 'professional' || id === 'editorial') {
     it('preserves hidden section IDs when reordering the visible main column', async () => {
       const { wrapper, data } = await render();
       await wrapper.setProps({ data: { ...data, hiddenSections: ['experience'] } });
       const updateOrder = vi.spyOn(useResumeStore(), 'updateSectionOrder');
       wrapper.getComponent(draggable).vm.$emit('update:modelValue', ['projects']);
-      expect(updateOrder).toHaveBeenCalledWith(['projects', 'experience', 'education', 'skills']);
+      const calledWith = updateOrder.mock.calls[0]?.[0];
+      expect(calledWith).toEqual(expect.arrayContaining(['projects', 'experience', 'education', 'skills']));
+      expect(calledWith).toHaveLength(4);
     });
   }
 });

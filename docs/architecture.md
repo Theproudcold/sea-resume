@@ -4,6 +4,18 @@
 
 如果某条约定失效了，请直接改这份文档——它比代码更容易保持诚实。
 
+## 名词
+
+同一份简历上有三样容易叫混的东西：
+
+- **内置模板**：`templateId` 为 `modern` 这类值，对应 `components/preview/templates` 里的 Vue 组件。
+- **版式配方**：`ResumeData.layout`，类型 `LayoutRecipe`。有合法配方时，预览和可搜索 PDF 以它的结构为准，不再按 `templateId` 找组件。
+- **模板库**：`SavedRecipe` 只保存配方，存在 `sea-resume_layout-templates`。套用后简历的 `templateId` 仍会写成 `layout:<id>`，那是库记录的指针，不是组件名。`ResumeSnapshot` 保存整份简历，存在 `sea-resume_custom-templates`。
+
+编辑器三栏是窗口布局，代码在 `editorChrome.ts` / `useEditorChrome.ts`。存储键仍是 `sea-resume-editor-layout`。它和简历版式无关。
+
+字号、边距、强调色的读取来源是 `theme`。配方里的 `tokens` 只在套用和另存时写回 `theme`。
+
 ## 数据流总览
 
 ```
@@ -16,7 +28,7 @@
    views/Editor.vue   │ stores/resume.ts          │─▶│ services/storage/        │
                       │  data: ResumeData（活草稿）│  │  StorageManager（单例）   │
                       └──────────────────────────┘  │   ├ LocalStorageAdapter  │
-                                                    │   └ FileSystemAdapter    │
+                                                    │   └ DirectoryAdapter    │
    预览 ─────────────▶ components/preview/*.vue     └─────────────────────────┘
 ```
 
@@ -32,7 +44,7 @@
 `storageManager.saveResume(data)` 会自己从正文派生 `ResumeMeta`（`metaFromResume`）。
 **不要手工拼 `ResumeMeta` 再调 `save(data, meta)`**——列表只读索引、不读正文，漏掉一个索引字段（例如岗位版本信息）就会变成「只有某个入口才出现的缺陷」。
 
-`save(data, meta)` 保留给存储迁移使用：迁移必须原样搬运源索引，不能按正文重新推导。
+`save(data, meta)` 保留给存储迁移使用：迁移必须原样搬运源索引，不能按正文重新推导。磁盘上多出来的旧键跟着对象走，不在迁移时剔除。
 
 ### 2. 写入后不需要整表重读
 
@@ -41,16 +53,19 @@
 
 ### 3. 读盘一定经过归一化
 
-`StorageManager.read()` 内部调 `normalizeResumeData`，保证历史数据缺字段时也拿到完整结构。
-如果你绕过 `storageManager` 直接读存储，就绕过了这层保护。
+`StorageManager.read()` 走 `parseResume(data, 'read')`。缺字段补默认，并把 `customBlocks.order` 对齐到 `sectionOrder`。
+导入 JSON 走 `parseResume(data, 'import')`：字段不对就拒绝，会进 HTML 的正文在这一步清洗。
+`sanitizeResumeDataContent` 只洗 URL 和富文本，不补结构。绕过 `storageManager` 直接读存储，就绕过了读盘这条保护。
 
 ### 4. 编辑中的简历可能正在被写入
 
-`resumeStore.autoSave` 有两级定时（500ms 防抖 / 2000ms 上限）并串行化成队列：
+`resumeStore` 的写入只有三档，不要再加第四个入口：
 
-- `scheduleSave()` 只安排，不等待
-- `autoSave(background)` 真正写盘；后台写会被更新的写取代
-- `flushSave()` 是屏障，用于 **离开页面前** 和 **导出前**
+- `scheduleSave()`：文本输入。500ms 防抖，最迟 2000ms
+- `saveImmediately()`：增删、排序、显隐。后台写，可以被更新的写取代
+- `flushSave()`：离开页面、导出、切换简历前的屏障，等到已经开始的写入结束
+
+`autoSave` 把这三档串成队列。后台写可以被更新的写取代，不能取消已经开始的那一次。
 
 **任何要读稳定数据的操作（导出、备份、切简历）都必须先 `flushSave()`**，否则会读到未落盘的旧数据。
 
@@ -90,9 +105,13 @@ A4 是定尺纸张、预览是连续长图，等分必然把正好压线的文�
 注意两个测量细节，改动前先确认：
 
 - `Range.getClientRects()` 返回的是字体内容区（ascent + descent），比行盒矮，必须按父元素
-  `line-height` 补上下半个行距；字形墨迹会画到行盒边缘。
+  `line-height` 补行距；字形墨迹会画到行盒边缘。
+- 行盒总高必须**小于行距**（封顶「行距 − `MIN_CUT_GAP`」）。补满半行距后，html2canvas 的
+  字形余量只能吃掉剩余高度，不能加在行盒外面：否则相邻两行的行盒首尾相接，
+  `mergeContentBands` 把整段并成一条带，切点只能退到段首（第一页几乎空白）或按页高硬切（切在行内）。
 - `DOMRect` 的字段挂在原型上，`{...rect}` 得到的是空对象——曾经因此丢掉所有行盒，
-  表现为「内容带只剩装饰盒」。
+  表现为「内容带只剩装饰盒」。另外 jsdom 的 `DOMRect` 上 `top/bottom` 由 `x/y` 推导，
+  手写 fixture 请直接给出 `top/bottom/height` 字段。
 
 ### 9. AI 请求的四个前置条件
 
@@ -116,7 +135,50 @@ A4 是定尺纸张、预览是连续长图，等分必然把正好压线的文�
 `createAdapter` 用穷尽检查（`const unknown: never = type`），
 新增类型时如果忘了适配器会**编译失败**，而不是运行时抛错。
 
-### 12. 本地目录授权只能在用户手势里申请
+### 12. 轨道字段只由派生与复制路径写入
+
+`trackId` / `versionNumber` / `jobTarget.baseId` / `jobTarget.baseVersion` 描述「这份简历属于哪条轨道、从哪一版派生」。写入点只有三处，其它编辑路径都不许改它们：
+
+| 路径 | trackId | versionNumber | jobTarget |
+| --- | --- | --- | --- |
+| `normalizeResumeData`（读盘） | 缺失时补为自身 id | 缺失/非法时补为 1 | 不动 |
+| `createJobResumeVersion`（派生岗位版本） | 沿用来源主干 | 分支内从 1 开始 | 写入 baseId / baseVersion |
+| `createMasterVersion`（主干另存） | 沿用来源轨道 | 同轨道最大值 + 1 | 不写 |
+| `duplicateResume`（复制） | **清空**，副本自成新轨道 | **清空**，读出补为 1 | **清空** |
+
+两条容易踩的坑：
+
+- **复制不是派生**。副本若继承 `jobTarget`，会在列表里冒充同一个岗位版本；若继承轨道，会被当成主干新版本，让所有分支误报「主干已有新版」。`duplicateResume` 必须清掉三者。
+- **分支版本号不参与主干比较**。`masterBehindStatus` 只统计同轨道上「没有 `jobTarget`」的简历；否则一个版本号很大的分支会把标准抬高，产生永久落后。
+
+旧数据没有这些字段：读盘补齐后，旧分支缺 `baseVersion`，判定为「不落后」，避免对历史简历打扰。
+
+**同步主干只前进基线**。`saveRebasedVersion` 生成新记录，`jobTarget.baseVersion` 更新为最新主干版本，同时把 `jobTarget.rebasedFromId` 写成同步前的分支 ID（同岗位上多次同步靠它串成一条链，否则只能靠时间猜先后），`trackId` 与 `versionNumber` 保持不变——同步是把主干已有内容补进来，不是新一版岗位洞见。原分支必须保留，便于对比与回退。`baseId` 也不改：它始终是最初分出的那一版。图谱要找「这一版同步到哪条主干」，用同轨道上 `versionNumber === baseVersion` 的主干；找不到就标成找不到主干，不要把线连回 `baseId`。
+
+**同步不走「新增内容」模块**。主干新增的要点只能并进已有经历条目（来源条目不存在时落到最近一段并标记 fallback），整段经历/项目插到列表最前；找不到落点的如实报为未放置，不允许在文末生成悬挂自定义模块。
+
+### 13. 自定义版式嵌入简历，不跟随模板库
+
+`ResumeData.layout` 存在时，预览、封面、模板缩略图和可搜索 PDF 都读这份配方，不再按 `templateId` 找内置组件。没有 `layout` 的旧简历仍走六套内置模板。
+
+切回任意内置模板必须删掉 `layout`，否则旧配方会一直盖住内置组件。套用版式只替换排版和当时的主题 token，不替换正文。模板库里删除版式，不会改写已经嵌进简历的配方。
+
+版式只接受枚举、`#RRGGBB` 和有界数字。应用内快捷 AI 与外部 AI 都用 `set_layout` 修改它，并拿到当前配方或内置种子作为完整底稿；非法配方在解析时拒绝。应用后，配方里的字号、边距和强调色写回 `theme`。外部 AI 仍不能用 `set_template` 或 `reorder_sections`。
+
+### 14. 外部 MCP 的「已启动」不等于「已连接」
+
+`startExternalAiBridge` 返回时，若尚未收到握手通知，状态是 `waiting`。
+上游 `embed.js` 在隐藏 `host` iframe 内还会再创建一层 `iframe[data-webmcp-relay]`（`blob:` widget），
+因此 widget 调用 `window.parent.postMessage` 的接收者是 `host.contentWindow` 而非顶层 `window`。
+`startExternalAiBridge` 直接监听 `host.contentWindow`，且只接受来自 `hostDocument.querySelector('iframe[data-webmcp-relay]').contentWindow`、
+来源等于本站的 `sea-resume.relay` 消息：`connected` 来自 `hello/accepted`，`rejected` 来自 `hello/rejected`（如 `--widget-origin` 不匹配），
+连接关闭或进入两分钟一次的休眠探测时是 `reconnecting`。停止桥接必须同时拆掉 `host` frame 和这条监听，不能让旧连接继续改新会话的状态。
+
+MCP 连接在主页与编辑器顶栏共享同一份单例状态，切换路由后仍保持，直到用户停止。`sea_resume_list`、`get`、`set`、`create`、`derive_version`、`delete`、`open`、`quality`、`sea_jd_risk_scan` 操作当前存储与纯前端规则引擎。`sea_resume_set` 要求传入完整结构；`sea_resume_create` 允许在空库或外部知识库场景只传核心字段，缺省章节、主题和条目 ID 由归一化补齐并经 `sanitizeResumeDataContent` 清洗；`sea_resume_derive_version` 复用 `createJobResumeVersion` 维持主干轨道与岗位分支谱系。正在编辑的简历走 `importData`，其余直接 `saveResume` 并更新列表；删除时同步调用 `removeMeta`，删除正在编辑的简历前先 `discardOpenResume` 阻止自动保存写回。`sea_resume_open` 将浏览器导航到 `/editor/:id` 供实时可视化预览。`sea_resume_export_pdf` 使用可搜索 PDF 并直接触发浏览器下载。
+
+外部 MCP 已连接时，AI 设置、AI 简历助手（简历优化、STAR 润色、快捷修改、打招呼语）、文本 PDF 导入与模拟面试均支持免 API Key 的 MCP 委派模式：网页把表单意图写入仅存内存的 `externalTaskQueue`（最多 20 条、断开桥接即清空），外部 Agent 通过 `sea_task_list` / `sea_task_complete` 读取并回填结果；外部 Agent 主持的模拟面试通过 `sea_interview_save` 写入本机面试历史，不再强制要求网页 API Key。`sea_interview_start` 仍用于网页模型直连出题。文件交换仍使用草稿和人工确认。
+
+### 15. 本地目录授权只能在用户手势里申请
 
 `reauthorizeFileSystem` / `showDirectoryPicker` 必须在点击回调的同步路径中调用，
 否则浏览器不弹授权框。不要把它包装进 `setTimeout` 或 `await` 之后的逻辑。
@@ -125,8 +187,8 @@ A4 是定尺纸张、预览是连续长图，等分必然把正好压线的文�
 
 | 位置 | 说明 |
 | --- | --- |
-| `ResumeData.sectionOrder` + `sectionTitles` + `customBlocks[].title` | 模块顺序、可见性与标题分散在三处，`sectionTitles` 用同一索引签名混装标准模块与自定义模块 ID。归一化入口是 `normalizeResumeData`，重构请从那里切入。 |
-| `FileSystemAdapter` | 同时支持当前 manifest 布局与旧版单文件索引，首次写入时把旧布局复制成新布局（旧文件保留）。 |
+| `sectionOrder` + `sectionTitles` + `customBlocks` | 磁盘上仍是这三处。阅读顺序和显示名从 `src/resume/sections.ts` 投影：`orderedSectionIds`、`sectionDisplayTitle`。自定义模块的显示名以 `customBlocks.title` 为准。 |
+| `DirectoryAdapter` | 同时支持当前 manifest 布局与旧版单文件索引，首次写入时把旧布局复制成新布局（旧文件保留）。 |
 | `utils/capture-colors.ts` | 为绕开 html2canvas 不支持 `oklch()/oklab()` 而手写的颜色转换，只在导出 PDF / 图片时使用。 |
 | `utils/` 目录 | 混装了通用工具、领域规则、浏览器桥接与导出实现，按「是否含业务知识」拆分是后续工作。 |
 
@@ -151,4 +213,4 @@ pnpm build    # vue-tsc -b && vite build
 改动存储、保存时序或编辑器布局前，先读对应的测试：
 `src/stores/__tests__/resume-save-scheduler.spec.ts`、
 `src/components/editor/__tests__/EditorPersistence.spec.ts`、
-`src/utils/__tests__/editorLayout.spec.ts`。
+`src/utils/__tests__/editorChrome.spec.ts`。

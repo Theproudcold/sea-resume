@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { ResumeData } from '@/types/resume';
 import {
-  buildCustomTemplateFromResume,
-  customTemplateToMetadata,
-  resumeFromCustomTemplate,
+  buildResumeSnapshot,
+  resumeSnapshotToMetadata,
+  resumeFromSnapshot,
 } from '@/utils/custom-template';
+import { builtinToRecipe } from '@/utils/layout-template';
 
 const resume = {
   id: 'resume-1',
@@ -36,7 +37,7 @@ const resume = {
 
 describe('custom templates', () => {
   it('keeps the resume content and theme without the job-specific target', () => {
-    const template = buildCustomTemplateFromResume(resume, {
+    const template = buildResumeSnapshot(resume, {
       name: '  校招通用版  ',
       description: '  带项目经历  ',
     }, { id: 'template-1', now: 100 });
@@ -56,16 +57,16 @@ describe('custom templates', () => {
   });
 
   it('creates an independent resume copy that still uses the built-in layout', () => {
-    const template = buildCustomTemplateFromResume(resume, { name: '校招通用版' }, { id: 'template-1' });
+    const template = buildResumeSnapshot(resume, { name: '校招通用版' }, { id: 'template-1' });
     template.snapshot.basic.name = '已改模板';
 
-    const created = resumeFromCustomTemplate(template);
+    const created = resumeFromSnapshot(template);
     created.basic.name = '新简历';
 
     expect(created.templateId).toBe('tech');
     expect(created.jobTarget).toBeUndefined();
     expect(template.snapshot.basic.name).toBe('已改模板');
-    expect(customTemplateToMetadata(template)).toMatchObject({
+    expect(resumeSnapshotToMetadata(template)).toMatchObject({
       id: 'template-1',
       category: 'custom',
       categoryLabel: '我的',
@@ -75,6 +76,24 @@ describe('custom templates', () => {
   });
 
   it('rejects a blank name', () => {
-    expect(() => buildCustomTemplateFromResume(resume, { name: '   ' })).toThrow('请填写模板名称。');
+    expect(() => buildResumeSnapshot(resume, { name: '   ' })).toThrow('请填写模板名称。');
+  });
+
+  it('keeps a valid layout inside a content snapshot', () => {
+    const withLayout = {
+      ...resume,
+      templateId: 'layout:saved',
+      layout: builtinToRecipe('tech', resume.theme),
+    };
+    const template = buildResumeSnapshot(withLayout, { name: '深色内容' }, { id: 'with-layout' });
+    expect(template.baseTemplateId).toBe('tech');
+    expect(template.snapshot.templateId).toBe('layout:saved');
+    expect(template.snapshot.layout?.paper).toBe('dark');
+
+    const created = resumeFromSnapshot(template);
+    expect(created.templateId).toBe('layout:saved');
+    expect(created.layout?.paper).toBe('dark');
+    created.layout = undefined;
+    expect(template.snapshot.layout?.paper).toBe('dark');
   });
 });

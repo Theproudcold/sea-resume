@@ -106,9 +106,55 @@ describe('ResumeCard 操作菜单', () => {
     await flushPromises();
 
     const items = wrapper.findAll('li.menu-item');
-    expect(items.map((item) => item.text())).toEqual(['模拟面试', '版本历史', '重命名', '复制', '删除']);
+    expect(items.map((item) => item.text())).toEqual(['模拟面试', '版本历史', '重命名', '复制', '存为新版本', '删除']);
     for (const item of items) {
       expect(item.find('.menu-icon').exists()).toBe(true);
     }
+  });
+});
+
+describe('ResumeCard 版本角标与主干版本', () => {
+  function mountWithMenu(resume: ResumeMeta) {
+    return mount(ResumeCard, {
+      props: { resume },
+      global: {
+        stubs: {
+          ElDropdown: defineComponent({ template: '<div><slot name="dropdown" /></div>' }),
+          ElDropdownMenu: defineComponent({ template: '<ul><slot /></ul>' }),
+          ElDropdownItem: defineComponent({ template: '<li class="menu-item"><slot /></li>' }),
+          ElIcon: defineComponent({ template: '<i class="menu-icon"><slot /></i>' }),
+          ElButton: true,
+          ResumeCoverPreview: ResumeCoverStub,
+        },
+      },
+    });
+  }
+
+  it('hides the version tag for a first-version resume', async () => {
+    readResume.mockResolvedValue(resumeContent('姓名'));
+    const wrapper = mountWithMenu({ ...resumeMeta, versionNumber: 1 });
+    await flushPromises();
+    expect(wrapper.find('[data-testid=resume-version-tag]').exists()).toBe(false);
+  });
+
+  it('shows a master version tag once the track moves past v1', async () => {
+    readResume.mockResolvedValue(resumeContent('姓名'));
+    const wrapper = mountWithMenu({ ...resumeMeta, trackId: 'resume-1', versionNumber: 3 });
+    await flushPromises();
+    expect(wrapper.get('[data-testid=resume-version-tag]').text()).toContain('主干 v3');
+  });
+
+  it('does not offer a new master version for a job branch', async () => {
+    readResume.mockResolvedValue(resumeContent('姓名'));
+    const branch: ResumeMeta = {
+      ...resumeMeta,
+      versionNumber: 2,
+      jobTarget: { versionName: 'Acme', company: 'Acme', position: '前端', sourceResumeId: 'main' },
+    };
+    const wrapper = mountWithMenu(branch);
+    await flushPromises();
+    expect(wrapper.findAll('li.menu-item').map((item) => item.text())).not.toContain('存为新版本');
+    // 分支版本号在分支内独立计数：v2 显示为「v2」，不带「主干」字样。
+    expect(wrapper.get('[data-testid=resume-version-tag]').text()).toBe('v2');
   });
 });

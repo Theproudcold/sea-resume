@@ -8,6 +8,11 @@ import AiAgentTemplate from '../templates/AiAgentTemplate.vue';
 import MinimalTemplate from '../templates/MinimalTemplate.vue';
 import CreativeTemplate from '../templates/CreativeTemplate.vue';
 import TechTemplate from '../templates/TechTemplate.vue';
+import ClassicTemplate from '../templates/ClassicTemplate.vue';
+import EditorialTemplate from '../templates/EditorialTemplate.vue';
+import EngineerTemplate from '../templates/EngineerTemplate.vue';
+import ExecutiveTemplate from '../templates/ExecutiveTemplate.vue';
+import CampusTemplate from '../templates/CampusTemplate.vue';
 import { templateDemoData } from '@/data/template-demo';
 import type { ResumeData } from '@/types/resume';
 
@@ -56,6 +61,23 @@ describe('template theme tokens', () => {
     expect(style()).toContain('--font-size: 18px');
     expect(style()).toContain('--line-height: 1.2');
   });
+
+  const tokenizedNewTemplates: Array<[string, Component, string]> = [
+    ['ClassicTemplate', ClassicTemplate, '.classic-template'],
+    ['EditorialTemplate', EditorialTemplate, '.editorial-template'],
+    ['EngineerTemplate', EngineerTemplate, '.engineer-template'],
+    ['ExecutiveTemplate', ExecutiveTemplate, '.executive-template'],
+    ['CampusTemplate', CampusTemplate, '.campus-template'],
+  ];
+
+  for (const [name, component, rootClass] of tokenizedNewTemplates) {
+    it(`${name} defines typography and spacing tokens consumed by its styles`, () => {
+      const style = rootStyle(component, rootClass);
+      expect(style()).toContain('--font-size: 18px');
+      expect(style()).toContain('--line-height: 1.2');
+      expect(style()).toContain('--spacing: 32px');
+    });
+  }
 
   const directTemplates: Array<[string, Component, string]> = [
     ['MinimalTemplate', MinimalTemplate, '.minimal-template'],

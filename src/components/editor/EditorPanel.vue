@@ -167,14 +167,15 @@ import EducationEditor from './EducationEditor.vue';
 import SkillEditor from './SkillEditor.vue';
 import ProjectEditor from './ProjectEditor.vue';
 import PanelSplitter from '@/components/common/PanelSplitter.vue';
-import { useEditorLayout } from '@/composables/useEditorLayout';
-import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from '@/utils/editorLayout';
+import { useEditorChrome } from '@/composables/useEditorChrome';
+import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from '@/utils/editorChrome';
 import { useSectionKeepAlive, useValidSectionFallback } from '@/composables/useSectionKeepAlive';
+import { sectionDisplayTitle } from '@/resume/sections';
 
 const resumeStore = useResumeStore();
 const { data } = storeToRefs(resumeStore);
 
-const { compact, resolved, paneVisible, canToggle, togglePane, resizeSidebar, resetLayout } = useEditorLayout();
+const { compact, resolved, paneVisible, canToggle, togglePane, resizeSidebar, resetLayout } = useEditorChrome();
 const sidebarVisible = computed(() => paneVisible('sidebar'));
 const editorVisible = computed(() => paneVisible('editor'));
 /** 三栏宽度由布局状态驱动：模块导航固定，编辑区占满剩余宽度。 */
@@ -242,14 +243,8 @@ const isCustomBlock = (id: string) => !sectionConfig[id];
 
 // 获取模块标题
 const getSectionTitle = (id: string) => {
-  if (sectionConfig[id]) {
-    // 标准模块：优先使用自定义标题，否则使用默认标题
-    return data.value.sectionTitles?.[id] || sectionConfig[id].defaultTitle;
-  } else {
-    // 自定义模块：查找 customBlocks 中的标题
-    const block = data.value.customBlocks.find(b => b.id === id);
-    return block ? block.title : '未命名模块';
-  }
+  if (!sectionConfig[id] && !data.value.customBlocks.some((block) => block.id === id)) return '未命名模块';
+  return sectionDisplayTitle(data.value, id);
 };
 
 // 更新标题

@@ -146,7 +146,15 @@ export function toResumeSnapshot(data: ResumeData): SnapshotBuild {
   const normalized = normalizeResumeData(data);
   const cloned = JSON.parse(JSON.stringify(normalized)) as ResumeData;
   const avatar = cloned.basic.avatar;
-  const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, basic, ...rest } = cloned;
+  const {
+    id: _id,
+    createdAt: _createdAt,
+    updatedAt: _updatedAt,
+    trackId: _trackId,
+    versionNumber: _versionNumber,
+    basic,
+    ...rest
+  } = cloned;
   const { avatar: _avatar, ...basicRest } = basic;
   return {
     snapshot: canonicalizeSnapshot({ ...rest, basic: basicRest } as ResumeSnapshot),
@@ -200,12 +208,12 @@ export function snapshotToResumeData(
 }
 
 /**
- * 把快照写回当前简历。恢复必须保留当前简历的身份与创建时间；
+ * 把快照写回当前简历。恢复必须保留当前简历的身份、创建时间与版本轨道；
  * `avatar` 为 null 表示该版本本来就没有头像，undefined 表示头像 blob 丢失、沿用当前头像。
  */
 export function materializeSnapshot(
   snapshot: ResumeSnapshot,
-  current: Pick<ResumeData, 'id' | 'createdAt' | 'basic'>,
+  current: Pick<ResumeData, 'id' | 'createdAt' | 'basic' | 'trackId' | 'versionNumber'>,
   avatar: string | null | undefined,
 ): ResumeData {
   const basic = { ...snapshot.basic } as ResumeSnapshot['basic'] & { avatar?: string };
@@ -217,6 +225,8 @@ export function materializeSnapshot(
     id: current.id,
     createdAt: current.createdAt,
     updatedAt: new Date().toISOString(),
+    ...(current.trackId ? { trackId: current.trackId } : {}),
+    ...(typeof current.versionNumber === 'number' ? { versionNumber: current.versionNumber } : {}),
     basic,
   });
 }

@@ -1,4 +1,4 @@
-import type { AiProviderConfig, ResumeAiOperation } from '@/types/ai';
+import type { AiProviderConfig, ResumePatchOperation } from '@/types/ai';
 import type { ResumeData } from '@/types/resume';
 import { requestAiJson, type AiRequestOptions } from './transport';
 import { aiPlainText, buildResumeContext } from './resumeContext';
@@ -25,7 +25,7 @@ export interface StarPolishSuggestion {
   after: string;
   note: string;
   novelNumbers: string[];
-  operation: ResumeAiOperation;
+  operation: ResumePatchOperation;
 }
 
 export interface StarPolishDraft {
@@ -111,7 +111,7 @@ function readRaw(resume: ResumeData, key: string): string | string[] | undefined
   return item.description;
 }
 
-function toOperation(target: StarPolishTarget, value: string | string[]): ResumeAiOperation {
+function toOperation(target: StarPolishTarget, value: string | string[]): ResumePatchOperation {
   if (target.kind === 'summary') return { type: 'set_basic', field: 'summary', value: value as string };
   const id = target.key.split('.').slice(1, -1).join('.');
   if (target.kind === 'highlights') return { type: 'update_experience', id, field: 'highlights', value: value as string[] };

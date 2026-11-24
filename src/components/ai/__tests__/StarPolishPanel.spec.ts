@@ -1,9 +1,12 @@
+import { webcrypto } from 'node:crypto';
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElButton } from 'element-plus';
 import StarPolishPanel from '../StarPolishPanel.vue';
 import { requestStarPolish } from '@/services/ai/starPolish';
-import { clearAiModelSettings, saveAiModelSettings, setAiSessionApiKey } from '@/services/ai/AiSettings';
+import { clearAiModelSettings, clearAiSessionApiKey, saveAiModelSettings, setAiSessionApiKey } from '@/services/ai/AiSettings';
+import { useMcpState } from '@/services/ai/useMcpBridge';
+import { clearExternalTasks, completeExternalTask, listExternalTasks } from '@/services/ai/externalTaskQueue';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import type { ResumeData } from '@/types/resume';
 vi.mock('@/services/ai/starPolish', async () => {
@@ -24,6 +27,7 @@ async function start() {
   await flushPromises();
 }
 beforeEach(() => {
+  vi.stubGlobal('crypto', webcrypto);
   vi.resetAllMocks(); localStorage.clear(); clearAiModelSettings();
   saveAiModelSettings({ presetId: 'custom', baseUrl: 'https://example.test/v1', model: 'mock', profileName: '测试模型' });
   setAiSessionApiKey('session-key');
@@ -75,5 +79,28 @@ describe('StarPolishPanel', () => {
     resolve({ explanation: '', suggestions: [] });
     await flushPromises();
     expect(panel.text()).not.toContain('没有需要改动');
+  });
+  it('dispatches STAR polish via external MCP without an API key when connected', async () => {
+    clearAiModelSettings();
+    clearAiSessionApiKey();
+    clearExternalTasks();
+    const mcp = useMcpState();
+    mcp.linkState.value = 'connected';
+    try {
+      setup();
+      expect(panel.text()).toContain('外部 Agent（MCP · 免 API Key）');
+      expect(panel.get('[data-testid=star-start]').text()).toContain('派发给外部 Agent 润色（免 Key）');
+      await start();
+      const pending = listExternalTasks('pending');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]?.kind).toBe('polish');
+      expect(requestStarPolish).not.toHaveBeenCalled();
+      completeExternalTask(pending[0]!.id, { summary: '已完成 STAR 润色并写回简历' });
+      await flushPromises();
+      expect(panel.text()).toContain('已完成 STAR 润色并写回简历');
+    } finally {
+      mcp.linkState.value = '';
+      clearExternalTasks();
+    }
   });
 });

@@ -2,10 +2,10 @@
   <section class="star-panel" aria-label="经历润色">
     <p class="hint">把所选经历写清楚：你做了什么、如何行动、取得什么结果。不补写原文没有的数字和结果。</p>
     <div class="provider">
-      <span>{{ settings?.profileName || '未配置模型' }} · {{ settings?.model || '请选择模型' }}</span>
-      <el-button text type="primary" @click="emit('configure')">配置模型</el-button>
+      <span>{{ isMcpMode ? '外部 Agent（MCP · 免 API Key） · 已就绪' : `${settings?.profileName || '未配置模型'} · ${settings?.model || '请选择模型'}` }}</span>
+      <el-button text type="primary" @click="emit('configure')">{{ isMcpMode ? '模型设置' : '配置模型' }}</el-button>
     </div>
-    <p v-if="!providerReady" class="hint" role="status">请先配置 AI 服务和所需密钥，再开始生成。</p>
+    <p v-if="!isMcpMode && !providerReady" class="hint" role="status">请先配置 AI 服务和所需密钥，再开始生成。</p>
     <template v-if="!draft">
       <p v-if="!targets.length" class="hint">当前没有可润色的个人简介、工作描述、亮点或项目描述。请先在编辑器中填写。</p>
       <fieldset v-else :disabled="loading">
@@ -20,9 +20,10 @@
       <p class="hint">发送时不含姓名、联系方式、出生日期和头像，公司与学校名称会替换为占位。请先检查正文里是否写了敏感信息。</p>
       <label class="consent"><input v-model="consent" data-testid="star-consent" type="checkbox" :disabled="loading" />我同意把所选内容发送给当前 AI 服务做本次润色</label>
       <div class="actions">
-        <el-button type="primary" data-testid="star-start" :disabled="!canPolish" :loading="loading" @click="polish">开始润色</el-button>
+        <el-button type="primary" data-testid="star-start" :disabled="!canPolish" :loading="loading" @click="polish">{{ isMcpMode ? '派发给外部 Agent 润色（免 Key）' : '开始润色' }}</el-button>
         <el-button v-if="loading" @click="cancel">取消润色</el-button>
       </div>
+      <McpTaskStatusCard v-if="activeMcpTask" :task="activeMcpTask" :prompt="mcpPrompt" :initial-copied="mcpCopied" @cancel="cancelMcpTask" />
     </template>
     <template v-else>
       <p v-if="draft.explanation" class="hint">{{ draft.explanation }}</p>
@@ -51,15 +52,19 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { ResumeData } from '@/types/resume';
-import type { ResumeChangeProposal } from '@/services/ai/changeProposal';
-import { createChangeProposal } from '@/services/ai/changeProposal';
+import type { EditProposal } from '@/services/ai/externalProposal';
+import { createExternalProposal } from '@/services/ai/externalProposal';
 import { getAiSessionApiKey, hasAiSessionApiKey, isAiProviderReady, loadAiModelSettings, toAiProviderConfig } from '@/services/ai/AiSettings';
 import { assertStarPolishCurrent, collectStarPolishTargets, requestStarPolish, type StarPolishDraft, type StarPolishKind } from '@/services/ai/starPolish';
+import { useMcpState } from '@/services/ai/useMcpBridge';
+import { resolveAiDriver, useAiDriverPreference } from '@/services/ai/useAiExecutionMode';
+import { cancelExternalTask, copyExternalTaskPrompt, enqueueExternalTask, useExternalTasks } from '@/services/ai/externalTaskQueue';
+import McpTaskStatusCard from './McpTaskStatusCard.vue';
 
 const props = defineProps<{ resume: ResumeData }>();
 const emit = defineEmits<{
   configure: [];
-  apply: [proposal: ResumeChangeProposal, done: (saved: boolean) => void];
+  apply: [proposal: EditProposal, done: (saved: boolean) => void];
 }>();
 const settings = ref(loadAiModelSettings());
 const keyAvailable = ref(hasAiSessionApiKey());
@@ -73,10 +78,19 @@ const draft = ref<StarPolishDraft | null>(null);
 const error = ref('');
 let controller: AbortController | undefined;
 let generation = 0;
+const { linkState: mcpLinkState } = useMcpState();
+const { driverPreference } = useAiDriverPreference();
+const { findTask } = useExternalTasks();
+const mcpTaskId = ref('');
+const mcpPrompt = ref('');
+const mcpCopied = ref(false);
+const activeMcpTask = computed(() => findTask(mcpTaskId.value));
 const kindLabels: Record<StarPolishKind, string> = { summary: '个人简介', experience: '工作描述', project: '项目描述', highlights: '工作亮点' };
 const targets = computed(() => collectStarPolishTargets(props.resume));
 const providerReady = computed(() => isAiProviderReady(settings.value, keyAvailable.value ? getAiSessionApiKey(settings.value?.profileId) : ''));
-const canPolish = computed(() => consent.value && providerReady.value && selected.value.length > 0 && selected.value.length <= 12 && !loading.value);
+const isMcpMode = computed(() => resolveAiDriver(mcpLinkState.value === 'connected', providerReady.value, driverPreference.value) === 'mcp');
+const canPolish = computed(() => consent.value && (isMcpMode.value || providerReady.value) && selected.value.length > 0 && selected.value.length <= 12 && !loading.value);
+function cancelMcpTask() { if (mcpTaskId.value) cancelExternalTask(mcpTaskId.value); }
 const preview = (value: string) => value.replace(/\s+/g, ' ').slice(0, 72);
 function cancel() { generation++; controller?.abort(); loading.value = false; }
 function refreshSettings() {
@@ -95,7 +109,26 @@ onMounted(() => window.addEventListener('focus', refreshSettings));
 onBeforeUnmount(() => { cancel(); window.removeEventListener('focus', refreshSettings); });
 async function polish() {
   refreshSettings();
-  if (!canPolish.value || !settings.value) return;
+  if (!canPolish.value) return;
+  if (isMcpMode.value) {
+    error.value = '';
+    try {
+      const chosenTargets = targets.value.filter((item) => selected.value.includes(item.key));
+      const { task, prompt } = enqueueExternalTask({
+        kind: 'polish',
+        resumeId: props.resume.id,
+        summary: `STAR 润色 ${chosenTargets.length} 项${role.value.trim() ? `（${role.value.trim()}）` : ''}`,
+        payload: { resumeId: props.resume.id, targetRole: role.value.trim(), targets: chosenTargets },
+      });
+      mcpTaskId.value = task.id;
+      mcpPrompt.value = prompt;
+      mcpCopied.value = await copyExternalTaskPrompt(prompt);
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : '派发任务失败。';
+    }
+    return;
+  }
+  if (!settings.value) return;
   const current = ++generation;
   const keys = [...selected.value];
   controller = new AbortController(); loading.value = true; error.value = '';
@@ -116,7 +149,7 @@ function apply() {
   try { assertStarPolishCurrent(props.resume, chosen); }
   catch (cause) { error.value = cause instanceof Error ? cause.message : '内容已变化，请重新生成。'; return; }
   applying.value = true;
-  void createChangeProposal(props.resume, { explanation: draft.value.explanation || '按 STAR 法则润色所选内容。', operations: chosen.map((suggestion) => suggestion.operation) }).then((proposal) => {
+  void createExternalProposal(props.resume, { explanation: draft.value.explanation || '按 STAR 法则润色所选内容。', operations: chosen.map((suggestion) => suggestion.operation) }).then((proposal) => {
     emit('apply', proposal, (saved) => {
       applying.value = false;
       if (saved) { draft.value = null; accepted.value = []; selected.value = []; consent.value = false; }

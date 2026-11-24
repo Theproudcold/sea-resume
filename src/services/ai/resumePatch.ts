@@ -1,8 +1,12 @@
 import type { ResumeData } from '@/types/resume';
-import type { ResumeAiDraft, ResumeAiOperation } from '@/types/ai';
+import type { ResumePatch, ResumePatchOperation } from '@/types/ai';
+import type { LayoutSeedId } from '@/types/layout-template';
+import { BUILTIN_LAYOUT_IDS } from '@/utils/custom-template';
+import { readLayoutRecipe, themeFromRecipe } from '@/utils/layout-template';
 import { markdownToSafeHtml, sanitizeMarkdownUrl } from '@/utils/markdown/markdownSafety';
 
-const templates = new Set(['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent']);
+const templates = new Set<string>(BUILTIN_LAYOUT_IDS);
+const entryCollections = new Set(['experiences', 'projects', 'education', 'skills', 'customBlocks']);
 const textFields: Record<string, string[]> = {
   set_basic: ['name', 'title', 'email', 'phone', 'location', 'website', 'summary'],
   update_experience: ['company', 'position', 'startDate', 'endDate', 'description', 'highlights'],
@@ -24,7 +28,7 @@ function safeStringList(value: unknown, field: string): string[] {
 }
 
 /** Parse and enforce the fixed operation allowlist; never evaluates model output. */
-export function parseResumeAiDraft(input: unknown, options?: { allowEmpty?: boolean }): ResumeAiDraft {
+export function parseResumePatch(input: unknown, options?: { allowEmpty?: boolean }): ResumePatch {
   let parsed = input;
   if (typeof parsed === 'string') {
     const stripped = parsed.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
@@ -40,17 +44,30 @@ export function parseResumeAiDraft(input: unknown, options?: { allowEmpty?: bool
     if (!options?.allowEmpty || !explanation.trim()) throw new Error('AI 没有返回可执行的简历修改，或操作数量超出限制。');
     return { explanation, operations: [] };
   }
-  const operations = object.operations.map((entry): ResumeAiOperation => {
+  const operations = object.operations.map((entry): ResumePatchOperation => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('AI 操作格式无效。');
     const operation = entry as Record<string, unknown>;
     const type = operation.type;
     if (type === 'set_template') {
       if (typeof operation.templateId !== 'string' || !templates.has(operation.templateId)) throw new Error('AI 请求了不支持的模板。');
-      return { type: 'set_template', templateId: operation.templateId as 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' | 'ai-agent' };
+      return { type: 'set_template', templateId: operation.templateId as LayoutSeedId };
+    }
+    if (type === 'set_layout') {
+      if (operation.layout === null) return { type: 'set_layout', layout: null };
+      const layout = readLayoutRecipe(operation.layout);
+      if (!layout) throw new Error('AI 提供的版式无效。');
+      return { type: 'set_layout', layout };
     }
     if (type === 'reorder_sections') {
       if (!Array.isArray(operation.sectionOrder) || operation.sectionOrder.length > 30 || operation.sectionOrder.some((id) => typeof id !== 'string')) throw new Error('AI 请求的章节顺序无效。');
       return { type, sectionOrder: operation.sectionOrder as string[] };
+    }
+    if (type === 'remove_entry') {
+      const collection = operation.collection;
+      const id = operation.id;
+      if (typeof collection !== 'string' || !entryCollections.has(collection)) throw new Error('AI 请求了不允许删除的内容。');
+      if (typeof id !== 'string' || !id || id.length > 120) throw new Error('AI 操作缺少有效条目 ID。');
+      return { type, collection: collection as 'experiences' | 'projects' | 'education' | 'skills' | 'customBlocks', id };
     }
     if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(textFields, type)) throw new Error('AI 请求了不允许的操作。');
     const field = operation.field;
@@ -59,15 +76,15 @@ export function parseResumeAiDraft(input: unknown, options?: { allowEmpty?: bool
     if (type !== 'set_basic' && (typeof id !== 'string' || !id || id.length > 120)) throw new Error('AI 操作缺少有效条目 ID。');
     const listField = (type === 'update_experience' && field === 'highlights') || (type === 'update_project' && field === 'techStack') || (type === 'update_skill' && field === 'items');
     const normalizedValue = listField ? safeStringList(operation.value, field) : safeString(operation.value, field);
-    return { type, field, ...(type === 'set_basic' ? {} : { id }), value: normalizedValue } as ResumeAiOperation;
+    return { type, field, ...(type === 'set_basic' ? {} : { id }), value: normalizedValue } as ResumePatchOperation;
   });
   return { explanation: explanation || '请审阅以下修改建议。', operations };
 }
 
 /** Apply validated operations to a copy; failures never partially mutate the live Pinia store. */
-export function applyResumeAiOperations(source: ResumeData, operations: ResumeAiOperation[]): ResumeData {
-  const resume = JSON.parse(JSON.stringify(source)) as ResumeData;
-  for (const operation of parseResumeAiDraft({ operations }).operations) {
+export function applyResumePatch(source: ResumeData, operations: ResumePatchOperation[]): ResumeData {
+  const resume = structuredClone(source);
+  for (const operation of parseResumePatch({ operations }).operations) {
     switch (operation.type) {
       case 'set_basic': {
         const value = safeString(operation.value, operation.field);
@@ -122,13 +139,31 @@ export function applyResumeAiOperations(source: ResumeData, operations: ResumeAi
       }
       case 'set_template':
         resume.templateId = operation.templateId;
+        delete resume.layout;
         break;
+      case 'set_layout': {
+        if (operation.layout === null) delete resume.layout;
+        else {
+          const layout = readLayoutRecipe(operation.layout);
+          if (!layout) throw new Error('AI 提供的版式无效。');
+          resume.layout = layout;
+          resume.theme = themeFromRecipe(layout);
+        }
+        break;
+      }
       case 'reorder_sections': {
         const expected = resume.sectionOrder;
         if (operation.sectionOrder.length !== expected.length || new Set(operation.sectionOrder).size !== expected.length || expected.some((id) => !operation.sectionOrder.includes(id))) {
           throw new Error('AI 只能调整当前已有章节的顺序，不能添加或隐藏章节。');
         }
         resume.sectionOrder = [...operation.sectionOrder];
+        break;
+      }
+      case 'remove_entry': {
+        const list = resume[operation.collection];
+        const index = list.findIndex((entry) => entry.id === operation.id);
+        if (index < 0) throw new Error('AI 要删除的条目不存在。');
+        list.splice(index, 1);
         break;
       }
     }

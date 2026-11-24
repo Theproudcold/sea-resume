@@ -18,11 +18,11 @@ export interface CommitStats {
 /**
  * 简历正文快照。
  *
- * 不包含 `id` / `createdAt` / `updatedAt`：这些字段会随保存、复制、恢复变化，
- * 放进快照会让“内容没变”也被判定成新版本。头像单独按内容寻址存放，避免每个
- * 版本都复制一份 base64 图片。
+ * 不包含 `id` / `createdAt` / `updatedAt` / `trackId` / `versionNumber`：这些身份与轨道字段
+ * 会随保存、复制、另存主干版本与恢复变化，放进快照会让“内容没变”也被判定成新版本，
+ * 恢复时也会破坏版本图谱轨道关系。头像单独按内容寻址存放，避免每个版本都复制一份 base64 图片。
  */
-export type ResumeSnapshot = Omit<ResumeData, 'id' | 'createdAt' | 'updatedAt' | 'basic'> & {
+export type ResumeSnapshot = Omit<ResumeData, 'id' | 'createdAt' | 'updatedAt' | 'trackId' | 'versionNumber' | 'basic'> & {
   basic: Omit<BasicInfo, 'avatar'>;
 };
 

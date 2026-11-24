@@ -9,6 +9,7 @@ import InterviewReport from '../InterviewReport.vue';
 import InterviewHistory from '@/views/InterviewHistory.vue';
 import { buildResumeContext } from '@/services/ai/resumeContext';
 import { clearAiSessionApiKey, hasAiStoredApiKey, saveAiModelSettings, setAiSessionApiKey } from '@/services/ai/AiSettings';
+import { useMcpState } from '@/services/ai/useMcpBridge';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { storageManager } from '@/services/storage/StorageManager';
 import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
@@ -177,5 +178,17 @@ describe('interview UI safety and handoff', () => {
     await byText(wrapper, '仅将已确认事实交给优化与审查').trigger('click'); await flushPromises();
     expect(optimization.run).toBeNull(); expect(wrapper.find('[data-testid="optimizer"]').exists()).toBe(true);
     wrapper.unmount();
+  });
+  it('explains keyless MCP interview flow via sea_interview_save when connected without web API models', () => {
+    const mcp = useMcpState();
+    mcp.linkState.value = 'connected';
+    try {
+      const wrapper = mount(InterviewConsent, { ...options, props: { preview: {} } });
+      expect(wrapper.text()).toContain('已连接外部 MCP（免 API Key）');
+      expect(wrapper.text()).toContain('sea_interview_save');
+      wrapper.unmount();
+    } finally {
+      mcp.linkState.value = '';
+    }
   });
 });

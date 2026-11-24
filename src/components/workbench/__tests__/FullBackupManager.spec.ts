@@ -119,7 +119,7 @@ describe('FullBackupManager', () => {
       ...existing,
       theme: {
         color: '#2563eb', fontFamily: 'sans-serif', fontSize: 14, lineHeight: 1.5,
-        spacing: 24, displayIcons: true,
+        spacing: 8, displayIcons: true,
       },
       customBlocks: [{ id: 'legacy-block', title: 'Legacy timeline', type: 'timeline', content: '<p>Old content</p>', order: 0 }],
     } as unknown as ResumeData;

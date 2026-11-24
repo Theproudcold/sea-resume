@@ -26,7 +26,7 @@
         <section v-if="section === 'ai'" class="settings-page">
           <header class="settings-page-heading">
             <h2>AI 服务</h2>
-            <p>用于 AI 助手和 PDF 导入，不影响手动编辑简历。</p>
+            <p>支持通过外部 Agent（MCP，免 API Key）或网页模型 API 驱动，不影响手动编辑简历。</p>
           </header>
           <AiProviderSettingsPanel />
         </section>
@@ -90,7 +90,7 @@
             <h2>关于 Sea Resume</h2>
             <p>简洁、灵活的简历制作工具。</p>
           </header>
-          <div class="about-card"><strong>Sea Resume</strong><span>版本 1.0.0</span></div>
+          <div class="about-card"><strong>Sea Resume</strong><span>版本 {{ appVersion }}</span></div>
         </section>
       </main>
     </div>
@@ -131,6 +131,8 @@ const emit = defineEmits<{
 }>();
 
 const storageStore = useStorageStore();
+// 构建时由 vite 从 package.json 注入；测试环境下用占位值。
+const appVersion = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '开发版';
 const section = ref<SettingsSection>(props.initialSection);
 const backupResumeId = ref('');
 

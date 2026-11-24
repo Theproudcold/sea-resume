@@ -3,8 +3,9 @@
     <header><h2>简历优化</h2><p>先分析，再逐项确认修改。通常请求 AI 3 次，可能产生费用。</p></header>
     <AiWorkflowSteps :steps="['分析', '补充', '改写', '审查', '采纳']" :current="workflowIndex" :complete="workspace.run?.stage === 'completed'" label="简历优化步骤" />
     <div class="provider">
-      <div><strong>{{ providerLabel }}</strong><p>{{ settings?.model || '未配置模型' }} · {{ keyAvailable ? '服务已就绪' : '需要完成服务配置' }}</p></div>
-      <button type="button" @click="emit('configure')">配置 AI 服务</button>
+      <div v-if="isMcpMode"><strong>外部 Agent（MCP · 免 API Key）</strong><p>已连接本机 MCP · 可直接派发优化任务，无需配置网页模型密钥</p></div>
+      <div v-else><strong>{{ providerLabel }}</strong><p>{{ settings?.model || '未配置模型' }} · {{ keyAvailable ? '服务已就绪' : '需要完成服务配置' }}</p></div>
+      <button type="button" @click="emit('configure')">{{ isMcpMode ? '模型设置' : '配置 AI 服务' }}</button>
       <button type="button" @click="refreshProvider">刷新配置</button>
     </div>
     <p class="notice">仅发送简历可见正文，不发送照片、生日、结构化姓名或联系方式。正文、岗位要求和补充回答仍可能含敏感信息，请检查预览。</p>
@@ -30,10 +31,11 @@
     <details><summary>关于记录保存</summary><p class="muted">AI 记录仅在当前浏览器，不随简历目录迁移，不纳入全量简历备份。恢复后仍需确认发送范围；未记住密钥时需重新输入 API Key。</p></details>
     <p v-if="workspace.unsaved || answerDirty" class="notice">存在未保存的优化内容 / 补充输入，关闭或刷新可能丢失；可选择保存到本机。</p>
     <div class="actions">
-      <button v-if="!workspace.run" type="button" data-testid="start" :disabled="!canSend" @click="start">开始分析</button>
+      <button v-if="!workspace.run" type="button" data-testid="start" :disabled="!canSend" @click="start">{{ isMcpMode ? '派发给外部 Agent 优化（免 Key）' : '开始分析' }}</button>
       <button v-if="workspace.busy" type="button" @click="workspace.cancel">取消请求</button>
       <button v-if="workspace.run && !workspace.busy" type="button" :disabled="applying" @click="restart">重新开始</button>
     </div>
+    <McpTaskStatusCard v-if="activeMcpTask" :task="activeMcpTask" :prompt="mcpPrompt" :initial-copied="mcpCopied" @cancel="cancelMcpTask" />
     <div v-if="workspace.run" class="run-content">
       <p class="run-status" role="status"><strong>{{ stageLabel }}</strong></p><details><summary>请求用量 · {{ workspace.run.usage.calls }} 次</summary><p>输入 {{ workspace.run.usage.promptTokens }} / 输出 {{ workspace.run.usage.completionTokens }} tokens（服务未返回时为 0，不估算费用）</p></details>
       <details v-if="workspace.run.analysis" open>
@@ -60,7 +62,11 @@
           <strong>{{ operationLabel(suggestion.operation) }} · {{ suggestion.rejected ? '用户已拒绝' : reviewLabels[suggestion.review] }}</strong>
           <div class="diff"><div><small>原文</small><p>{{ display(suggestion.before) || '（空）' }}</p></div><div><small>建议</small><p>{{ display(suggestion.operation.value) || '（空）' }}</p></div></div>
           <p>理由：{{ suggestion.reason }}</p><p v-if="suggestion.requirement">对应要求：{{ suggestion.requirement }}</p>
-          <p>审查：{{ suggestion.reviewReason }}</p>
+          <div v-if="suggestion.guard?.length" class="guard" data-testid="guard-verdict">
+            <strong>事实校验未通过，不能应用</strong>
+            <ul><li v-for="issue in suggestion.guard" :key="issue.code + issue.message">{{ issue.message }}<span v-if="issue.details.length">（{{ issue.details.join('、') }}）</span></li></ul>
+          </div>
+          <p v-if="suggestion.reviewReason && !suggestion.guard?.length">审查：{{ suggestion.reviewReason }}</p>
           <details><summary>证据来源</summary><p v-for="reference in suggestion.sourceRefs" :key="reference">{{ reference }}：{{ sources[reference] }}</p></details>
           <label class="check"><input type="checkbox" :checked="suggestion.selected" :disabled="suggestion.review === 'reject' || suggestion.rejected || workspace.run.stage !== 'ready' || applying" @change="workspace.choose(suggestion.id, { selected: checked($event) })" />选择此建议</label>
           <label v-if="suggestion.review === 'confirm'" class="check"><input type="checkbox" :checked="suggestion.confirmed" :disabled="suggestion.rejected || workspace.run.stage !== 'ready' || applying" @change="workspace.choose(suggestion.id, { confirmed: checked($event) })" />我已核实此建议事实无误，明确确认采纳</label>
@@ -100,7 +106,11 @@ import { useWorkbenchStore } from '@/stores/workbench';
 import { storageManager } from '@/services/storage/StorageManager';
 import { createJobResumeVersion } from '@/utils/resumeVersions';
 import { generateId } from '@/utils/helpers';
+import { useMcpState } from '@/services/ai/useMcpBridge';
+import { resolveAiDriver, useAiDriverPreference } from '@/services/ai/useAiExecutionMode';
+import { cancelExternalTask, copyExternalTaskPrompt, enqueueExternalTask, useExternalTasks } from '@/services/ai/externalTaskQueue';
 import AiWorkflowSteps from './AiWorkflowSteps.vue';
+import McpTaskStatusCard from './McpTaskStatusCard.vue';
 import { confirmAiAction } from '@/utils/aiDialogs';
 import { describeError } from '@/utils/globalErrorReporting';
 
@@ -125,10 +135,20 @@ const overwriteConfirmed = ref(false);
 let providerSignature = '';
 let refreshTimer: ReturnType<typeof setInterval> | undefined;
 let restoring = false;
+const { linkState: mcpLinkState } = useMcpState();
+const { driverPreference } = useAiDriverPreference();
+const { findTask } = useExternalTasks();
+const mcpTaskId = ref('');
+const mcpPrompt = ref('');
+const mcpCopied = ref(false);
+const activeMcpTask = computed(() => findTask(mcpTaskId.value));
+const apiReady = computed(() => keyAvailable.value && !!settings.value?.model && !!settings.value?.baseUrl);
+const isMcpMode = computed(() => resolveAiDriver(mcpLinkState.value === 'connected', apiReady.value, driverPreference.value) === 'mcp');
+function cancelMcpTask() { if (mcpTaskId.value) cancelExternalTask(mcpTaskId.value); }
 const checked = (event: Event) => (event.target as HTMLInputElement).checked;
 const providerLabel = computed(() => settings.value?.profileName || AI_PROVIDER_PRESETS.find(p => p.id === settings.value?.presetId)?.label || '未配置服务');
 const config = () => toAiProviderConfig(settings.value);
-const canSend = computed(() => consent.value && keyAvailable.value && !!settings.value?.model && !!settings.value?.baseUrl && !workspace.busy && !applying.value);
+const canSend = computed(() => consent.value && (isMcpMode.value || apiReady.value) && !workspace.busy && !applying.value);
 const confirmedIncoming = computed(() => incomingFacts.value.filter(f => acceptedFacts[f.id] === true));
 const sendingPreview = computed(() => JSON.stringify({ resume: workspace.run?.context || buildResumeContext(props.resume, options), options: workspace.run?.options || options, confirmedFacts: workspace.run?.facts || confirmedIncoming.value, confirmedSupplementForNextCall: workspace.run?.stage === 'supplement' ? (workspace.run.analysis?.questions || []).filter(q => answers[q.id]?.trim() && answerConfirmed[q.id]).map(q => ({ text: answers[q.id], targetId: q.targetId })) : [] }, null, 2));
 const sources = computed(() => workspace.run ? optimizationSources(workspace.run) : {});
@@ -188,7 +208,30 @@ watch(() => props.resume.id, () => { consent.value = false; workspace.cancel(); 
 watch(applyMode, () => { overwriteConfirmed.value = false; });
 async function start() {
   refreshProvider(); if (!canSend.value) return;
-  localError.value = ''; clearAnswers();
+  localError.value = '';
+  if (isMcpMode.value) {
+    try {
+      const targetTitle = [options.company, options.target].filter(Boolean).join(' · ') || '通用简历优化';
+      const { task, prompt } = enqueueExternalTask({
+        kind: 'optimize',
+        resumeId: props.resume.id,
+        summary: `简历优化：${targetTitle}`,
+        payload: {
+          resumeId: props.resume.id,
+          options: { ...options },
+          confirmedFacts: confirmedIncoming.value,
+          preferredTools: ['sea_resume_get', 'sea_jd_risk_scan', 'sea_resume_derive_version', 'sea_resume_set', 'sea_resume_quality', 'sea_resume_open'],
+        },
+      });
+      mcpTaskId.value = task.id;
+      mcpPrompt.value = prompt;
+      mcpCopied.value = await copyExternalTaskPrompt(prompt);
+    } catch (cause) {
+      localError.value = describeError(cause);
+    }
+    return;
+  }
+  clearAnswers();
   await workspace.start(props.resume, options, config(), consent.value, confirmedIncoming.value);
 }
 async function continueRun(skip: boolean) {
@@ -252,6 +295,7 @@ input:not([type=checkbox]), textarea, select { width: 100%; min-width: 0; min-he
 button { min-height: var(--ui-control-height); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); padding: var(--ui-space-2) var(--ui-space-3); color: var(--ui-text-main); background: var(--ui-bg-surface); cursor: pointer; font: inherit; transition: background var(--ui-duration-fast) ease; }button:hover:not(:disabled) { background: var(--ui-bg-hover); }button:disabled { opacity: .5; cursor: not-allowed; }button[data-testid=start], button[data-testid=continue], button[data-testid=apply] { background: var(--ui-primary); color: var(--ui-bg-surface); border-color: var(--ui-primary); }button[data-testid=start]:hover:not(:disabled), button[data-testid=continue]:hover:not(:disabled), button[data-testid=apply]:hover:not(:disabled) { background: var(--ui-primary-hover); }
 summary { cursor: pointer; font-size: var(--ui-font-sm); } pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow: auto; font-size: var(--ui-font-xs); padding: var(--ui-space-2); background: var(--ui-bg-subtle); }
 .form-grid, .diff { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-space-3); }.suggestion { margin-bottom: var(--ui-space-4); }.suggestion > strong { display: block; margin-bottom: var(--ui-space-3); font-size: var(--ui-font-sm); }.suggestion[data-review=reject] { opacity: .7; border-color: color-mix(in srgb, var(--ui-danger) 35%, var(--ui-border)); }.suggestion[data-review=pass] { border-top: 2px solid var(--ui-success); }.suggestion[data-review=confirm] { border-top: 2px solid var(--ui-warning); }.diff { margin-bottom: var(--ui-space-3); }.diff > div { padding: var(--ui-space-3); border-radius: var(--ui-radius-md); background: var(--ui-bg-subtle); }.diff > div + div { background: color-mix(in srgb, var(--ui-primary) 5%, var(--ui-bg-surface)); }.diff p { white-space: pre-wrap; margin-top: var(--ui-space-2); }
+.guard { margin-bottom: var(--ui-space-3); padding: var(--ui-space-3); border-radius: var(--ui-radius-md); border-left: 3px solid var(--ui-danger); background: var(--ui-bg-subtle); font-size: var(--ui-font-xs); }.guard > strong { display: block; margin-bottom: var(--ui-space-2); color: var(--ui-danger); }.guard ul { margin: 0; padding-left: var(--ui-space-4); }.guard span { color: var(--ui-text-muted); }
 .run-content { display: grid; gap: var(--ui-space-4); }.run-status { padding: var(--ui-space-3) 0; border-top: 1px solid var(--ui-border); border-bottom: 1px solid var(--ui-border); }.run-status span { display: block; margin-top: var(--ui-space-1); color: var(--ui-text-muted); font-size: var(--ui-font-xs); }.error { color: var(--ui-danger); }.muted, small { color: var(--ui-text-muted); font-size: var(--ui-font-xs); }.question, .match { margin-top: var(--ui-space-3); }.history-row { padding: var(--ui-space-3) 0; border-bottom: 1px solid var(--ui-border); font-size: var(--ui-font-xs); }
 @media (max-width: 768px) { .form-grid, .diff { grid-template-columns: minmax(0, 1fr); }.actions button { flex: 1 1 100%; }.provider > div { flex-basis: 100%; } }
 </style>

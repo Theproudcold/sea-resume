@@ -5,9 +5,10 @@ import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import ResumeVersionManager from '@/components/workbench/ResumeVersionManager.vue';
 
-const { readResume, createResumeFromData } = vi.hoisted(() => ({
+const { readResume, createResumeFromData, saveRebasedVersion } = vi.hoisted(() => ({
   readResume: vi.fn(),
   createResumeFromData: vi.fn(),
+  saveRebasedVersion: vi.fn(),
 }));
 
 vi.mock('@/services/storage/StorageManager', () => ({
@@ -15,7 +16,7 @@ vi.mock('@/services/storage/StorageManager', () => ({
 }));
 
 vi.mock('@/stores/workbench', () => ({
-  useWorkbenchStore: () => ({ createJobVersion: vi.fn(), createResumeFromData }),
+  useWorkbenchStore: () => ({ createJobVersion: vi.fn(), createResumeFromData, saveRebasedVersion: saveRebasedVersion }),
 }));
 
 const resumes: ResumeMeta[] = [
@@ -167,6 +168,143 @@ describe('ResumeVersionManager comparison', () => {
     // 索引里已有岗位版本的简历不再读正文；没有索引的旧简历仍会回落读一次。
     expect(readResume).not.toHaveBeenCalledWith('target');
     expect(readResume).toHaveBeenCalledWith('base');
+  });
+
+  it('marks a job version that fell behind its master track', async () => {
+    const indexed: ResumeMeta[] = [
+      { id: 'base', title: '基础简历', templateId: 'modern', createdAt: 1, updatedAt: 1, trackId: 'track-a', versionNumber: 3 },
+      {
+        id: 'branch',
+        title: 'Acme 前端',
+        templateId: 'modern',
+        createdAt: 1,
+        updatedAt: 2,
+        trackId: 'track-a',
+        versionNumber: 1,
+        jobTarget: { versionName: 'Acme 前端', company: 'Acme', position: '前端', sourceResumeId: 'base', baseId: 'base', baseVersion: 1 },
+      },
+    ];
+    const wrapper = mount(ResumeVersionManager, { props: { modelValue: true, resumes: indexed }, global: { stubs } });
+    await wrapper.find('.open-history').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid=version-behind]').text()).toContain('主干已有新版');
+    // 这是提示而不是动作：D 功能才提供同步。
+    expect(wrapper.find('[data-testid=version-behind] input, [data-testid=version-behind] button').exists()).toBe(false);
+  });
+
+  it('does not mark a branch that already matches the latest master version', async () => {
+    const indexed: ResumeMeta[] = [
+      { id: 'base', title: '基础简历', templateId: 'modern', createdAt: 1, updatedAt: 1, trackId: 'track-a', versionNumber: 3 },
+      {
+        id: 'branch',
+        title: 'Acme 前端',
+        templateId: 'modern',
+        createdAt: 1,
+        updatedAt: 2,
+        trackId: 'track-a',
+        versionNumber: 1,
+        jobTarget: { versionName: 'Acme 前端', company: 'Acme', position: '前端', sourceResumeId: 'base', baseId: 'base', baseVersion: 3 },
+      },
+    ];
+    const wrapper = mount(ResumeVersionManager, { props: { modelValue: true, resumes: indexed }, global: { stubs } });
+    await wrapper.find('.open-history').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid=version-behind]').exists()).toBe(false);
+  });
+
+  it('distinguishes same-titled versions by their track version in the selector', async () => {
+    const indexed: ResumeMeta[] = [
+      { id: 'base1', title: '我的简历', templateId: 'modern', createdAt: 1, updatedAt: 1, trackId: 'track-a', versionNumber: 1 },
+      { id: 'base2', title: '我的简历', templateId: 'modern', createdAt: 1, updatedAt: 2, trackId: 'track-a', versionNumber: 3 },
+    ];
+    const wrapper = mount(ResumeVersionManager, { props: { modelValue: true, resumes: indexed }, global: { stubs } });
+    await flushPromises();
+    const labels = (wrapper.vm as unknown as { resumeOptionLabel: (r: ResumeMeta) => string }).resumeOptionLabel;
+    // 同名不同版必须能区分：第一版不加后缀，之后的版本带「主干 vN」。
+    expect(labels(indexed[0]!)).not.toContain('主干 v');
+    expect(labels(indexed[1]!)).toContain('主干 v3');
+  });
+
+  it('plans a master sync, previews the additions and saves a rebased copy', async () => {
+    const masterV1 = parseResumeMarkdown('# Alex').resume;
+    masterV1.id = 'm1';
+    masterV1.trackId = 'track-a';
+    masterV1.versionNumber = 1;
+    masterV1.experiences = [{ id: 'e1', company: '星海科技', position: '前端', startDate: '2022-01', endDate: 'present', description: '<p>负责结算</p>', highlights: ['负责结算页面改版'] }];
+    const masterV2 = JSON.parse(JSON.stringify(masterV1)) as ResumeData;
+    masterV2.id = 'm2';
+    masterV2.versionNumber = 2;
+    masterV2.experiences[0]!.highlights = ['负责结算页面改版', '推动首屏耗时降到 1.2s'];
+    const branch = JSON.parse(JSON.stringify(masterV1)) as ResumeData;
+    branch.id = 'b1';
+    branch.jobTarget = { versionName: 'Acme 前端', company: 'Acme', position: '前端', sourceResumeId: 'm1', baseId: 'm1', baseVersion: 1 };
+
+    const indexed: ResumeMeta[] = [
+      { id: 'm2', title: '我的简历', templateId: 'modern', createdAt: 1, updatedAt: 3, trackId: 'track-a', versionNumber: 2 },
+      { id: 'm1', title: '我的简历', templateId: 'modern', createdAt: 1, updatedAt: 1, trackId: 'track-a', versionNumber: 1 },
+      { id: 'b1', title: 'Acme 前端', templateId: 'modern', createdAt: 1, updatedAt: 2, trackId: 'track-a', versionNumber: 1, jobTarget: branch.jobTarget },
+    ];
+    readResume.mockImplementation(async (id: string) => ({ m1: masterV1, m2: masterV2, b1: branch }[id] ?? null));
+    saveRebasedVersion.mockResolvedValue('rebased');
+
+    const wrapper = mount(ResumeVersionManager, { props: { modelValue: true, resumes: indexed }, global: { stubs } });
+    await wrapper.find('.open-history').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('[data-testid=rebase-start]').trigger('click');
+    await flushPromises();
+
+    // 预览只列出主干多出来的那一条，并且默认勾选（无冲突）。
+    const choices = wrapper.findAll('[data-testid=rebase-choice]');
+    expect(choices).toHaveLength(1);
+    expect(wrapper.text()).toContain('推动首屏耗时降到 1.2s');
+    expect((choices[0]!.element as HTMLInputElement).checked).toBe(true);
+
+    await wrapper.get('[data-testid=rebase-apply]').trigger('click');
+    await flushPromises();
+
+    expect(saveRebasedVersion).toHaveBeenCalledTimes(1);
+    const [saved, baseVersion] = saveRebasedVersion.mock.calls[0]!;
+    expect(baseVersion).toBe(2);
+    // 原内容保留，新要点并入同一条经历，且没有产生悬挂模块。
+    expect(saved.experiences[0].highlights).toEqual(['负责结算页面改版', '推动首屏耗时降到 1.2s']);
+    expect(saved.customBlocks ?? []).toHaveLength(0);
+    expect(wrapper.emitted('created')?.[0]).toEqual(['rebased']);
+  });
+
+  it('does not offer master sync for a branch that is already current', async () => {
+    const indexed: ResumeMeta[] = [
+      { id: 'm3', title: '我的简历', templateId: 'modern', createdAt: 1, updatedAt: 3, trackId: 'track-a', versionNumber: 3 },
+      {
+        id: 'b1', title: 'Acme 前端', templateId: 'modern', createdAt: 1, updatedAt: 2, trackId: 'track-a', versionNumber: 1,
+        jobTarget: { versionName: 'Acme 前端', company: 'Acme', position: '前端', sourceResumeId: 'm3', baseId: 'm3', baseVersion: 3 },
+      },
+    ];
+    const wrapper = mount(ResumeVersionManager, { props: { modelValue: true, resumes: indexed }, global: { stubs } });
+    await wrapper.find('.open-history').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid=rebase-start]').exists()).toBe(false);
+  });
+
+  it('opens the version graph tab and fills version B from a selected node', async () => {
+    const indexed: ResumeMeta[] = [
+      { id: 'm1', title: '我的简历', templateId: 'modern', createdAt: 1, updatedAt: 1, trackId: 'T', versionNumber: 1 },
+      { id: 'm2', title: '我的简历', templateId: 'modern', createdAt: 2, updatedAt: 2, trackId: 'T', versionNumber: 2 },
+    ];
+    // 不用 stub：在真实父组件里确认图谱能挂上，并且点选后切到比较页签。
+    const wrapper = mount(ResumeVersionManager, { props: { modelValue: true, resumes: indexed }, global: { stubs } });
+    await wrapper.find('.open-history').trigger('click');
+    await flushPromises();
+    const vm = wrapper.vm as unknown as { handleGraphSelect: (id: string) => void; activeTab: string; afterId: string };
+    expect(typeof vm.handleGraphSelect).toBe('function');
+    vm.handleGraphSelect('m2');
+    await flushPromises();
+    expect(vm.activeTab).toBe('compare');
+    expect(vm.afterId).toBe('m2');
+    // 点一个不存在的 id 不产生副作用。
+    vm.handleGraphSelect('missing');
+    await flushPromises();
+    expect(vm.afterId).toBe('m2');
   });
 
   function selectionCount(wrapper: ReturnType<typeof mountManager>) {

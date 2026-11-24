@@ -4,6 +4,7 @@
       <template #actions>
         <el-button text @click="goToTemplates">模板库</el-button>
         <el-button text @click="router.push('/interviews')">模拟面试</el-button>
+        <McpConnection />
         <el-dropdown trigger="click" @command="handleManageCommand">
           <el-button text>设置<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
           <template #dropdown>
@@ -31,15 +32,16 @@
 
     <!-- 主内容 -->
     <div class="workbench-content">
-      <div v-if="storageStore.initializationWarning" class="backup-reminder" role="alert">
-        <span>{{ storageStore.initializationWarning }}</span>
-        <el-button v-if="storageStore.hasFileSystemConfig" type="primary" size="small" @click="handleReauthorizeStorageDirectory">重新授权本地目录</el-button>
+      <div v-if="storageStore.initializationWarning" class="backup-reminder backup-reminder--alert" role="alert">
+        <span>本地文件夹需要重新授权，简历暂时存在这台浏览器里。</span>
+        <el-button v-if="storageStore.hasFileSystemConfig" type="primary" size="small" @click="handleReauthorizeStorageDirectory">重新授权</el-button>
+        <el-button size="small" @click="showFullBackupManager = true">先备份</el-button>
       </div>
-      <div v-if="!loading && hasResumes && backupReminderDue && !backupReminderDismissed" class="backup-reminder" role="status">
+      <div v-else-if="!loading && hasResumes && backupReminderDue" class="backup-reminder backup-reminder--quiet" role="status">
         <span v-if="storageStore.currentType === 'file_system'">简历保存在本地文件夹。为防止误删或磁盘故障，请另存一份备份。</span>
-        <span v-else>简历保存在当前浏览器，清理浏览器数据会导致丢失。建议下载备份。</span>
-        <el-button type="primary" size="small" @click="showFullBackupManager = true">立即备份</el-button>
-        <el-button text size="small" aria-label="关闭备份提醒" @click="backupReminderDismissed = true">稍后</el-button>
+        <span v-else>简历只保存在这台浏览器里，建议下载一份备份。</span>
+        <el-button type="primary" size="small" @click="showFullBackupManager = true">备份</el-button>
+        <el-button text size="small" @click="dismissBackupReminder">以后再说</el-button>
       </div>
         <div v-if="loading" class="loading-state" role="status" aria-label="加载中…">
           <div v-for="row in 3" :key="row" class="skeleton-row" aria-hidden="true">
@@ -106,6 +108,7 @@
               @rename="handleRename(resume)"
               @history="openHistory(resume.id)"
               @duplicate="handleDuplicate(resume.id)"
+              @new-version="handleNewVersion(resume.id)"
               @delete="handleDelete(resume)"
             />
           </div>
@@ -155,6 +158,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowDown, Plus } from '@element-plus/icons-vue';
 import AppHeader from '@/components/common/AppHeader.vue';
+import McpConnection from '@/components/workbench/McpConnection.vue';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { useStorageStore } from '@/stores/storage';
 import { storageManager } from '@/services/storage/StorageManager';
@@ -167,7 +171,7 @@ const MarkdownImportDialog = lazyFeature(() => import('@/components/workbench/Ma
 const AiPdfImportDialog = lazyFeature(() => import('@/components/workbench/AiPdfImportDialog.vue'));
 const ResumeVersionManager = lazyFeature(() => import('@/components/workbench/ResumeVersionManager.vue'));
 const FullBackupManager = lazyFeature(() => import('@/components/workbench/FullBackupManager.vue'));
-import { getFullBackupReminderStatus } from '@/utils/fullBackup';
+import { dismissFullBackupReminder, getFullBackupReminderStatus } from '@/utils/fullBackup';
 import type { ResumeMeta } from '@/types/resume';
 import { describeError } from '@/utils/globalErrorReporting';
 
@@ -186,7 +190,6 @@ const showPdfImport = ref(false);
 const showVersionManager = ref(false);
 const showFullBackupManager = ref(false);
 const backupReminderDue = ref(false);
-const backupReminderDismissed = ref(false);
 const creating = ref(false);
 const renaming = ref(false);
 
@@ -308,9 +311,13 @@ const handleVersionCreated = (id: string) => {
   router.push(`/editor/${id}`);
 };
 
+function dismissBackupReminder() {
+  dismissFullBackupReminder();
+  backupReminderDue.value = false;
+}
+
 const handleFullBackupSuccess = () => {
   backupReminderDue.value = false;
-  backupReminderDismissed.value = false;
 };
 
 
@@ -364,6 +371,17 @@ const handleDuplicate = async (id: string) => {
     router.push(`/editor/${newId}`);
   } catch (error) {
     ElMessage.error('复制失败: ' + (describeError(error)));
+  }
+};
+
+/** 把主干另存为下一版本；岗位分支没有这个入口。 */
+const handleNewVersion = async (id: string) => {
+  try {
+    const newId = await workbenchStore.createMasterVersion(id);
+    ElMessage.success('已存为新版本；原有版本未更改。');
+    router.push(`/editor/${newId}`);
+  } catch (error) {
+    ElMessage.error('存为新版本失败: ' + (describeError(error)));
   }
 };
 
@@ -695,6 +713,11 @@ const handleSwitchToBrowserStorage = async () => {
 
 .backup-reminder :deep(.el-button + .el-button) {
   margin-left: 0;
+}
+
+.backup-reminder--quiet {
+  border-color: var(--color-rule);
+  background: var(--color-paper);
 }
 
 @media (max-width: 768px) {

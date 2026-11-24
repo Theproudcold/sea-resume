@@ -1,16 +1,28 @@
 import { defineStore } from 'pinia';
-import type { CustomResumeTemplate } from '@/types/custom-template';
+import type { ResumeSnapshot } from '@/types/custom-template';
+import type { SavedRecipe } from '@/types/layout-template';
 import type { ResumeData, TemplateMetadata } from '@/types/resume';
 import {
-  deleteCustomTemplate,
-  listCustomTemplates,
-  renameCustomTemplate,
-  saveCustomTemplate,
+  deleteResumeSnapshot,
+  listResumeSnapshots,
+  renameResumeSnapshot,
+  saveResumeSnapshot,
 } from '@/services/templates/CustomTemplateRepository';
 import {
-  buildCustomTemplateFromResume,
-  customTemplateToMetadata,
+  deleteSavedRecipe,
+  listSavedRecipes,
+  renameSavedRecipe,
+  saveSavedRecipe,
+} from '@/services/templates/SavedRecipeRepository';
+import {
+  buildResumeSnapshot,
+  resumeSnapshotToMetadata,
 } from '@/utils/custom-template';
+import {
+  buildSavedRecipe,
+  savedRecipeToMetadata,
+  recipeFromCurrent,
+} from '@/utils/layout-template';
 
 export const builtinTemplates: TemplateMetadata[] = [
   {
@@ -67,12 +79,58 @@ export const builtinTemplates: TemplateMetadata[] = [
     keywords: ['AI', 'Agent', '大模型', '人工智能', '全栈', '研发'],
     recommendedOrder: 6,
   },
+  {
+    id: 'classic',
+    name: '经典学院 / ATS',
+    description: '居中页眉与极细横线分区，高信息密度且打印与 ATS 机筛友好',
+    category: 'minimal',
+    categoryLabel: '极简',
+    keywords: ['经典', 'ATS', '学院', '大厂', '外企', '投行', '咨询', 'LaTeX', '单栏'],
+    recommendedOrder: 7,
+  },
+  {
+    id: 'editorial',
+    name: '现代杂志双栏',
+    description: '左侧主栏与右侧暖灰轻侧栏，符合自然阅读动线，优雅克制',
+    category: 'modern',
+    categoryLabel: '现代',
+    keywords: ['双栏', '杂志', '产品', 'UX', '运营', '设计', '右侧栏'],
+    recommendedOrder: 8,
+  },
+  {
+    id: 'engineer',
+    name: '浅色工程文档',
+    description: '白底细线时间轴与等宽技术标签，兼具技术辨识度与打印友好体验',
+    category: 'tech',
+    categoryLabel: '技术',
+    keywords: ['工程师', '开发', '前端', '后端', '全栈', '时间轴', '白底'],
+    recommendedOrder: 9,
+  },
+  {
+    id: 'executive',
+    name: '资深管理 / 专家',
+    description: '顶部双色细带与沉稳字阶，突出核心摘要与资深履历层次',
+    category: 'professional',
+    categoryLabel: '商务',
+    keywords: ['管理', '总监', '架构师', '专家', '资深', '负责人'],
+    recommendedOrder: 10,
+  },
+  {
+    id: 'campus',
+    name: '校招 / 学术科研',
+    description: '紧凑单栏并突出教育背景与 GPA 徽章，适合校招、实习与科研投递',
+    category: 'minimal',
+    categoryLabel: '极简',
+    keywords: ['校招', '应届生', '实习', '学术', '科研', '研究生', '保研'],
+    recommendedOrder: 11,
+  },
 ];
 
 export const useTemplateStore = defineStore('template', {
   state: () => ({
     builtinTemplates,
-    customTemplates: [] as CustomResumeTemplate[],
+    resumeSnapshots: [] as ResumeSnapshot[],
+    savedRecipes: [] as SavedRecipe[],
     currentTemplateId: 'modern',
     loaded: false,
   }),
@@ -80,7 +138,8 @@ export const useTemplateStore = defineStore('template', {
   getters: {
     templates(state): TemplateMetadata[] {
       return [
-        ...state.customTemplates.map(customTemplateToMetadata),
+        ...state.savedRecipes.map(savedRecipeToMetadata),
+        ...state.resumeSnapshots.map(resumeSnapshotToMetadata),
         ...state.builtinTemplates,
       ];
     },
@@ -94,31 +153,65 @@ export const useTemplateStore = defineStore('template', {
       this.currentTemplateId = id;
     },
 
-    loadCustomTemplates() {
-      this.customTemplates = listCustomTemplates();
+    loadTemplateLibrary() {
+      this.resumeSnapshots = listResumeSnapshots();
+      // 版式库损坏只影响版式，不让已经读出的内容模板一起消失。
+      try {
+        this.savedRecipes = listSavedRecipes();
+      } catch (error) {
+        this.savedRecipes = [];
+        this.loaded = true;
+        throw error;
+      }
       this.loaded = true;
     },
 
-    saveCurrentResumeAsTemplate(
-      resume: ResumeData,
-      input: { name: string; description?: string },
-    ): CustomResumeTemplate {
-      const template = buildCustomTemplateFromResume(resume, input);
-      this.customTemplates = saveCustomTemplate(template);
+    saveCurrentRecipe(resume: ResumeData, input: { name: string; description?: string }): SavedRecipe {
+      const template = buildSavedRecipe(recipeFromCurrent(resume), input);
+      this.savedRecipes = saveSavedRecipe(template);
       this.loaded = true;
       return template;
     },
 
-    renameCustomTemplate(id: string, name: string) {
-      this.customTemplates = renameCustomTemplate(id, name);
+    importLayout(input: { name: string; description?: string; recipe: SavedRecipe['recipe'] }): SavedRecipe {
+      const template = buildSavedRecipe(input.recipe, input);
+      this.savedRecipes = saveSavedRecipe(template);
+      this.loaded = true;
+      return template;
     },
 
-    deleteCustomTemplate(id: string) {
-      this.customTemplates = deleteCustomTemplate(id);
+    renameSavedRecipe(id: string, name: string) {
+      this.savedRecipes = renameSavedRecipe(id, name);
     },
 
-    findCustomTemplate(id: string): CustomResumeTemplate | undefined {
-      return this.customTemplates.find((template) => template.id === id);
+    deleteSavedRecipe(id: string) {
+      this.savedRecipes = deleteSavedRecipe(id);
+    },
+
+    findSavedRecipe(id: string): SavedRecipe | undefined {
+      return this.savedRecipes.find((template) => template.id === id);
+    },
+
+    saveCurrentAsSnapshot(
+      resume: ResumeData,
+      input: { name: string; description?: string },
+    ): ResumeSnapshot {
+      const template = buildResumeSnapshot(resume, input);
+      this.resumeSnapshots = saveResumeSnapshot(template);
+      this.loaded = true;
+      return template;
+    },
+
+    renameResumeSnapshot(id: string, name: string) {
+      this.resumeSnapshots = renameResumeSnapshot(id, name);
+    },
+
+    deleteResumeSnapshot(id: string) {
+      this.resumeSnapshots = deleteResumeSnapshot(id);
+    },
+
+    findResumeSnapshot(id: string): ResumeSnapshot | undefined {
+      return this.resumeSnapshots.find((template) => template.id === id);
     },
   },
 });

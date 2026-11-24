@@ -9,15 +9,42 @@
     @update:model-value="emit('update:visible', $event)"
   >
     <div class="assistant-panel">
+      <el-alert
+        v-if="mcpLinkState === 'connected'"
+        type="success"
+        :closable="false"
+        show-icon
+        title="外部 MCP 已连接"
+      >
+        <p>外部 Agent 已可直接读写简历并实时刷新预览，无需在此配置 API Key。各功能表单可直接派发给外部 Agent 执行。</p>
+        <div v-if="apiReady" class="driver-switch">
+          <span>当前执行方式：</span>
+          <el-radio-group :model-value="activeDriver" size="small" aria-label="AI 执行方式" @update:model-value="setDriver">
+            <el-radio-button value="mcp">外部 Agent（MCP · 免 Key）</el-radio-button>
+            <el-radio-button value="api">网页模型 API</el-radio-button>
+          </el-radio-group>
+        </div>
+      </el-alert>
+      <el-alert
+        v-else-if="mcpLinkState"
+        type="info"
+        :closable="false"
+        show-icon
+        title="外部 MCP 与网页内置 AI 互相独立"
+      >
+        <p>本面板仅调用网页里配置的 AI 服务；外部 Agent 连接后直接通过 MCP 读写简历，无需在此填写 API Key。</p>
+      </el-alert>
       <el-radio-group :model-value="mode" aria-label="AI 工作模式" @update:model-value="changeMode">
         <el-radio-button value="optimize">简历优化</el-radio-button>
         <el-radio-button value="polish">经历润色</el-radio-button>
         <el-radio-button value="quick">快捷修改</el-radio-button>
         <el-radio-button value="greeting">打招呼语</el-radio-button>
+        <el-radio-button value="jdRisk">岗位判读</el-radio-button>
       </el-radio-group>
       <ResumeOptimizationPanel v-if="visible && mode === 'optimize'" ref="optimizationPanel" :resume="resume" @configure="configureModel" @applied="handleOptimized" />
       <StarPolishPanel v-if="visible && mode === 'polish'" ref="polishPanel" :resume="resume" @configure="configureModel" @apply="(proposal, done) => emit('apply', proposal, done)" />
       <GreetingPanel v-if="visible && mode === 'greeting'" :resume="resume" @configure="configureModel" />
+      <JdRiskPanel v-if="visible && mode === 'jdRisk'" />
       <template v-if="mode === 'quick'">
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>隐私说明</template>
@@ -27,12 +54,14 @@
       <template v-if="!pendingDraft">
         <div class="current-resume provider-summary">
           <div class="provider-summary__details">
-            <span class="eyebrow">当前模型服务</span>
-            <strong>{{ providerLabel }}</strong>
-            <span>{{ modelSettings?.model || '尚未选择模型' }}</span>
-            <span class="provider-key-status" :class="{ 'is-ready': sessionKeyAvailable }">{{ modelSettings?.authMode === 'none' ? '本机服务 · 无需 API Key' : (sessionKeyAvailable ? 'API Key 已配置' : '需要配置 API Key') }}</span>
+            <span class="eyebrow">当前执行通道</span>
+            <strong>{{ isMcpMode ? '外部 Agent（MCP · 免 API Key）' : providerLabel }}</strong>
+            <span>{{ isMcpMode ? '通过本机 MCP 委派给外部 Agent 执行' : (modelSettings?.model || '尚未选择模型') }}</span>
+            <span class="provider-key-status" :class="{ 'is-ready': isMcpMode || sessionKeyAvailable }">
+              {{ isMcpMode ? 'MCP 已连接 · 无需 API Key' : (modelSettings?.authMode === 'none' ? '本机服务 · 无需 API Key' : (sessionKeyAvailable ? 'API Key 已配置' : '需要配置 API Key')) }}
+            </span>
           </div>
-          <el-button text type="primary" @click="emit('configure')">配置模型</el-button>
+          <el-button text type="primary" @click="emit('configure')">{{ isMcpMode ? '模型设置' : '配置模型' }}</el-button>
         </div>
         <el-form label-position="top" class="provider-form">
           <el-form-item label="希望 AI 如何修改？" for="quick-edit-instruction">
@@ -41,17 +70,18 @@
         </el-form>
 
         <el-checkbox v-model="consent" :disabled="loading" class="consent-check">
-          我确认将当前可见的简历正文和这条指令发送给所配置的 AI 服务。
+          {{ isMcpMode ? '我确认将本次修改指令派发给已连接的外部 Agent（通过 MCP 读取并写回当前简历）。' : '我确认将当前可见的简历正文和这条指令发送给所配置的 AI 服务。' }}
         </el-checkbox>
-        <el-checkbox v-model="directApply" :disabled="loading" class="direct-check">
+        <el-checkbox v-if="!isMcpMode" v-model="directApply" :disabled="loading" class="direct-check">
           跳过逐项审核，直接应用本次修改（仍可撤销）
         </el-checkbox>
         <div class="current-resume">当前目标：<strong>{{ resume.basic.name || resume.title }}</strong></div>
         <el-button type="primary" :loading="loading" :disabled="!canRequest" class="request-button" @click="requestChanges">
-          {{ loading ? '正在生成…' : '生成修改建议' }}
+          {{ loading ? '正在生成…' : (isMcpMode ? '派发给外部 Agent 修改（免 Key）' : '生成修改建议') }}
         </el-button>
         <el-button v-if="loading" @click="cancelQuickRequest">取消生成</el-button>
-        <p v-else-if="!sessionKeyAvailable" role="status">请先配置 AI 服务和所需密钥。</p>
+        <p v-else-if="!isMcpMode && !sessionKeyAvailable" role="status">请先配置 AI 服务和所需密钥。</p>
+        <McpTaskStatusCard v-if="activeMcpTask" :task="activeMcpTask" :prompt="mcpPrompt" :initial-copied="mcpCopied" @cancel="cancelMcpTask" />
       </template>
 
       <template v-else>
@@ -84,32 +114,53 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import type { ResumeData } from '@/types/resume';
-import type { ResumeAiOperation } from '@/types/ai';
-import { createChangeProposal, type ResumeChangeProposal } from '@/services/ai/changeProposal';
+import type { ResumePatchOperation } from '@/types/ai';
+import { createExternalProposal, type EditProposal } from '@/services/ai/externalProposal';
 import { AI_PROVIDER_PRESETS, isAiProviderReady, toAiProviderConfig, loadAiModelSettings, type AiModelSettings } from '@/services/ai/AiSettings';
 import { requestResumeAiDraft } from '@/services/ai/quickEdit';
+import { useMcpState } from '@/services/ai/useMcpBridge';
+import { resolveAiDriver, useAiDriverPreference } from '@/services/ai/useAiExecutionMode';
+import { cancelExternalTask, copyExternalTaskPrompt, enqueueExternalTask, useExternalTasks } from '@/services/ai/externalTaskQueue';
+import McpTaskStatusCard from '@/components/ai/McpTaskStatusCard.vue';
 import ResumeOptimizationPanel from '@/components/ai/ResumeOptimizationPanel.vue';
 import StarPolishPanel from '@/components/ai/StarPolishPanel.vue';
 import GreetingPanel from '@/components/ai/GreetingPanel.vue';
+import JdRiskPanel from '@/components/ai/JdRiskPanel.vue';
 
 const props = defineProps<{ visible: boolean; resume: ResumeData; undoAvailable: boolean }>();
 const emit = defineEmits<{
   'update:visible': [visible: boolean];
-  apply: [proposal: ResumeChangeProposal, done: (saved: boolean) => void];
+  apply: [proposal: EditProposal, done: (saved: boolean) => void];
   undo: [];
   configure: [];
   applied: [resumeId: string];
 }>();
+const { linkState: mcpLinkState } = useMcpState();
+const { driverPreference, setAiDriverPreference } = useAiDriverPreference();
+const { findTask } = useExternalTasks();
+const mcpTaskId = ref('');
+const mcpPrompt = ref('');
+const mcpCopied = ref(false);
+const activeMcpTask = computed(() => findTask(mcpTaskId.value));
 const modelSettings = ref<AiModelSettings | null>(loadAiModelSettings());
 const sessionKeyAvailable = ref(isAiProviderReady(modelSettings.value));
+const apiReady = computed(() => !!modelSettings.value?.baseUrl.trim() && !!modelSettings.value?.model.trim() && sessionKeyAvailable.value);
+const activeDriver = computed(() => resolveAiDriver(mcpLinkState.value === 'connected', apiReady.value, driverPreference.value));
+const isMcpMode = computed(() => activeDriver.value === 'mcp');
+function setDriver(value: string | number | boolean | undefined) {
+  if (value === 'mcp' || value === 'api') setAiDriverPreference(value);
+}
+function cancelMcpTask() {
+  if (mcpTaskId.value) cancelExternalTask(mcpTaskId.value);
+}
 const instruction = ref('');
 const consent = ref(false);
 const directApply = ref(false);
 const loading = ref(false);
 const errorMessage = ref('');
-const pendingDraft = ref<ResumeChangeProposal | null>(null);
+const pendingDraft = ref<EditProposal | null>(null);
 const applying = ref(false);
-const mode = ref<'quick' | 'optimize' | 'polish' | 'greeting'>('optimize');
+const mode = ref<'quick' | 'optimize' | 'polish' | 'greeting' | 'jdRisk'>('optimize');
 const optimizationPanel = ref<InstanceType<typeof ResumeOptimizationPanel>>();
 const polishPanel = ref<InstanceType<typeof StarPolishPanel>>();
 async function beforeClose(): Promise<boolean> {
@@ -119,7 +170,7 @@ async function beforeClose(): Promise<boolean> {
   return true;
 }
 async function closeDrawer(done: () => void) { if (await beforeClose()) done(); }
-async function changeMode(value: string | number | boolean | undefined) { if ((value === 'quick' || value === 'optimize' || value === 'polish' || value === 'greeting') && await beforeClose()) mode.value = value; }
+async function changeMode(value: string | number | boolean | undefined) { if ((value === 'quick' || value === 'optimize' || value === 'polish' || value === 'greeting' || value === 'jdRisk') && await beforeClose()) mode.value = value; }
 async function configureModel() { if (await beforeClose()) emit('configure'); }
 defineExpose({ beforeClose });
 let controller: AbortController | undefined;
@@ -129,7 +180,7 @@ onBeforeUnmount(cancelQuickRequest);
 watch(mode, cancelQuickRequest);
 function handleOptimized(id: string) { emit('applied', id); emit('update:visible', false); }
 const providerLabel = computed(() => modelSettings.value?.profileName || AI_PROVIDER_PRESETS.find((preset) => preset.id === modelSettings.value?.presetId)?.label || '未配置');
-const canRequest = computed(() => !!modelSettings.value?.baseUrl.trim() && !!modelSettings.value?.model.trim() && sessionKeyAvailable.value && !!instruction.value.trim() && consent.value && !loading.value);
+const canRequest = computed(() => (isMcpMode.value || apiReady.value) && !!instruction.value.trim() && consent.value && !loading.value);
 
 watch(() => props.visible, (visible) => {
   if (visible) {
@@ -143,10 +194,31 @@ watch(() => props.visible, (visible) => {
   directApply.value = false;
   pendingDraft.value = null;
   errorMessage.value = '';
+  mcpTaskId.value = '';
+  mcpPrompt.value = '';
+  mcpCopied.value = false;
 }, { immediate: true });
 
 async function requestChanges() {
-  if (!canRequest.value || !modelSettings.value) return;
+  if (!canRequest.value) return;
+  if (isMcpMode.value) {
+    errorMessage.value = '';
+    try {
+      const { task, prompt } = enqueueExternalTask({
+        kind: 'quick_edit',
+        resumeId: props.resume.id,
+        summary: `快捷修改：${instruction.value.trim().slice(0, 40)}`,
+        payload: { resumeId: props.resume.id, instruction: instruction.value.trim() },
+      });
+      mcpTaskId.value = task.id;
+      mcpPrompt.value = prompt;
+      mcpCopied.value = await copyExternalTaskPrompt(prompt);
+    } catch (error) {
+      errorMessage.value = error instanceof Error ? error.message : '派发任务失败。';
+    }
+    return;
+  }
+  if (!modelSettings.value) return;
   loading.value = true;
   const generation = ++requestGeneration;
   controller = new AbortController();
@@ -155,7 +227,7 @@ async function requestChanges() {
     const baseline = JSON.parse(JSON.stringify(props.resume)) as ResumeData;
     const draft = await requestResumeAiDraft(toAiProviderConfig(modelSettings.value), baseline, instruction.value, { signal: controller.signal });
     if (generation !== requestGeneration) return;
-    const proposal = await createChangeProposal(baseline, draft);
+    const proposal = await createExternalProposal(baseline, draft);
     if (generation !== requestGeneration) return;
     if (!draft.operations.length) {
       errorMessage.value = draft.explanation;
@@ -178,7 +250,7 @@ function confirmApply() {
   });
 }
 
-function findItem(operation: ResumeAiOperation): Record<string, unknown> | undefined {
+function findItem(operation: ResumePatchOperation): Record<string, unknown> | undefined {
   if (operation.type === 'update_experience') return props.resume.experiences.find((item) => item.id === operation.id) as unknown as Record<string, unknown> | undefined;
   if (operation.type === 'update_project') return props.resume.projects.find((item) => item.id === operation.id) as unknown as Record<string, unknown> | undefined;
   if (operation.type === 'update_education') return props.resume.education.find((item) => item.id === operation.id) as unknown as Record<string, unknown> | undefined;
@@ -191,20 +263,26 @@ function display(value: unknown): string {
   if (value === undefined || value === null || value === '') return '（空）';
   return String(value).replace(/<[^>]*>/g, '').slice(0, 500);
 }
-function displayCurrent(operation: ResumeAiOperation): string {
+function displayCurrent(operation: ResumePatchOperation): string {
+  if (operation.type === 'remove_entry') return '此条目';
   if (operation.type === 'set_basic') return display(props.resume.basic[operation.field]);
   if (operation.type === 'set_template') return props.resume.templateId;
+  if (operation.type === 'set_layout') return props.resume.layout ? `${props.resume.layout.structure} / ${props.resume.layout.paper}` : '内置模板';
   if (operation.type === 'reorder_sections') return props.resume.sectionOrder.join(' → ');
   return display(findItem(operation)?.[operation.field]);
 }
-function displayProposed(operation: ResumeAiOperation): string {
+function displayProposed(operation: ResumePatchOperation): string {
+  if (operation.type === 'remove_entry') return '删除此条目';
   if (operation.type === 'set_template') return operation.templateId;
+  if (operation.type === 'set_layout') return operation.layout ? `${operation.layout.structure} / ${operation.layout.paper}` : '恢复内置模板';
   if (operation.type === 'reorder_sections') return operation.sectionOrder.join(' → ');
-  return display(operation.type === 'set_basic' ? operation.value : operation.value);
+  return display(operation.value);
 }
-function describeOperation(operation: ResumeAiOperation): string {
+function describeOperation(operation: ResumePatchOperation): string {
+  if (operation.type === 'remove_entry') return '删除已有条目';
   const labels: Record<string, string> = { name: '姓名', title: '求职意向', email: '邮箱', phone: '电话', location: '所在地', website: '个人链接', summary: '个人简介', company: '公司', position: '职位', description: '描述', highlights: '工作亮点', school: '学校', degree: '学历', major: '专业', gpa: 'GPA', role: '角色', link: '项目链接', techStack: '技术栈', category: '技能分类', items: '技能条目', content: '模块内容' };
   if (operation.type === 'set_template') return '切换模板';
+  if (operation.type === 'set_layout') return '调整版式';
   if (operation.type === 'reorder_sections') return '调整章节顺序';
   return `修改${operation.type === 'set_basic' ? '基础信息' : '简历条目'} · ${labels[operation.field] || operation.field}`;
 }
@@ -218,9 +296,24 @@ function describeOperation(operation: ResumeAiOperation): string {
   gap: var(--ui-space-4);
 }
 
+/* 模式条是内容宽度的小托盘。面板是纵向 flex，不写 align-self 会被拉成通栏；
+   再补一点下方留白，让标题更像紧跟模式条的小标题。 */
+.assistant-panel > :deep(.el-radio-group) {
+  align-self: flex-start;
+  max-width: 100%;
+  margin-bottom: var(--ui-space-1);
+}
+
 .assistant-panel :deep(.el-alert p) {
   margin: var(--ui-space-1) 0 0;
   line-height: var(--ui-line-height);
+}
+.driver-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .provider-form :deep(.el-form-item) {

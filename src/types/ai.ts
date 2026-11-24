@@ -1,16 +1,21 @@
-export type ResumeAiOperation =
+import type { LayoutRecipe, LayoutSeedId } from '@/types/layout-template';
+import type { FactGuardIssue } from '@/utils/aiFactGuard';
+
+export type ResumePatchOperation =
   | { type: 'set_basic'; field: 'name' | 'title' | 'email' | 'phone' | 'location' | 'website' | 'summary'; value: string }
   | { type: 'update_experience'; id: string; field: 'company' | 'position' | 'startDate' | 'endDate' | 'description' | 'highlights'; value: string | string[] }
   | { type: 'update_project'; id: string; field: 'name' | 'role' | 'startDate' | 'endDate' | 'description' | 'link' | 'techStack'; value: string | string[] }
   | { type: 'update_education'; id: string; field: 'school' | 'degree' | 'major' | 'startDate' | 'endDate' | 'gpa'; value: string }
   | { type: 'update_skill'; id: string; field: 'category' | 'items'; value: string | string[] }
   | { type: 'update_custom_block'; id: string; field: 'title' | 'content'; value: string }
-  | { type: 'set_template'; templateId: 'modern' | 'professional' | 'creative' | 'minimal' | 'tech' | 'ai-agent' }
-  | { type: 'reorder_sections'; sectionOrder: string[] };
+  | { type: 'set_template'; templateId: LayoutSeedId }
+  | { type: 'reorder_sections'; sectionOrder: string[] }
+  | { type: 'set_layout'; layout: LayoutRecipe | null }
+  | { type: 'remove_entry'; collection: 'experiences' | 'projects' | 'education' | 'skills' | 'customBlocks'; id: string };
 
-export interface ResumeAiDraft {
+export interface ResumePatch {
   explanation: string;
-  operations: ResumeAiOperation[];
+  operations: ResumePatchOperation[];
 }
 
 export interface AiProviderConfig {
@@ -55,6 +60,8 @@ export interface ResumeSuggestion {
   id: string;
   operation: OptimizationOperation;
   before: string | string[];
+  /** 确定性事实校验的结论；缺省表示未执行（例如恢复的旧记录）。 */
+  guard?: FactGuardIssue[];
   reason: string;
   requirement: string;
   sourceRefs: string[];

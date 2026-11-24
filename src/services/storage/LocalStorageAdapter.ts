@@ -131,17 +131,4 @@ export class LocalStorageAdapter implements IStorageAdapter {
       throw error;
     }
   }
-
-
-  /**
-   * 导出简历为 JSON Blob
-   */
-  async export(id: string): Promise<Blob> {
-    const data = await this.read(id);
-    if (!data) {
-      throw new Error(`简历 ${id} 不存在`);
-    }
-    const jsonStr = JSON.stringify(data, null, 2);
-    return new Blob([jsonStr], { type: 'application/json' });
-  }
 }

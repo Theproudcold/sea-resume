@@ -4,12 +4,11 @@ import type { AiProviderConfig } from '@/types/ai';
 import type { ResumeData } from '@/types/resume';
 import type { InterviewSession, InterviewSettings, InterviewStage, InterviewQuestion } from '@/types/interview';
 import { buildResumeContext } from '@/services/ai/resumeContext';
-import { initializeInterview, nextInterviewQuestion, coachInterviewAnswer, reportInterview } from '@/services/ai/interview';
+import { initializeInterview, nextInterviewQuestion, coachInterviewAnswer, reportInterview, invalidInterviewSettings } from '@/services/ai/interview';
 import { AiCompatibilityError, emptyAiUsage, addAiUsage } from '@/services/ai/transport';
 import { aiWorkspaceRepository } from '@/services/ai/AiWorkspaceRepository';
 import { generateId } from '@/utils/helpers';
 import { clearInterviewDraft } from '@/utils/interviewDraft';
-import { isValidInterviewFocus } from '@/utils/interviewWeakness';
 import { isAiProviderReady } from '@/services/ai/AiSettings';
 
 export const useInterviewStore = defineStore('interview', () => {
@@ -147,7 +146,7 @@ export const useInterviewStore = defineStore('interview', () => {
   }
   async function start(resume: ResumeData, settings: InterviewSettings, config: AiProviderConfig, options: { consent: boolean; persistence?: boolean; generalizeOrganizations?: boolean }) {
     if (busy.value) return;
-    if (![5, 8, 12].includes(settings.mainQuestionLimit) || !['training', 'real'].includes(settings.mode) || !['综合', '项目深挖', '岗位专业', '行为面试'].includes(settings.direction) || settings.jd.length > 15000 || settings.targetRole.length > 200 || settings.level.length > 200 || (settings.focus !== undefined && !isValidInterviewFocus(settings.focus))) { error.value = '面试设置无效或文本过长。'; return; }
+    if (invalidInterviewSettings(settings)) { error.value = '面试设置无效或文本过长。'; return; }
     if (!confirmProvider(config, options.consent)) return;
     epoch++; revision = 0; dirty.value = true; storageError.value = '';
     const now = new Date().toISOString();

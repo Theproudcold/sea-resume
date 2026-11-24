@@ -1,5 +1,7 @@
 # 项目协作规则
 
+开工改代码前先读 [LESSONS.md](LESSONS.md)：修完又返工、不该合入、验证不足的记录，以及标为 Done right 的做法。它只记事实；与本文件或 [CONTRIBUTING.md](CONTRIBUTING.md) 不一致时，以这两份规范为准。
+
 ## Git 工作规范
 
 完整流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。下面只保留执行时必须遵守的约束；与该文件冲突时以它为准。
@@ -18,6 +20,7 @@
 5. 开 PR 前先对齐基线：`git fetch origin && git rebase origin/dev`，冲突在功能分支内解决
 6. 推送功能分支并向 `dev` 开 Pull Request；等待 `Tests and build` 通过后，用 merge commit 合入。不要本地 `git merge` 后再推送 `dev`
 7. 发布：`dev` 验证通过后开 `dev` → `master` 的 Pull Request，用 merge commit 合入；合入即推送并部署
+8. 打 tag：合入后 `git switch master && git pull --ff-only`，用 `node tools/release-tag.mjs vX.Y.Z` 校验并创建附注标签，检查后 `git push origin vX.Y.Z`。版本号只改 `package.json`，与 tag 和 `CHANGELOG.md` 条目保持一致；已发布的 tag 不删除、不移动
 
 ### 合并与历史
 - 合入 `dev`、`master` 走 Pull Request，并使用 merge commit（相当于 `--no-ff`）保留特性边界；不要用 Squash 或 Rebase 合并。合并提交信息写作 `merge(中文范围): 中文说明`。
@@ -37,6 +40,8 @@
 - 修 Bug 先加能在旧实现上失败的行为用例，再做最小修复；提交前记录 RED / GREEN。历史修复补测试也要验证样本确实触发旧错误，不能只验证新代码会通过。
 - 涉及共享字段、状态或异步通信时，先列生产者、所有消费者及状态组合，遵守 [架构契约](<docs/architecture.md>)，按 [风险验证矩阵](<docs/change-safety.md>) 选测试。
 - `provide/inject`、事件和 ref 的接线必须在真实父组件上验证。不能只靠 `global.provide`、stub 或源码字符串断言证明页面可用；DOM 尺寸、字体、输入法还需浏览器验证。
+- 预览和导出是两套渲染器。浏览器几何、颜色回读或画布高度通过，不能证明 html2canvas 的切页、`lab()` 和截图高度。差值写在常数旁边，并保留能在旧导出行为上失败的用例。
+- 用项目 CSS 覆盖组件库布局时，`!important` 的源码顺序和写死的像素宽度都要有会失败的断言。测试里的站点路径跟生产代码使用同一个 `BASE_URL`。发版校验在 tag 格式不成立时，不要再报一条由该格式拼出来的更新日志错误。
 - 数据转换用同一个样本贯穿解析 → 消费/渲染，覆盖隐藏且非空、未知/可选字段、截断警告；Markdown 是可见内容交换格式，不是全字段备份。
 - 重构只搬实现、不夹带行为修改；能力扩展、纠错、测试提速分别保留可验证边界。不得为提速删除唯一的真实正确性验证，也不以测试数量代替覆盖证明。
 - 合入前对最终内容运行 `pnpm verify`；部署 workflow 同样运行它。`master` / `dev` 的分支保护要求走 PR、禁止强推与删除，并把 `Tests and build` 作为必须通过的检查；保护是仓库设置，不随文件提交自动生效。管理员仍可绕过，未核实仓库设置时不要声称已禁止绕过。

@@ -7,6 +7,7 @@ import { useResumeStore } from '@/stores/resume';
 import { useTemplateStore } from '@/stores/template';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { templateDemoData } from '@/data/template-demo';
+import { builtinToRecipe } from '@/utils/layout-template';
 
 const { query, push, routeGuards } = vi.hoisted(() => ({ query: {} as Record<string, string>, push: vi.fn(), routeGuards: {} as { leave?: () => boolean; update?: () => boolean } }));
 vi.mock('vue-router', () => ({
@@ -39,10 +40,11 @@ beforeEach(() => {
   delete query.resumeId;
   push.mockReset();
   useResumeStore().$patch({ data: { ...structuredClone(templateDemoData), id: 'current' } });
-  vi.spyOn(useTemplateStore(), 'loadCustomTemplates').mockImplementation(() => {});
+  vi.spyOn(useTemplateStore(), 'loadTemplateLibrary').mockImplementation(() => {});
   vi.spyOn(useWorkbenchStore(), 'createResume').mockResolvedValue('new-resume');
   vi.spyOn(useResumeStore(), 'setTemplate').mockImplementation(() => {});
   vi.spyOn(useResumeStore(), 'applyTemplateSnapshot').mockImplementation(() => {});
+  vi.spyOn(useResumeStore(), 'applyLayout').mockImplementation(() => {});
   vi.spyOn(ElMessage, 'success').mockImplementation(() => ({ close: vi.fn() } as never));
   vi.spyOn(ElMessage, 'error').mockImplementation(() => ({ close: vi.fn() } as never));
   vi.spyOn(ElMessageBox, 'confirm').mockResolvedValue('confirm' as never);
@@ -50,7 +52,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 function addCustomTemplate() {
-  useTemplateStore().customTemplates = [{
+  useTemplateStore().resumeSnapshots = [{
     id: 'custom-template', name: '我的模板', description: '已保存的内容', baseTemplateId: 'modern',
     createdAt: 1, updatedAt: 1, snapshot: structuredClone(templateDemoData),
   }];
@@ -64,6 +66,29 @@ describe('TemplateGallery actions', () => {
     expect(useWorkbenchStore().createResume).toHaveBeenCalledWith(expect.any(String), 'modern');
     expect(push).toHaveBeenCalledWith('/editor/new-resume');
     expect(wrapper.find('.preview').exists()).toBe(false);
+  });
+
+  it('applies a saved layout without replacing the current resume content', async () => {
+    query.resumeId = 'current';
+    useTemplateStore().savedRecipes = [{
+      id: 'layout-1',
+      name: '双栏',
+      description: '只改排版',
+      createdAt: 1,
+      updatedAt: 1,
+      recipe: builtinToRecipe('professional', templateDemoData.theme),
+    }];
+    const wrapper = mountGallery();
+    await wrapper.get('[data-template="layout-1"] .select-template').trigger('click');
+    await flushPromises();
+    expect(ElMessageBox.confirm).toHaveBeenCalledWith(
+      expect.stringContaining('不替换已填写的内容'),
+      '套用这个版式？',
+      expect.objectContaining({ confirmButtonText: '套用版式' }),
+    );
+    expect(useResumeStore().applyLayout).toHaveBeenCalledWith(expect.objectContaining({ id: 'layout-1' }));
+    expect(useResumeStore().setTemplate).not.toHaveBeenCalled();
+    expect(useResumeStore().applyTemplateSnapshot).not.toHaveBeenCalled();
   });
 
   it('applies only the builtin layout without showing a destructive confirmation', async () => {

@@ -99,7 +99,10 @@ describe('browser PDF export', () => {
     const operatorLists = await Promise.all(pages.map((page) => page.getOperatorList()));
     expect(operatorLists.flatMap((operators) => operators.fnArray)).toContain(OPS.paintImageXObject);
     await loadingTask.destroy();
-    for (const templateId of ['modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent']) {
+    for (const templateId of [
+      'modern', 'professional', 'creative', 'minimal', 'tech', 'ai-agent',
+      'classic', 'editorial', 'engineer', 'executive', 'campus',
+    ]) {
       const templateData: ResumeData = structuredClone(templateDemoData);
       templateData.templateId = templateId;
       const templateBlob = await createResumePdfBlob(templateData);
@@ -110,5 +113,5 @@ describe('browser PDF export', () => {
     }
     expect(fetchMock).toHaveBeenCalledTimes(2);
     fetchMock.mockRestore();
-  });
+  }, 15000);
 });

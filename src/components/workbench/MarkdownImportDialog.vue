@@ -56,12 +56,7 @@
         </el-form-item>
         <el-form-item label="模板">
           <el-select v-model="templateId" class="w-full">
-            <el-option label="现代简约" value="modern" />
-            <el-option label="商务专业" value="professional" />
-            <el-option label="创意设计" value="creative" />
-            <el-option label="极简主义" value="minimal" />
-            <el-option label="科技感" value="tech" />
-            <el-option label="AI Agent 技术" value="ai-agent" />
+            <el-option v-for="tpl in builtinTemplates" :key="tpl.id" :label="tpl.name" :value="tpl.id" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -98,6 +93,7 @@ import { UploadFilled } from '@element-plus/icons-vue';
 import type { ResumeData } from '@/types/resume';
 import type { MarkdownImportResult } from '@/types/markdown-import';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
+import { builtinTemplates } from '@/stores/template';
 
 const props = withDefaults(defineProps<{ modelValue: boolean; loading?: boolean }>(), { loading: false });
 const emit = defineEmits<{
