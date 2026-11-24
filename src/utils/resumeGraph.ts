@@ -308,12 +308,18 @@ export function buildResumeGraph(resumes: ResumeMeta[], options: GraphOptions = 
       continue;
     }
 
-    // 折点分三段：本列竖直下行 → 在「来源行上一行」处汇入主干列 → 落到来源行。
-    // 中间保持在自己列上竖直走，弯折只占相邻一行，画出来才是平行的竖直轨道。
-    const points: PathPoint[] = [{ row: vertex.row, lane }];
-    if (end - start > 1) {
-      const stayRow = vertex.row < parent ? parent - 1 : parent + 1;
-      points.push({ row: stayRow, lane });
+    // 折点必须**逐行**记录：起点一行、中间每一行、终点一行。
+    //
+    // 参考 vscode-git-graph 的 determinePath：它从起点行开始逐行遍历到根，
+    // 每个经过的行都 addLine 一次。只在两端留折点的话，渲染出来的线只覆盖
+    // 两个端点，中间那段就是空白——这就是「中间断开」的真正原因。
+    //
+    // 中间行保持在自己的列上（不做横移），只有到终点那一行才汇入主干列，
+    // 于是画出来是一条竖直轨道 + 末尾一个弯，而不是一根斜线。
+    const points: PathPoint[] = [];
+    const step = vertex.row < parent ? 1 : -1;
+    for (let r = vertex.row; r !== parent; r += step) {
+      points.push({ row: r, lane });
     }
     points.push({ row: parent, lane: laneOf[parent] ?? 0 });
     paths.push({ lane, color: LANE_COLORS[lane % LANE_COLORS.length]!, kind: 'branch', points });
