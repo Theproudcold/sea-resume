@@ -104,14 +104,27 @@ export interface ResumeMeta {
   updatedAt: number;       // 毫秒时间戳。正文 ResumeData.updatedAt 是 ISO 字符串。
   /** 岗位版本索引：带上它就能不读取简历正文直接列出岗位版本历史。 */
   jobTarget?: ResumeJobTarget;
+  /** 主干轨道 ID。同一份主干的所有版本共享，缺省时本条简历自己就是一条主干。 */
+  trackId?: string;
+  /** 版本号，从 1 开始。主干内部递增，岗位分支从 1 独立计数。 */
+  versionNumber?: number;
 }
 
-/** 岗位版本目标，正文与列表索引共用同一份结构。 */
+/**
+ * 岗位版本目标，正文与列表索引共用同一份结构。
+ *
+ * `baseId` / `baseVersion` 记录「从哪一版主干派生」，用于判断岗位版本是否落后于主干。
+ * 旧数据没有这两个字段，按「未知基线」处理：不提示落后，也不报错。
+ */
 export interface ResumeJobTarget {
   versionName: string;
   company: string;
   position: string;
   sourceResumeId: string;
+  /** 派生时所用主干版本的简历 ID。 */
+  baseId?: string;
+  /** 派生时所用主干版本的版本号。 */
+  baseVersion?: number;
 }
 
 // 主题配置
@@ -145,6 +158,10 @@ export interface ResumeData {
   /** 用户自定义版式。缺省时按 templateId 渲染内置模板，已有合法值时预览和 PDF 都以它为准。 */
   layout?: import('@/types/layout-template').LayoutRecipe;
   jobTarget?: ResumeJobTarget;
+  /** 主干轨道 ID。派生出的岗位版本沿用来源主干的轨道，编辑正文不会改变它。 */
+  trackId?: string;
+  /** 版本号。主干的另存版本递增，岗位分支从 1 开始。 */
+  versionNumber?: number;
   theme: ThemeConfig;
   sectionOrder: string[];
   hiddenSections?: string[];
