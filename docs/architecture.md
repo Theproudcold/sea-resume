@@ -150,7 +150,7 @@ A4 是定尺纸张、预览是连续长图，等分必然把正好压线的文�
 连接关闭或进入两分钟一次的休眠探测时是 `reconnecting`。宿主页只接受自己那个隐藏 frame、
 且来源等于本站的消息。停止桥接必须同时拆掉 frame 和这条监听，不能让旧连接继续改新会话的状态。
 
-MCP 连接挂在简历主页，离开页面后仍保持，直到用户停止。`sea_resume_list`、`get`、`set`、`create`、`delete` 操作当前存储里的全部简历。正在编辑的简历走 `importData`，其余直接 `saveResume` 并更新列表。删除正在编辑的简历时先 `discardOpenResume`，阻止自动保存把它写回。文件交换仍使用草稿和人工确认。
+MCP 连接挂在简历主页，离开页面后仍保持，直到用户停止。`sea_resume_list`、`get`、`set`、`create`、`delete` 操作当前存储里的全部简历。正在编辑的简历走 `importData`，其余直接 `saveResume` 并更新列表。删除正在编辑的简历时先 `discardOpenResume`，阻止自动保存把它写回。`sea_resume_export_pdf` 使用可搜索 PDF 并直接触发浏览器下载。面试工具只读写本机 AI 工作区记录；开始面试复用页面已配置的模型。文件交换仍使用草稿和人工确认。
 
 ### 14. 本地目录授权只能在用户手势里申请
 

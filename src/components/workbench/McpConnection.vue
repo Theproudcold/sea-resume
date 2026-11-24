@@ -3,7 +3,7 @@
   <el-dialog v-model="open" title="连接 Codex / Claude Code" width="min(640px, calc(100vw - 24px))" align-center append-to-body>
   <section class="mcp-connection" aria-labelledby="mcp-connection-title">
     <div class="mcp-connection__heading">
-      <p id="mcp-connection-title">启用后可以管理这里的全部简历：列出、读取、修改、新建和删除。写回会立即保存。</p>
+      <p id="mcp-connection-title">启用后可以管理全部简历、导出 PDF，并读取或开始模拟面试。简历写回会立即保存；开始面试会使用设置里的模型。</p>
       <el-tag :type="linkTag.type">{{ linkTag.label }}</el-tag>
     </div>
     <div class="mcp-connection__actions">

@@ -162,7 +162,7 @@ describe('MCP business tools', () => {
       remove: async () => undefined,
     });
     const tools = externalTools(library);
-    expect(tools.map(tool => tool.name)).toEqual(['sea_resume_list', 'sea_resume_get', 'sea_resume_set', 'sea_resume_create', 'sea_resume_delete']);
+    expect(tools.map(tool => tool.name)).toEqual(['sea_resume_list', 'sea_resume_get', 'sea_resume_set', 'sea_resume_create', 'sea_resume_delete', 'sea_resume_export_pdf', 'sea_interview_list', 'sea_interview_get', 'sea_interview_delete', 'sea_interview_start']);
     const listed = await tools[0]!.execute({}) as { content: { text: string }[] };
     expect(JSON.parse(listed.content[0]!.text)[0].id).toBe(resume.id);
     const read = await tools[1]!.execute({ id: resume.id }) as { content: { text: string }[] };
