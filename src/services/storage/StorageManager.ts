@@ -1,8 +1,7 @@
-import type { IStorageAdapter, StorageType, StorageConfig, MigrationProgress } from '@/types/storage';
+import type { IStorageAdapter, StorageType, StorageConfig } from '@/types/storage';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { withTimeout } from '@/utils/asyncTimeout';
 import { normalizeResumeData } from '@/utils/resumeData';
-import { describeError } from '@/utils/globalErrorReporting';
 import { LocalStorageAdapter } from './LocalStorageAdapter';
 import { FileSystemAdapter } from './FileSystemAdapter';
 
@@ -149,20 +148,13 @@ export class StorageManager {
   }
 
   /**
-   * 数据迁移
-   * @param from 源存储类型
-   * @param to 目标存储类型
-   * @param onProgress 进度回调
+   * 把一份存储里的简历原样搬到另一份存储，然后切到目标适配器。
+   * 索引按源列表搬运，不按正文重算。
    */
-  async migrate(
-    from: StorageType,
-    to: StorageType,
-    onProgress?: (progress: MigrationProgress) => void
-  ): Promise<void> {
+  async migrate(from: StorageType, to: StorageType): Promise<void> {
     const sourceAdapter = this.adapterCache.get(from) || this.createAdapter(from);
     const targetAdapter = this.adapterCache.get(to) || this.createAdapter(to);
 
-    // 确保两个适配器都已初始化
     if (!sourceAdapter.isReady()) {
       await sourceAdapter.init();
     }
@@ -170,53 +162,22 @@ export class StorageManager {
       await targetAdapter.init();
     }
 
-    // 获取源数据列表
     const sourceList = await sourceAdapter.list();
-    const total = sourceList.length;
-
-    for (let i = 0; i < total; i++) {
-      const meta = sourceList[i];
+    for (const meta of sourceList) {
       if (!meta) continue;
-
-      // 报告进度
-      onProgress?.({
-        total,
-        current: i + 1,
-        currentItem: meta.title,
-        status: 'processing',
-      });
-
       try {
-        // 读取完整数据
         const data = await sourceAdapter.read(meta.id);
         if (!data) {
           console.warn(`简历 ${meta.id} 不存在，跳过`);
           continue;
         }
-
-        // 保存到目标存储（补齐旧数据缺失的字段）
         await targetAdapter.save(normalizeResumeData(data), meta);
       } catch (error) {
         console.error(`迁移简历 ${meta.id} 失败:`, error);
-        onProgress?.({
-          total,
-          current: i + 1,
-          currentItem: meta.title,
-          status: 'error',
-          error: describeError(error),
-        });
         throw error;
       }
     }
 
-    // 迁移完成
-    onProgress?.({
-      total,
-      current: total,
-      status: 'completed',
-    });
-
-    // 切换到新适配器
     this.currentAdapter = targetAdapter;
   }
 
@@ -240,7 +201,7 @@ export class StorageManager {
    * 保存一份简历：索引由正文派生，调用方不需要也不应该手工拼 `ResumeMeta`。
    *
    * 这是应用代码的统一写入入口。保留下面的 `save(data, meta)` 只是为了迁移：
-   * 迁移必须原样搬运源索引（含历史遗留字段），不能按正文重新推导。
+   * 迁移必须原样搬运源索引，不能按正文重新推导。磁盘上多出来的旧键跟着对象走，不在这里剔除。
    */
   async saveResume(data: ResumeData): Promise<void> {
     await this.save(data, metaFromResume(data));
@@ -268,16 +229,6 @@ export class StorageManager {
       console.error(`删除简历 ${id} 失败（${this.currentAdapter.type}）:`, error);
       throw error;
     }
-  }
-
-  /**
-   * 代理方法：导出简历
-   */
-  async export(id: string): Promise<Blob | undefined> {
-    if (this.currentAdapter.export) {
-      return this.currentAdapter.export(id);
-    }
-    return undefined;
   }
 
   /**

@@ -32,7 +32,7 @@
 `storageManager.saveResume(data)` 会自己从正文派生 `ResumeMeta`（`metaFromResume`）。
 **不要手工拼 `ResumeMeta` 再调 `save(data, meta)`**——列表只读索引、不读正文，漏掉一个索引字段（例如岗位版本信息）就会变成「只有某个入口才出现的缺陷」。
 
-`save(data, meta)` 保留给存储迁移使用：迁移必须原样搬运源索引，不能按正文重新推导。
+`save(data, meta)` 保留给存储迁移使用：迁移必须原样搬运源索引，不能按正文重新推导。磁盘上多出来的旧键跟着对象走，不在迁移时剔除。
 
 ### 2. 写入后不需要整表重读
 
