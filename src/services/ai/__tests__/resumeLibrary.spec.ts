@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultResumeData } from '@/utils/resumeData';
-import { createResumeLibrary, type ResumeCatalog } from '../resumeLibrary';
+import { assertNoActiveInterview, createResumeLibrary, type ResumeCatalog } from '../resumeLibrary';
 
 function catalog() {
   const first = createDefaultResumeData();
@@ -16,12 +16,12 @@ function catalog() {
     remove: async (id) => { store.delete(id); },
     discardOpen,
   };
-  return { library: createResumeLibrary(backend), store, discardOpen, first };
+  return { library: createResumeLibrary(backend), backend, store, discardOpen, first };
 }
 
 describe('resume library MCP', () => {
   it('lists, updates, creates and deletes separate resumes', async () => {
-    const { library, store, discardOpen, first } = catalog();
+    const { library, backend, store, discardOpen, first } = catalog();
     expect(await library.list()).toEqual([{ id: 'resume-1', title: '第一份', templateId: 'modern', updatedAt: 2 }]);
     const changed = await library.set({ ...first, title: '改过的第一份', basic: { ...first.basic, email: 'b@example.com' } });
     expect(changed.id).toBe('resume-1');
@@ -35,5 +35,19 @@ describe('resume library MCP', () => {
     expect(store.has('resume-1')).toBe(false);
     expect(store.has(created.id)).toBe(true);
     await expect(library.remove('resume-1')).rejects.toThrow('没有这份简历');
+    const exported = vi.fn(async () => undefined);
+    const withExports = createResumeLibrary({ ...backend, exportPdf: exported, interviews: {
+      list: async () => [{ id: 'interview-1', sourceResumeId: first.id, status: 'completed', settings: { targetRole: '前端', jd: '', level: '', direction: '综合', mode: 'training', mainQuestionLimit: 8 }, createdAt: '', updatedAt: '', context: {} as never, provider: { baseUrl: '', model: '' }, pendingStage: null, coveragePlan: [], turns: [], usage: { calls: 0, promptTokens: 0, completionTokens: 0 }, persistence: true, jsonMode: true, ending: true }],
+      get: async (id) => id === 'interview-1' ? { id, settings: { targetRole: '前端', jd: '', level: '', direction: '综合', mode: 'training', mainQuestionLimit: 8 }, turns: [] } as never : null,
+      remove: async () => undefined,
+      start: async () => ({ id: 'started' }) as never,
+    } });
+    await withExports.exportPdf(created.id);
+    expect(exported).toHaveBeenCalledOnce();
+    expect((await withExports.listInterviews())[0]?.id).toBe('interview-1');
+    expect((await withExports.getInterview('interview-1')).markdown).toContain('文字模拟面试');
+    await expect(withExports.startInterview(created.id, { targetRole: '前端' })).resolves.toMatchObject({ id: 'started' });
+    expect(() => assertNoActiveInterview(true)).toThrow('已有面试');
+    expect(() => assertNoActiveInterview(false)).not.toThrow();
   });
 });

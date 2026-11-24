@@ -14,7 +14,8 @@ describe('resume job versions', () => {
     const variant = createJobResumeVersion(source, { versionName: 'Acme 前端', company: 'Acme', position: '前端工程师' }, 'variant-1');
     variant.basic.name = 'Changed only in copy';
     expect(variant.id).toBe('variant-1');
-    expect(variant.jobTarget).toEqual({ versionName: 'Acme 前端', company: 'Acme', position: '前端工程师', sourceResumeId: source.id });
+    // baseId / baseVersion 记录派生基线，供落后检测使用。
+    expect(variant.jobTarget).toEqual({ versionName: 'Acme 前端', company: 'Acme', position: '前端工程师', sourceResumeId: source.id, baseId: source.id, baseVersion: 1 });
     expect(source.basic.name).toBe('Alex');
     expect(source.jobTarget).toBeUndefined();
   });

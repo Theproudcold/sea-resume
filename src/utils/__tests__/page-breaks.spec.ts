@@ -134,8 +134,9 @@ describe('content band collection', () => {
     const bands = collectContentBands(root, 1122.5);
     restore();
 
-    // 内容区 16px，行高 20px：上下各补 2px，切点才不会落进其实还有字形的行距里。
-    expect(bands).toEqual([{ top: 98, bottom: 118 }]);
+    // 内容区 16px、行高 20px：上方补满半个行距 2px，下方先放渲染余量、再留 2px 切缝。
+    // 行盒总高 18px < 行距 20px，相邻两行之间才有可切的空隙。
+    expect(bands).toEqual([{ top: 98, bottom: 116 }]);
   });
 
   it('reserves the renderer ink slack below each line', () => {
@@ -143,7 +144,9 @@ describe('content band collection', () => {
     root.innerHTML = '<p>正文</p>';
     document.body.appendChild(root);
     const paragraph = root.querySelector('p')!;
-    paragraph.style.lineHeight = '20px';
+    // 行距足够宽（30px）时才有真正的余量可分：封顶「行距 - 切缝」= 28px，
+    // 上方补满半个行距 7px，下方先放 3.9px 字形余量，剩下的再补行距。
+    paragraph.style.lineHeight = '30px';
     paragraph.style.fontSize = '13px';
     stubRects([[root, rect(100, 400)]]);
     const restore = stubLineRects([[rect(200, 16)]]);
@@ -151,9 +154,96 @@ describe('content band collection', () => {
     const bands = collectContentBands(root, 1122.5);
     restore();
 
-    // 浏览器把字形画在内容区里，html2canvas 会低约 0.3em：下边缘多留 3.9px。
-    expect(bands[0]!.top).toBeCloseTo(98, 5);
-    expect(bands[0]!.bottom).toBeCloseTo(118 + 3.9, 5);
+    // 内容带坐标相对 root 顶边；root 顶边在 100，行内容区在 200，字框高 16。
+    const glyphTop = 200 - 100;
+    const glyphBottom = glyphTop + 16;
+    const above = glyphTop - bands[0]!.top;
+    const below = bands[0]!.bottom - glyphBottom;
+    // 上方补满半个行距（30px 行距、16px 字框 → 7px）。
+    expect(above).toBeCloseTo((30 - 16) / 2, 5);
+    // 浏览器把字形画在内容区里，html2canvas 会低约 0.3em：下边缘因此还要多留余量。
+    expect(below).toBeCloseTo(13 * 0.3, 5);
+    // 余量不会无上限：行盒仍比行距短，相邻两行之间留得住切缝。
+    expect(bands[0]!.bottom - bands[0]!.top).toBeLessThan(30);
+  });
+
+  it('never lets the ink slack close the gap to the next line', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<p>正文</p>';
+    document.body.appendChild(root);
+    const paragraph = root.querySelector('p')!;
+    // 行距紧到只剩 2px 富余：余量必须让位，行盒不能长到行距。
+    paragraph.style.lineHeight = '18px';
+    paragraph.style.fontSize = '16px';
+    stubRects([[root, rect(100, 400)]]);
+    const restore = stubLineRects([[rect(200, 16), rect(218, 16)]]);
+
+    const bands = collectContentBands(root, 1122.5);
+    restore();
+
+    expect(bands).toHaveLength(2);
+    expect(bands[1]!.top - bands[0]!.bottom).toBeGreaterThanOrEqual(2 - 1e-6);
+  });
+
+  /**
+   * 真实编辑器里量到的正文几何：font-size 13px、line-height 20.8px（1.6）、
+   * Range 行内容区 15.5px，相邻行间距 11.6px。
+   */
+  function paragraphOfLines(count: number): DOMRect[] {
+    const PITCH = 20.8;
+    const GLYPH = 15.5;
+    const firstTop = 200;
+    return Array.from({ length: count }, (_, index) => rect(firstTop + index * PITCH, GLYPH));
+  }
+
+  it('keeps the gap between consecutive lines cuttable instead of merging them into one band', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<p>正文</p>';
+    document.body.appendChild(root);
+    const paragraph = root.querySelector('p')!;
+    paragraph.style.lineHeight = '20.8px';
+    paragraph.style.fontSize = '13px';
+    stubRects([[root, rect(100, 400)]]);
+    const restore = stubLineRects([paragraphOfLines(4)]);
+
+    const bands = collectContentBands(root, 1122.5);
+    restore();
+
+    // 每行一段内容带：切点只能落在行与行之间的空隙里。
+    expect(bands).toHaveLength(4);
+    // 相邻两行之间必须留出空隙，而不是首尾相接并成一条长带。
+    expect(bands[1]!.top - bands[0]!.bottom).toBeGreaterThanOrEqual(2 - 1e-6);
+    // 行距 20.8px 里必须留出可切的空隙，而不是被上下补边和渲染余量吃光。
+    expect(bands[1]!.bottom - bands[1]!.top).toBeLessThan(20.8);
+  });
+
+  it('still finds a cut between lines when a page ends in the middle of a paragraph', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<p>正文</p>';
+    document.body.appendChild(root);
+    const paragraph = root.querySelector('p')!;
+    paragraph.style.lineHeight = '20.8px';
+    paragraph.style.fontSize = '13px';
+    paragraph.style.margin = '0';
+    stubRects([[root, rect(0, 400)]]);
+    const restore = stubLineRects([paragraphOfLines(120)]);
+
+    const bands = collectContentBands(root, 1122.5);
+    restore();
+
+    const contentHeight = 200 + 120 * 20.8;
+    const breaks = computePageBreaks({ contentHeight, pageHeight: 1122.5, bands });
+    // 旧实现把整段并成一条内容带，只能退到段首：第一页只剩 0~200px，后面按页高硬切。
+    // 修复后第一页要装满到接近页底，且每个切点都落在两行之间。
+    expect(breaks[0]).toBeGreaterThan(1100);
+    expect(breaks[0]).toBeLessThanOrEqual(1122.5 + 1e-6);
+    for (const [index, end] of breaks.slice(0, -1).entries()) {
+      const start = index === 0 ? 0 : breaks[index - 1]!;
+      expect(end - start).toBeLessThanOrEqual(1122.5 + 1e-6);
+      expect(end > 200 && end < contentHeight).toBe(true);
+      // 切点不能落在任何一行的行盒内部。
+      for (const band of bands) expect(end > band.top + 1e-6 && end < band.bottom - 1e-6).toBe(false);
+    }
   });
 
   it('falls back to whole blocks and keeps replaced elements when line rects are unavailable', () => {

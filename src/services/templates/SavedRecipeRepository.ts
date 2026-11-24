@@ -1,4 +1,4 @@
-import type { LayoutTemplate } from '@/types/layout-template';
+import type { SavedRecipe } from '@/types/layout-template';
 import {
   LAYOUT_TEMPLATE_LIMIT,
   normalizeLayoutName,
@@ -8,9 +8,9 @@ import {
 const STORAGE_KEY = 'sea-resume_layout-templates';
 const CORRUPT = '自定义版式数据已损坏，未继续写入。';
 
-function isStoredTemplate(value: unknown): value is LayoutTemplate {
+function isStoredTemplate(value: unknown): value is SavedRecipe {
   if (!value || typeof value !== 'object') return false;
-  const record = value as Partial<LayoutTemplate>;
+  const record = value as Partial<SavedRecipe>;
   return typeof record.id === 'string'
     && record.id.length > 0
     && record.id.length <= 120
@@ -19,7 +19,7 @@ function isStoredTemplate(value: unknown): value is LayoutTemplate {
     && readLayoutRecipe(record.recipe) !== null;
 }
 
-function normalizeStored(template: LayoutTemplate): LayoutTemplate {
+function normalizeStored(template: SavedRecipe): SavedRecipe {
   const recipe = readLayoutRecipe(template.recipe);
   if (!recipe) throw new Error(CORRUPT);
   return {
@@ -32,7 +32,7 @@ function normalizeStored(template: LayoutTemplate): LayoutTemplate {
   };
 }
 
-function readStoredTemplates(): LayoutTemplate[] {
+function readStoredTemplates(): SavedRecipe[] {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
   let parsed: unknown;
@@ -47,11 +47,11 @@ function readStoredTemplates(): LayoutTemplate[] {
   return parsed.map(normalizeStored).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function listLayoutTemplates(): LayoutTemplate[] {
+export function listSavedRecipes(): SavedRecipe[] {
   return readStoredTemplates();
 }
 
-function persist(templates: LayoutTemplate[]): void {
+function persist(templates: SavedRecipe[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
   } catch (error) {
@@ -62,9 +62,9 @@ function persist(templates: LayoutTemplate[]): void {
   }
 }
 
-export function saveLayoutTemplate(template: LayoutTemplate): LayoutTemplate[] {
+export function saveSavedRecipe(template: SavedRecipe): SavedRecipe[] {
   const stored = normalizeStored(template);
-  const existing = listLayoutTemplates();
+  const existing = listSavedRecipes();
   if (existing.length >= LAYOUT_TEMPLATE_LIMIT) {
     throw new Error(`最多保存 ${LAYOUT_TEMPLATE_LIMIT} 个自定义版式。请先删除不再使用的版式。`);
   }
@@ -76,8 +76,8 @@ export function saveLayoutTemplate(template: LayoutTemplate): LayoutTemplate[] {
   return next.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function renameLayoutTemplate(id: string, name: string, now = Date.now()): LayoutTemplate[] {
-  const existing = listLayoutTemplates();
+export function renameSavedRecipe(id: string, name: string, now = Date.now()): SavedRecipe[] {
+  const existing = listSavedRecipes();
   const index = existing.findIndex((item) => item.id === id);
   const current = existing[index];
   if (!current) throw new Error('找不到这个自定义版式。');
@@ -87,8 +87,8 @@ export function renameLayoutTemplate(id: string, name: string, now = Date.now())
   return next.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function deleteLayoutTemplate(id: string): LayoutTemplate[] {
-  const existing = listLayoutTemplates();
+export function deleteSavedRecipe(id: string): SavedRecipe[] {
+  const existing = listSavedRecipes();
   if (!existing.some((item) => item.id === id)) throw new Error('找不到这个自定义版式。');
   const next = existing.filter((item) => item.id !== id);
   persist(next);

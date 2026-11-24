@@ -1,26 +1,26 @@
 import { defineStore } from 'pinia';
-import type { CustomResumeTemplate } from '@/types/custom-template';
-import type { LayoutTemplate } from '@/types/layout-template';
+import type { ResumeSnapshot } from '@/types/custom-template';
+import type { SavedRecipe } from '@/types/layout-template';
 import type { ResumeData, TemplateMetadata } from '@/types/resume';
 import {
-  deleteCustomTemplate,
-  listCustomTemplates,
-  renameCustomTemplate,
-  saveCustomTemplate,
+  deleteResumeSnapshot,
+  listResumeSnapshots,
+  renameResumeSnapshot,
+  saveResumeSnapshot,
 } from '@/services/templates/CustomTemplateRepository';
 import {
-  deleteLayoutTemplate,
-  listLayoutTemplates,
-  renameLayoutTemplate,
-  saveLayoutTemplate,
-} from '@/services/templates/LayoutTemplateRepository';
+  deleteSavedRecipe,
+  listSavedRecipes,
+  renameSavedRecipe,
+  saveSavedRecipe,
+} from '@/services/templates/SavedRecipeRepository';
 import {
-  buildCustomTemplateFromResume,
-  customTemplateToMetadata,
+  buildResumeSnapshot,
+  resumeSnapshotToMetadata,
 } from '@/utils/custom-template';
 import {
-  buildLayoutTemplate,
-  layoutTemplateToMetadata,
+  buildSavedRecipe,
+  savedRecipeToMetadata,
   recipeFromCurrent,
 } from '@/utils/layout-template';
 
@@ -84,8 +84,8 @@ export const builtinTemplates: TemplateMetadata[] = [
 export const useTemplateStore = defineStore('template', {
   state: () => ({
     builtinTemplates,
-    customTemplates: [] as CustomResumeTemplate[],
-    layoutTemplates: [] as LayoutTemplate[],
+    resumeSnapshots: [] as ResumeSnapshot[],
+    savedRecipes: [] as SavedRecipe[],
     currentTemplateId: 'modern',
     loaded: false,
   }),
@@ -93,8 +93,8 @@ export const useTemplateStore = defineStore('template', {
   getters: {
     templates(state): TemplateMetadata[] {
       return [
-        ...state.layoutTemplates.map(layoutTemplateToMetadata),
-        ...state.customTemplates.map(customTemplateToMetadata),
+        ...state.savedRecipes.map(savedRecipeToMetadata),
+        ...state.resumeSnapshots.map(resumeSnapshotToMetadata),
         ...state.builtinTemplates,
       ];
     },
@@ -108,65 +108,65 @@ export const useTemplateStore = defineStore('template', {
       this.currentTemplateId = id;
     },
 
-    loadCustomTemplates() {
-      this.customTemplates = listCustomTemplates();
+    loadTemplateLibrary() {
+      this.resumeSnapshots = listResumeSnapshots();
       // 版式库损坏只影响版式，不让已经读出的内容模板一起消失。
       try {
-        this.layoutTemplates = listLayoutTemplates();
+        this.savedRecipes = listSavedRecipes();
       } catch (error) {
-        this.layoutTemplates = [];
+        this.savedRecipes = [];
         this.loaded = true;
         throw error;
       }
       this.loaded = true;
     },
 
-    saveCurrentLayout(resume: ResumeData, input: { name: string; description?: string }): LayoutTemplate {
-      const template = buildLayoutTemplate(recipeFromCurrent(resume), input);
-      this.layoutTemplates = saveLayoutTemplate(template);
+    saveCurrentRecipe(resume: ResumeData, input: { name: string; description?: string }): SavedRecipe {
+      const template = buildSavedRecipe(recipeFromCurrent(resume), input);
+      this.savedRecipes = saveSavedRecipe(template);
       this.loaded = true;
       return template;
     },
 
-    importLayout(input: { name: string; description?: string; recipe: LayoutTemplate['recipe'] }): LayoutTemplate {
-      const template = buildLayoutTemplate(input.recipe, input);
-      this.layoutTemplates = saveLayoutTemplate(template);
+    importLayout(input: { name: string; description?: string; recipe: SavedRecipe['recipe'] }): SavedRecipe {
+      const template = buildSavedRecipe(input.recipe, input);
+      this.savedRecipes = saveSavedRecipe(template);
       this.loaded = true;
       return template;
     },
 
-    renameLayoutTemplate(id: string, name: string) {
-      this.layoutTemplates = renameLayoutTemplate(id, name);
+    renameSavedRecipe(id: string, name: string) {
+      this.savedRecipes = renameSavedRecipe(id, name);
     },
 
-    deleteLayoutTemplate(id: string) {
-      this.layoutTemplates = deleteLayoutTemplate(id);
+    deleteSavedRecipe(id: string) {
+      this.savedRecipes = deleteSavedRecipe(id);
     },
 
-    findLayoutTemplate(id: string): LayoutTemplate | undefined {
-      return this.layoutTemplates.find((template) => template.id === id);
+    findSavedRecipe(id: string): SavedRecipe | undefined {
+      return this.savedRecipes.find((template) => template.id === id);
     },
 
-    saveCurrentResumeAsTemplate(
+    saveCurrentAsSnapshot(
       resume: ResumeData,
       input: { name: string; description?: string },
-    ): CustomResumeTemplate {
-      const template = buildCustomTemplateFromResume(resume, input);
-      this.customTemplates = saveCustomTemplate(template);
+    ): ResumeSnapshot {
+      const template = buildResumeSnapshot(resume, input);
+      this.resumeSnapshots = saveResumeSnapshot(template);
       this.loaded = true;
       return template;
     },
 
-    renameCustomTemplate(id: string, name: string) {
-      this.customTemplates = renameCustomTemplate(id, name);
+    renameResumeSnapshot(id: string, name: string) {
+      this.resumeSnapshots = renameResumeSnapshot(id, name);
     },
 
-    deleteCustomTemplate(id: string) {
-      this.customTemplates = deleteCustomTemplate(id);
+    deleteResumeSnapshot(id: string) {
+      this.resumeSnapshots = deleteResumeSnapshot(id);
     },
 
-    findCustomTemplate(id: string): CustomResumeTemplate | undefined {
-      return this.customTemplates.find((template) => template.id === id);
+    findResumeSnapshot(id: string): ResumeSnapshot | undefined {
+      return this.resumeSnapshots.find((template) => template.id === id);
     },
   },
 });

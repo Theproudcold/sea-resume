@@ -93,18 +93,20 @@ describe('full backup data layer', () => {
     }))).toThrow();
     expect(() => parseFullBackup(JSON.stringify({ format: 'sea-resume-full-backup', version: 2, resumes: [] }))).toThrow(/version/i);
   });
-  it('accepts normalized older stored resumes with deprecated theme and custom-block fields', () => {
+  it('fills default module margins when an older theme omits them and treats string custom blocks as text', () => {
     const legacy = {
       ...makeResume('legacy-id', 'Legacy resume'),
       theme: {
         color: '#2563eb', fontFamily: 'sans-serif', fontSize: 14, lineHeight: 1.5,
-        spacing: 24, displayIcons: true,
+        spacing: 8, displayIcons: true,
       },
       customBlocks: [{ id: 'legacy-block', title: 'Legacy timeline', type: 'timeline', content: '<p>Old content</p>', order: 0 }],
     };
     const normalized = validateResumeData(legacy);
 
+    // spacing 不参与迁移；缺 moduleMargins 时下边距就是默认值 24。
     expect(normalized.theme.moduleMargins).toEqual({ top: 0, bottom: 24, left: 0, right: 0 });
+    expect(normalized.theme).not.toHaveProperty('spacing');
     expect(normalized.customBlocks[0]?.type).toBe('text');
     expect(() => createFullBackup([normalized])).not.toThrow();
   });

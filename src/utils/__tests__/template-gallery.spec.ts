@@ -37,7 +37,7 @@ describe('template-gallery helpers', () => {
     const byCategory = filterTemplates(templates, { category: 'professional', search: '' });
     expect(byCategory.map((item) => item.id)).toEqual(['professional']);
 
-    const customTemplates = filterTemplates([
+    const resumeSnapshots = filterTemplates([
       ...templates,
       {
         id: 'mine',
@@ -50,7 +50,7 @@ describe('template-gallery helpers', () => {
         source: 'custom',
       },
     ], { category: 'custom', search: '校招' });
-    expect(customTemplates.map((item) => item.id)).toEqual(['mine']);
+    expect(resumeSnapshots.map((item) => item.id)).toEqual(['mine']);
 
     const byKeyword = filterTemplates(templates, { category: 'all', search: '设计' });
     expect(byKeyword.map((item) => item.id)).toEqual(['creative']);

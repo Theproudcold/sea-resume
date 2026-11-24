@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   A4_WIDTH_PX,
-  DEFAULT_EDITOR_LAYOUT,
-  EDITOR_LAYOUT_STORAGE_KEY,
+  DEFAULT_EDITOR_CHROME,
+  EDITOR_CHROME_STORAGE_KEY,
   EDITOR_WIDTH_DEFAULT,
   EDITOR_WIDTH_MAX,
   EDITOR_WIDTH_MIN,
@@ -12,15 +12,15 @@ import {
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
   maxEditorDragWidth,
-  planEditorLayout,
-  readStoredEditorLayout,
-  sanitizeEditorLayout,
+  planEditorChrome,
+  readStoredEditorChrome,
+  sanitizeEditorChrome,
   tradeSidebarWidth,
-  writeStoredEditorLayout,
-  type EditorLayoutRequest,
-} from '@/utils/editorLayout';
+  writeStoredEditorChrome,
+  type EditorChromeRequest,
+} from '@/utils/editorChrome';
 
-const base: Omit<EditorLayoutRequest, 'containerWidth'> = {
+const base: Omit<EditorChromeRequest, 'containerWidth'> = {
   sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
   editorWidth: EDITOR_WIDTH_DEFAULT,
   sidebarVisible: true,
@@ -28,8 +28,8 @@ const base: Omit<EditorLayoutRequest, 'containerWidth'> = {
   previewVisible: true,
 };
 
-const plan = (containerWidth: number, overrides: Partial<EditorLayoutRequest> = {}) =>
-  planEditorLayout({ ...base, containerWidth, ...overrides });
+const plan = (containerWidth: number, overrides: Partial<EditorChromeRequest> = {}) =>
+  planEditorChrome({ ...base, containerWidth, ...overrides });
 
 afterEach(() => localStorage.clear());
 
@@ -140,14 +140,14 @@ describe('拖拽宽度', () => {
 
 describe('布局偏好存储', () => {
   it('读写往返并收敛非法值', () => {
-    writeStoredEditorLayout({
+    writeStoredEditorChrome({
       sidebarWidth: 9999,
       editorWidth: -20,
       sidebarCollapsed: true,
       editorCollapsed: true,
       previewCollapsed: true,
     });
-    const stored = readStoredEditorLayout();
+    const stored = readStoredEditorChrome();
     expect(stored.sidebarWidth).toBe(SIDEBAR_WIDTH_MAX);
     expect(stored.editorWidth).toBe(EDITOR_WIDTH_MIN);
     expect(stored.sidebarCollapsed).toBe(true);
@@ -156,9 +156,9 @@ describe('布局偏好存储', () => {
   });
 
   it('损坏或缺失的数据回落到默认布局', () => {
-    localStorage.setItem(EDITOR_LAYOUT_STORAGE_KEY, '{oops');
-    expect(readStoredEditorLayout()).toEqual(DEFAULT_EDITOR_LAYOUT);
-    expect(sanitizeEditorLayout('nope')).toEqual(DEFAULT_EDITOR_LAYOUT);
-    expect(sanitizeEditorLayout(null)).toEqual(DEFAULT_EDITOR_LAYOUT);
+    localStorage.setItem(EDITOR_CHROME_STORAGE_KEY, '{oops');
+    expect(readStoredEditorChrome()).toEqual(DEFAULT_EDITOR_CHROME);
+    expect(sanitizeEditorChrome('nope')).toEqual(DEFAULT_EDITOR_CHROME);
+    expect(sanitizeEditorChrome(null)).toEqual(DEFAULT_EDITOR_CHROME);
   });
 });

@@ -31,7 +31,7 @@
             @preview="openPreview(template.id)"
             @rename="renameStoredTemplate(template)"
             @remove="removeStoredTemplate(template)"
-            @export="exportLayoutTemplate(template.id)"
+            @export="exportSavedRecipe(template.id)"
           />
         </div>
 
@@ -72,8 +72,8 @@ import TemplateGalleryHeader from '@/components/template-gallery/TemplateGallery
 import TemplateGalleryToolbar from '@/components/template-gallery/TemplateGalleryToolbar.vue';
 import TemplatePreviewDialog from '@/components/template-gallery/TemplatePreviewDialog.vue';
 import type { TemplateMetadata } from '@/types/resume';
-import { resumeFromCustomTemplate } from '@/utils/custom-template';
-import { applyLayoutToResume, parseLayoutTemplateFile, serializeLayoutTemplate } from '@/utils/layout-template';
+import { resumeFromSnapshot } from '@/utils/custom-template';
+import { applyLayoutToResume, parseSavedRecipeFile, serializeSavedRecipe } from '@/utils/layout-template';
 import { createDefaultResumeData } from '@/utils/resumeData';
 import { buildTemplateResumeTitle, filterTemplates, sortTemplates, type TemplateSortKey } from '@/utils/template-gallery';
 import { getTemplateUsageMap, markTemplateUsed } from '@/utils/template-usage';
@@ -115,14 +115,14 @@ const canApplyToCurrent = computed(() => Boolean(activeResumeId.value));
 
 const cardPreviewData = (template: TemplateMetadata) => {
   if (template.source === 'layout') {
-    const layout = templateStore.findLayoutTemplate(template.id);
+    const layout = templateStore.findSavedRecipe(template.id);
     return layout
       ? { ...demoResumeData, templateId: `layout:${layout.id}`, layout: layout.recipe }
       : { ...demoResumeData, templateId: 'modern' };
   }
   if (template.source === 'custom') {
-    const custom = templateStore.findCustomTemplate(template.id);
-    return custom ? resumeFromCustomTemplate(custom) : { ...demoResumeData, templateId: 'modern' };
+    const custom = templateStore.findResumeSnapshot(template.id);
+    return custom ? resumeFromSnapshot(custom) : { ...demoResumeData, templateId: 'modern' };
   }
   return { ...demoResumeData, templateId: template.id, layout: undefined };
 };
@@ -133,7 +133,7 @@ const previewData = computed(() => {
   const currentReady = Boolean(activeResumeId.value) && data.value.id === activeResumeId.value;
   if (!currentReady || template.source === 'custom') return cardPreviewData(template);
   if (template.source === 'layout') {
-    const layout = templateStore.findLayoutTemplate(template.id);
+    const layout = templateStore.findSavedRecipe(template.id);
     return layout ? { ...data.value, templateId: `layout:${layout.id}`, layout: layout.recipe } : cardPreviewData(template);
   }
   return { ...data.value, templateId: template.id, layout: undefined };
@@ -161,7 +161,7 @@ const displayTemplates = computed(() => {
 
 onMounted(async () => {
   try {
-    templateStore.loadCustomTemplates();
+    templateStore.loadTemplateLibrary();
   } catch (error) {
     ElMessage.error(describeError(error));
   }
@@ -206,11 +206,11 @@ const createResumeFromTemplate = async () => {
   usingTemplate.value = true;
   try {
     const template = selectedTemplate.value;
-    const custom = template.source === 'custom' ? templateStore.findCustomTemplate(template.id) : undefined;
-    const layout = template.source === 'layout' ? templateStore.findLayoutTemplate(template.id) : undefined;
+    const custom = template.source === 'custom' ? templateStore.findResumeSnapshot(template.id) : undefined;
+    const layout = template.source === 'layout' ? templateStore.findSavedRecipe(template.id) : undefined;
     const title = buildTemplateResumeTitle(template.name, new Date());
     const newId = custom
-      ? await workbenchStore.createResumeFromData(resumeFromCustomTemplate(custom), title, custom.baseTemplateId)
+      ? await workbenchStore.createResumeFromData(resumeFromSnapshot(custom), title, custom.baseTemplateId)
       : layout
         ? await workbenchStore.createResumeFromData(applyLayoutToResume(createDefaultResumeData(), layout), title, `layout:${layout.id}`)
         : await workbenchStore.createResume(title, template.id);
@@ -240,8 +240,8 @@ const applyTemplateToCurrent = async () => {
       await resumeStore.loadResume(targetResumeId);
     }
     if (!isCurrentTarget()) return;
-    const custom = template.source === 'custom' ? templateStore.findCustomTemplate(template.id) : undefined;
-    const layout = template.source === 'layout' ? templateStore.findLayoutTemplate(template.id) : undefined;
+    const custom = template.source === 'custom' ? templateStore.findResumeSnapshot(template.id) : undefined;
+    const layout = template.source === 'layout' ? templateStore.findSavedRecipe(template.id) : undefined;
     if (layout) {
       replacementConfirmationPending = true;
       try {
@@ -268,7 +268,7 @@ const applyTemplateToCurrent = async () => {
       }
       // Confirmation authorizes this resume only, never whichever one is loaded later.
       if (!isCurrentTarget()) return;
-      resumeStore.applyTemplateSnapshot(resumeFromCustomTemplate(custom));
+      resumeStore.applyTemplateSnapshot(resumeFromSnapshot(custom));
     } else {
       resumeStore.setTemplate(template.id);
     }
@@ -285,17 +285,17 @@ const applyTemplateToCurrent = async () => {
 };
 
 const renameStoredTemplate = async (template: TemplateMetadata) => {
-  if (template.source === 'layout') return renameLayoutTemplate(template.id);
-  return renameCustomTemplate(template.id);
+  if (template.source === 'layout') return renameSavedRecipe(template.id);
+  return renameResumeSnapshot(template.id);
 };
 
 const removeStoredTemplate = async (template: TemplateMetadata) => {
-  if (template.source === 'layout') return removeLayoutTemplate(template.id);
+  if (template.source === 'layout') return removeSavedRecipe(template.id);
   return removeCustomTemplate(template.id);
 };
 
-const renameCustomTemplate = async (templateId: string) => {
-  const template = templateStore.findCustomTemplate(templateId);
+const renameResumeSnapshot = async (templateId: string) => {
+  const template = templateStore.findResumeSnapshot(templateId);
   if (!template) return;
   try {
     const { value } = await ElMessageBox.prompt('给这个模板起个新名字。', '重命名模板', {
@@ -304,7 +304,7 @@ const renameCustomTemplate = async (templateId: string) => {
       confirmButtonText: '保存',
       cancelButtonText: '取消',
     });
-    templateStore.renameCustomTemplate(templateId, value);
+    templateStore.renameResumeSnapshot(templateId, value);
     ElMessage.success('模板已重命名');
   } catch (error) {
     if (error === 'cancel' || error === 'close') return;
@@ -313,7 +313,7 @@ const renameCustomTemplate = async (templateId: string) => {
 };
 
 const removeCustomTemplate = async (templateId: string) => {
-  const template = templateStore.findCustomTemplate(templateId);
+  const template = templateStore.findResumeSnapshot(templateId);
   if (!template) return;
   try {
     await ElMessageBox.confirm(
@@ -321,7 +321,7 @@ const removeCustomTemplate = async (templateId: string) => {
       '删除自定义模板',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
     );
-    templateStore.deleteCustomTemplate(templateId);
+    templateStore.deleteResumeSnapshot(templateId);
     if (selectedTemplateId.value === templateId) closeDialogs();
     ElMessage.success('模板已删除');
   } catch (error) {
@@ -330,8 +330,8 @@ const removeCustomTemplate = async (templateId: string) => {
   }
 };
 
-const renameLayoutTemplate = async (templateId: string) => {
-  const template = templateStore.findLayoutTemplate(templateId);
+const renameSavedRecipe = async (templateId: string) => {
+  const template = templateStore.findSavedRecipe(templateId);
   if (!template) return;
   try {
     const { value } = await ElMessageBox.prompt('给这个版式起个新名字。', '重命名版式', {
@@ -340,7 +340,7 @@ const renameLayoutTemplate = async (templateId: string) => {
       confirmButtonText: '保存',
       cancelButtonText: '取消',
     });
-    templateStore.renameLayoutTemplate(templateId, value);
+    templateStore.renameSavedRecipe(templateId, value);
     ElMessage.success('版式已重命名');
   } catch (error) {
     if (error === 'cancel' || error === 'close') return;
@@ -348,8 +348,8 @@ const renameLayoutTemplate = async (templateId: string) => {
   }
 };
 
-const removeLayoutTemplate = async (templateId: string) => {
-  const template = templateStore.findLayoutTemplate(templateId);
+const removeSavedRecipe = async (templateId: string) => {
+  const template = templateStore.findSavedRecipe(templateId);
   if (!template) return;
   try {
     await ElMessageBox.confirm(
@@ -357,7 +357,7 @@ const removeLayoutTemplate = async (templateId: string) => {
       '删除自定义版式',
       { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
     );
-    templateStore.deleteLayoutTemplate(templateId);
+    templateStore.deleteSavedRecipe(templateId);
     if (selectedTemplateId.value === templateId) closeDialogs();
     ElMessage.success('版式已删除');
   } catch (error) {
@@ -366,10 +366,10 @@ const removeLayoutTemplate = async (templateId: string) => {
   }
 };
 
-const exportLayoutTemplate = (templateId: string) => {
-  const template = templateStore.findLayoutTemplate(templateId);
+const exportSavedRecipe = (templateId: string) => {
+  const template = templateStore.findSavedRecipe(templateId);
   if (!template) return;
-  const file = new Blob([JSON.stringify(serializeLayoutTemplate(template), null, 2)], { type: 'application/json' });
+  const file = new Blob([JSON.stringify(serializeSavedRecipe(template), null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(file);
   const link = document.createElement('a');
   link.href = url;
@@ -386,7 +386,7 @@ const readLayoutFile = async (event: Event) => {
   input.value = '';
   if (!file) return;
   try {
-    const parsed = parseLayoutTemplateFile(JSON.parse(await file.text()) as unknown);
+    const parsed = parseSavedRecipeFile(JSON.parse(await file.text()) as unknown);
     templateStore.importLayout(parsed);
     ElMessage.success('版式已导入');
   } catch (error) {

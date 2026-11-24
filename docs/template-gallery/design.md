@@ -147,7 +147,7 @@
 设计原则：
 
 - 只记录模板 UI 使用偏好，不写入简历正文数据。
-- 不修改现有 `LocalStorageAdapter` 与 `FileSystemAdapter` 的存储职责。
+- 不修改现有 `LocalStorageAdapter` 与 `DirectoryAdapter` 的存储职责。
 - 仅在模板被成功“创建新简历”或“应用到当前简历”后更新记录。
 
 ## 6. 组件与模块边界

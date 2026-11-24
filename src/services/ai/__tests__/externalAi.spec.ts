@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
 import { ExternalAiSession } from '../ExternalAiSession';
-import { assertProposalBaseline, createChangeProposal, parseChangeProposal, resumeRevision } from '../changeProposal';
+import { assertExternalBaseline, createExternalProposal, parseExternalProposal, resumeRevision } from '../externalProposal';
 import { createExternalContextArchive, readExternalProposal } from '../externalAiFiles';
 import { externalTools, relayAgentPrompt, relayBundleUrl, relayConfiguration, relaySetupCommand, startExternalAiBridge } from '../externalAiBridge';
 import { createResumeLibrary } from '../resumeLibrary';
 import { builtinToRecipe } from '@/utils/layout-template';
-import { applyResumeAiOperations, parseResumeAiDraft } from '../resumeTools';
+import { applyResumePatch, parseResumePatch } from '../resumePatch';
 
 const fixture = () => {
   const resume = parseResumeMarkdown('# Private Name\n\n## 工作经历\n### Example | Engineer | 2022.01 — 至今\n- Build tools').resume;
@@ -30,25 +30,25 @@ describe('unified change proposals', () => {
     expect(await resumeRevision(resume)).not.toBe(first);
   });
   it('rejects cross-resume, stale, malformed and oversized proposals', async () => {
-    const resume = fixture(); const proposal = await createChangeProposal(resume, { explanation: 'why', operations });
-    await expect(assertProposalBaseline({ ...resume, id: 'another' }, proposal)).rejects.toThrow('不属于');
-    await expect(assertProposalBaseline({ ...resume, title: 'edited' }, proposal)).rejects.toThrow('变化');
-    expect(() => parseChangeProposal({ ...proposal, schemaVersion: 2 })).toThrow('版本');
-    expect(() => parseChangeProposal({ ...proposal, proposalId: '../file' })).toThrow('ID');
-    expect(() => parseChangeProposal('x'.repeat(250001))).toThrow('过大');
+    const resume = fixture(); const proposal = await createExternalProposal(resume, { explanation: 'why', operations });
+    await expect(assertExternalBaseline({ ...resume, id: 'another' }, proposal)).rejects.toThrow('不属于');
+    await expect(assertExternalBaseline({ ...resume, title: 'edited' }, proposal)).rejects.toThrow('变化');
+    expect(() => parseExternalProposal({ ...proposal, schemaVersion: 2 })).toThrow('版本');
+    expect(() => parseExternalProposal({ ...proposal, proposalId: '../file' })).toThrow('ID');
+    expect(() => parseExternalProposal('x'.repeat(250001))).toThrow('过大');
   });
   it('enforces exact value types and removes unknown operation payloads at both boundaries', () => {
-    expect(() => parseResumeAiDraft({ operations: [{ type: 'set_basic', field: 'summary', value: [] }] })).toThrow();
-    expect(() => parseResumeAiDraft({ operations: [{ type: 'update_skill', id: 'x', field: 'items', value: 'not-array' }] })).toThrow();
-    expect(parseResumeAiDraft({ operations: [{ ...operations[0], code: 'execute' }] }).operations[0]).not.toHaveProperty('code');
-    expect(() => applyResumeAiOperations(fixture(), [{ type: 'set_basic', field: '__proto__', value: 'bad' }] as never)).toThrow('不允许');
+    expect(() => parseResumePatch({ operations: [{ type: 'set_basic', field: 'summary', value: [] }] })).toThrow();
+    expect(() => parseResumePatch({ operations: [{ type: 'update_skill', id: 'x', field: 'items', value: 'not-array' }] })).toThrow();
+    expect(parseResumePatch({ operations: [{ ...operations[0], code: 'execute' }] }).operations[0]).not.toHaveProperty('code');
+    expect(() => applyResumePatch(fixture(), [{ type: 'set_basic', field: '__proto__', value: 'bad' }] as never)).toThrow('不允许');
   });
 });
 
 describe('external AI authorization and file exchange', () => {
   function setup() {
     let resume = fixture();
-    const save = vi.fn(async (proposal) => { resume = applyResumeAiOperations(resume, proposal.operations); });
+    const save = vi.fn(async (proposal) => { resume = applyResumePatch(resume, proposal.operations); });
     const session = new ExternalAiSession(() => JSON.parse(JSON.stringify(resume)), save);
     return { session, save, read: () => resume, replace: (value: typeof resume) => { resume = value; } };
   }
@@ -73,7 +73,7 @@ describe('external AI authorization and file exchange', () => {
   });
   it('requires an issued baseline and rejects identity, hidden IDs, links and layout edits', async () => {
     const { session, read } = setup(); session.authorize();
-    const proposal = await createChangeProposal(read(), { explanation: '', operations });
+    const proposal = await createExternalProposal(read(), { explanation: '', operations });
     await expect(session.propose(proposal)).rejects.toThrow('先读取');
     await session.getContext();
     for (const operation of [
@@ -87,7 +87,7 @@ describe('external AI authorization and file exchange', () => {
   });
   it('returns pending without saving; handles duplicate concurrent requests and ID collisions', async () => {
     const { session, save, read } = setup(); session.authorize(); await session.getContext();
-    const proposal = await createChangeProposal(read(), { explanation: 'why', operations });
+    const proposal = await createExternalProposal(read(), { explanation: 'why', operations });
     await Promise.all([session.propose(proposal), session.propose(proposal)]);
     expect(session.entries).toHaveLength(1); expect(save).not.toHaveBeenCalled();
     expect(session.getStatus(proposal.proposalId).status).toBe('pending');
@@ -99,7 +99,7 @@ describe('external AI authorization and file exchange', () => {
   });
   it('marks stale drafts as conflict and rejected drafts cannot save', async () => {
     const { session, read, save } = setup(); session.authorize(); await session.getContext();
-    const proposal = await createChangeProposal(read(), { explanation: '', operations }); await session.propose(proposal);
+    const proposal = await createExternalProposal(read(), { explanation: '', operations }); await session.propose(proposal);
     read().basic.title = 'manual edit';
     await expect(session.approve(proposal.proposalId)).rejects.toThrow('变化');
     expect(session.getStatus(proposal.proposalId).status).toBe('conflict');
@@ -108,7 +108,7 @@ describe('external AI authorization and file exchange', () => {
   });
   it('keeps failed saves pending and revocation clears context grants', async () => {
     const { session, read, save } = setup(); session.authorize(); await session.getContext();
-    const proposal = await createChangeProposal(read(), { explanation: '', operations }); await session.propose(proposal);
+    const proposal = await createExternalProposal(read(), { explanation: '', operations }); await session.propose(proposal);
     save.mockRejectedValueOnce(new Error('disk full'));
     await expect(session.approve(proposal.proposalId)).rejects.toThrow('disk full');
     expect(session.getStatus(proposal.proposalId).status).toBe('pending');
@@ -120,7 +120,7 @@ describe('external AI authorization and file exchange', () => {
     const context = session.getContext(); session.revoke();
     await expect(context).rejects.toThrow('授权');
     session.authorize(); await session.getContext();
-    const proposal = await createChangeProposal(read(), { explanation: '', operations });
+    const proposal = await createExternalProposal(read(), { explanation: '', operations });
     const pending = session.propose(proposal); session.revoke();
     await expect(pending).rejects.toThrow('授权'); expect(session.entries).toEqual([]);
   });
@@ -131,7 +131,7 @@ describe('external AI authorization and file exchange', () => {
   });
   it('caps context grants and draft queue', async () => {
     const { session, read } = setup(); session.authorize(); await session.getContext();
-    const proposal = await createChangeProposal(read(), { explanation: '', operations });
+    const proposal = await createExternalProposal(read(), { explanation: '', operations });
     for (let i = 0; i < 50; i++) await session.propose({ ...proposal, proposalId: `p-${i}` });
     await expect(session.propose({ ...proposal, proposalId: 'overflow' })).rejects.toThrow('上限');
   });
@@ -141,7 +141,7 @@ describe('external AI authorization and file exchange', () => {
     read().experiences.push({ ...visible, id: 'hidden-exp', visible: false, company: 'Hidden Co' });
     session.authorize();
     await session.getContext();
-    const removal = await createChangeProposal(read(), { explanation: '删除这段经历', operations: [{ type: 'remove_entry', collection: 'experiences', id: visible.id }] });
+    const removal = await createExternalProposal(read(), { explanation: '删除这段经历', operations: [{ type: 'remove_entry', collection: 'experiences', id: visible.id }] });
     await session.propose(removal);
     expect(save).not.toHaveBeenCalled();
     await expect(session.propose({ ...removal, proposalId: 'hidden', operations: [{ type: 'remove_entry', collection: 'experiences', id: 'hidden-exp' }] })).rejects.toThrow('未授权');
@@ -162,7 +162,7 @@ describe('MCP business tools', () => {
       remove: async () => undefined,
     });
     const tools = externalTools(library);
-    expect(tools.map(tool => tool.name)).toEqual(['sea_resume_list', 'sea_resume_get', 'sea_resume_set', 'sea_resume_create', 'sea_resume_delete']);
+    expect(tools.map(tool => tool.name)).toEqual(['sea_resume_list', 'sea_resume_get', 'sea_resume_set', 'sea_resume_create', 'sea_resume_delete', 'sea_resume_export_pdf', 'sea_interview_list', 'sea_interview_get', 'sea_interview_delete', 'sea_interview_start']);
     const listed = await tools[0]!.execute({}) as { content: { text: string }[] };
     expect(JSON.parse(listed.content[0]!.text)[0].id).toBe(resume.id);
     const read = await tools[1]!.execute({ id: resume.id }) as { content: { text: string }[] };

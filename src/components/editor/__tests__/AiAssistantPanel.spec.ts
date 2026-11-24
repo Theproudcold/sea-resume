@@ -38,6 +38,25 @@ describe('AI assistant quick editing UX', () => {
     expect(requestResumeAiDraft).not.toHaveBeenCalled();
   });
 
+  it('opens the JD risk panel from the mode switch and renders a real scan', async () => {
+    // 不用 stub：在真实父组件里切换模式，确认面板真的挂上并能工作。
+    panel = mount(AiAssistantPanel, {
+      props: { visible: true, resume: parseResumeMarkdown('# 测试简历').resume, undoAvailable: false },
+      global: {
+        plugins: [ElementPlus],
+        stubs: { ElDrawer: { template: '<section><slot /></section>' }, ResumeOptimizationPanel: { template: '<div />', methods: { beforeClose: async () => true } }, StarPolishPanel: true, GreetingPanel: true },
+      },
+    });
+    expect(panel.find('[data-testid=jd-risk-input]').exists()).toBe(false);
+    panel.getComponent(ElRadioGroup).vm.$emit('update:modelValue', 'jdRisk');
+    await flushPromises();
+    const input = panel.get('[data-testid=jd-risk-input]');
+    await input.setValue('任职要求：抗压能力强。本岗位为劳务派遣。');
+    const labels = panel.findAll('[data-testid=jd-risk-hit]').map((hit) => hit.text()).join('\n');
+    expect(labels).toContain('加班 / 强度');
+    expect(labels).toContain('用工性质');
+  });
+
   it('让模式切换条贴住内容宽度，不再被面板拉成通栏', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/editor/AiAssistantPanel.vue'), 'utf8');
     const modeBar = /\.assistant-panel > :deep\(\.el-radio-group\)\s*\{[^}]*\}/.exec(source)?.[0] ?? '';

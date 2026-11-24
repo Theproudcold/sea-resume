@@ -43,7 +43,7 @@
 import { onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { useResumeStore } from '@/stores/resume';
-import type { ResumeAiOperation } from '@/types/ai';
+import type { ResumePatchOperation } from '@/types/ai';
 import { ExternalAiSession, type ProposalStatus } from '@/services/ai/ExternalAiSession';
 import { createExternalContextArchive, downloadContextArchive, readExternalProposal } from '@/services/ai/externalAiFiles';
 
@@ -101,16 +101,16 @@ function text(value: unknown): string {
   if (Array.isArray(value)) return value.join('、');
   return String(value ?? '（空）').replace(/<[^>]*>/g, '').slice(0, 10000);
 }
-function operationLabel(operation: ResumeAiOperation) {
+function operationLabel(operation: ResumePatchOperation) {
   if (operation.type === 'remove_entry') return `删除条目 · ${operation.collection}`;
   return 'field' in operation ? `${operation.type} · ${operation.field}` : operation.type;
 }
-function proposedValue(operation: ResumeAiOperation) {
+function proposedValue(operation: ResumePatchOperation) {
   if (operation.type === 'set_layout') return operation.layout ? `${operation.layout.structure} / ${operation.layout.paper}` : '恢复内置模板';
   if (operation.type === 'remove_entry') return '删除此条目';
   return 'value' in operation ? text(operation.value) : '—';
 }
-function currentValue(operation: ResumeAiOperation) {
+function currentValue(operation: ResumePatchOperation) {
   if (operation.type === 'set_layout') return store.data.layout ? `${store.data.layout.structure} / ${store.data.layout.paper}` : '内置模板';
   if (operation.type === 'set_basic') return text(store.data.basic[operation.field]);
   if (!('field' in operation)) return '—';

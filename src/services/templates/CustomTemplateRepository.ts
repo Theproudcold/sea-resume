@@ -1,4 +1,4 @@
-import type { CustomResumeTemplate } from '@/types/custom-template';
+import type { ResumeSnapshot } from '@/types/custom-template';
 import type { ResumeData } from '@/types/resume';
 import {
   CUSTOM_TEMPLATE_LIMIT,
@@ -8,9 +8,9 @@ import {
 
 const STORAGE_KEY = 'sea-resume_custom-templates';
 
-function isStoredTemplate(value: unknown): value is CustomResumeTemplate {
+function isStoredTemplate(value: unknown): value is ResumeSnapshot {
   if (!value || typeof value !== 'object') return false;
-  const record = value as Partial<CustomResumeTemplate>;
+  const record = value as Partial<ResumeSnapshot>;
   const snapshot = record.snapshot as Partial<ResumeData> | undefined;
   return typeof record.id === 'string'
     && record.id.length > 0
@@ -24,7 +24,7 @@ function isStoredTemplate(value: unknown): value is CustomResumeTemplate {
     && typeof snapshot.templateId === 'string';
 }
 
-function normalizeStored(template: CustomResumeTemplate): CustomResumeTemplate {
+function normalizeStored(template: ResumeSnapshot): ResumeSnapshot {
   return {
     ...template,
     description: typeof template.description === 'string' ? template.description : '',
@@ -33,7 +33,7 @@ function normalizeStored(template: CustomResumeTemplate): CustomResumeTemplate {
   };
 }
 
-function readStoredTemplates(): CustomResumeTemplate[] {
+function readStoredTemplates(): ResumeSnapshot[] {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return [];
   let parsed: unknown;
@@ -48,11 +48,11 @@ function readStoredTemplates(): CustomResumeTemplate[] {
   return parsed.map(normalizeStored).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function listCustomTemplates(): CustomResumeTemplate[] {
+export function listResumeSnapshots(): ResumeSnapshot[] {
   return readStoredTemplates();
 }
 
-function persist(templates: CustomResumeTemplate[]): void {
+function persist(templates: ResumeSnapshot[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
   } catch (error) {
@@ -63,8 +63,8 @@ function persist(templates: CustomResumeTemplate[]): void {
   }
 }
 
-export function saveCustomTemplate(template: CustomResumeTemplate): CustomResumeTemplate[] {
-  const existing = listCustomTemplates();
+export function saveResumeSnapshot(template: ResumeSnapshot): ResumeSnapshot[] {
+  const existing = listResumeSnapshots();
   if (existing.length >= CUSTOM_TEMPLATE_LIMIT) {
     throw new Error(`最多保存 ${CUSTOM_TEMPLATE_LIMIT} 个自定义模板。请先删除不再使用的模板。`);
   }
@@ -77,8 +77,8 @@ export function saveCustomTemplate(template: CustomResumeTemplate): CustomResume
   return next.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function renameCustomTemplate(id: string, name: string, now = Date.now()): CustomResumeTemplate[] {
-  const existing = listCustomTemplates();
+export function renameResumeSnapshot(id: string, name: string, now = Date.now()): ResumeSnapshot[] {
+  const existing = listResumeSnapshots();
   const index = existing.findIndex((item) => item.id === id);
   if (index < 0) {
     throw new Error('找不到这个自定义模板。');
@@ -98,8 +98,8 @@ export function renameCustomTemplate(id: string, name: string, now = Date.now())
   return next.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function deleteCustomTemplate(id: string): CustomResumeTemplate[] {
-  const existing = listCustomTemplates();
+export function deleteResumeSnapshot(id: string): ResumeSnapshot[] {
+  const existing = listResumeSnapshots();
   if (!existing.some((item) => item.id === id)) {
     throw new Error('找不到这个自定义模板。');
   }

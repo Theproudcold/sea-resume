@@ -1,5 +1,6 @@
 import type { Content } from 'pdfmake/interfaces';
 import type { CustomBlock, CustomItem, ResumeData } from '@/types/resume';
+import { orderedSectionIds, PDF_SECTION_TITLE_FALLBACKS, sectionDisplayTitle } from '@/resume/sections';
 import { formatResumeDateRange } from './dateFormat';
 import { richTextToPdfContent } from './richText';
 
@@ -8,14 +9,6 @@ export interface PdfResumeSection {
   title: string;
   content: Content[];
 }
-
-const STANDARD_SECTION_TITLES: Record<string, string> = {
-  experience: '工作经验',
-  education: '教育经历',
-  projects: '项目经历',
-  skills: '专业技能',
-};
-const STANDARD_SECTION_IDS = ['experience', 'projects', 'education', 'skills'];
 
 function isVisible<T extends { visible?: boolean }>(item: T): boolean {
   return item.visible !== false;
@@ -95,17 +88,12 @@ function sectionContent(id: string, data: ResumeData): Content[] {
 }
 
 export function buildResumeSections(data: ResumeData): PdfResumeSection[] {
-  const customOrder = [...data.customBlocks].sort((a, b) => a.order - b.order).map((block) => block.id);
-  const fallbackOrder = [...STANDARD_SECTION_IDS, ...customOrder];
-  const sectionOrder = data.sectionOrder.length ? data.sectionOrder : fallbackOrder;
-  const orderedIds = [...new Set([...sectionOrder, ...fallbackOrder])];
-
-  return orderedIds
+  return orderedSectionIds(data)
     .filter((id) => !data.hiddenSections?.includes(id))
-    .map((id) => {
-      const customBlock = data.customBlocks.find((item) => item.id === id);
-      const title = data.sectionTitles[id] || customBlock?.title || STANDARD_SECTION_TITLES[id] || id;
-      return { id, title, content: sectionContent(id, data) };
-    })
+    .map((id) => ({
+      id,
+      title: sectionDisplayTitle(data, id, PDF_SECTION_TITLE_FALLBACKS),
+      content: sectionContent(id, data),
+    }))
     .filter((section) => section.content.length > 0);
 }
