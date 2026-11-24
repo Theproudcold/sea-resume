@@ -55,7 +55,9 @@ import { computed, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
 import type { ResumeData } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
-import { validateJsonImportFileSize, validateResumeData } from '@/utils/export-json';
+import { resumeHistoryRepository } from '@/services/history/repository';
+import type { ResumeHistoryArchive } from '@/types/history';
+import { MAX_JSON_IMPORT_FILE_SIZE, validateJsonImportFileSize, validateResumeData } from '@/utils/export-json';
 import { useWorkbenchStore } from '@/stores/workbench';
 import { describeError } from '@/utils/globalErrorReporting';
 import {
@@ -97,12 +99,29 @@ async function readAllResumes(): Promise<ResumeData[]> {
   return resumes;
 }
 
+async function readAllHistories(resumes: readonly ResumeData[]): Promise<ResumeHistoryArchive[]> {
+  const histories: ResumeHistoryArchive[] = [];
+  for (const resume of resumes) {
+    try {
+      const archive = await resumeHistoryRepository.exportArchive(resume.id, { limit: 50 });
+      if (archive) histories.push(archive);
+    } catch (error) {
+      console.warn(`读取「${resume.title}」的版本历史失败，备份将继续:`, error);
+    }
+  }
+  return histories;
+}
+
 async function exportAll() {
   if (busy.value) return;
   exporting.value = true;
   errorMessage.value = '';
   try {
-    const json = serializeFullBackup(await readAllResumes());
+    const resumes = await readAllResumes();
+    const json = serializeFullBackup(resumes, await readAllHistories(resumes));
+    if (json.length > MAX_JSON_IMPORT_FILE_SIZE) {
+      throw new Error('备份超过 20 MB 的导入上限。请减少简历数量，或关闭版本历史后再导出。');
+    }
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -176,12 +195,22 @@ async function restoreAll() {
       restorePlan.value = candidate;
     }
     const plan = restorePlan.value!;
+    const historyByResume = new Map((backup.value.histories ?? []).map((archive) => [archive.resumeId, archive]));
     for (const [index, resume] of plan.resumes.entries()) {
       if (restoredIndexes.value.has(index)) continue;
       if (existingIds.has(resume.id)) {
         throw new Error('当前存储已变化，恢复计划中的 ID 发生冲突；已完成项不会重复写入，请重新校验备份。');
       }
       await storageManager.saveResume(resume);
+      const originalId = plan.items[index]?.id;
+      const archive = originalId ? historyByResume.get(originalId) : undefined;
+      if (archive) {
+        try {
+          await resumeHistoryRepository.importArchive(archive, resume.id);
+        } catch (error) {
+          console.warn(`恢复「${resume.title}」的版本历史失败，简历正文已恢复:`, error);
+        }
+      }
       written += 1;
       existingIds.add(resume.id);
       restoredIndexes.value = new Set([...restoredIndexes.value, index]);
