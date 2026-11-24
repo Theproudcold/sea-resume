@@ -124,7 +124,16 @@ A4 是定尺纸张、预览是连续长图，等分必然把正好压线的文�
 
 版式只接受枚举、`#RRGGBB` 和有界数字。应用内快捷 AI 与外部 AI 都用 `set_layout` 修改它，并拿到当前配方或内置种子作为完整底稿；非法配方在解析时拒绝。应用后，配方里的字号、边距和强调色写回 `theme`。外部 AI 仍不能用 `set_template` 或 `reorder_sections`。
 
-### 13. 本地目录授权只能在用户手势里申请
+### 13. 外部 MCP 的「已启动」不等于「已连接」
+
+`startExternalAiBridge` 返回时，页面只是加载完同源宿主和上游 embed，状态是 `waiting`。
+`connected` 只来自上游 widget 在 `hello/accepted` 后发出的 `sea-resume.relay` 消息；
+连接关闭或进入两分钟一次的休眠探测时是 `reconnecting`。宿主页只接受自己那个隐藏 frame、
+且来源等于本站的消息。停止桥接必须同时拆掉 frame 和这条监听，不能让旧连接继续改新会话的状态。
+
+MCP 连接挂在简历主页，离开页面后仍保持，直到用户停止。`sea_resume_list`、`get`、`set`、`create`、`delete` 操作当前存储里的全部简历。正在编辑的简历走 `importData`，其余直接 `saveResume` 并更新列表。删除正在编辑的简历时先 `discardOpenResume`，阻止自动保存把它写回。文件交换仍使用草稿和人工确认。
+
+### 14. 本地目录授权只能在用户手势里申请
 
 `reauthorizeFileSystem` / `showDirectoryPicker` 必须在点击回调的同步路径中调用，
 否则浏览器不弹授权框。不要把它包装进 `setTimeout` 或 `await` 之后的逻辑。

@@ -29,7 +29,7 @@ JSON 模式不兼容时关闭配置中的 JSON 模式，输出仍会严格校验
 ## 外部 Agent：文件交换（无需 MCP）
 
 1. 编辑器「更多 → 外部 AI · Codex / Claude Code」。隐私打码模式下禁用。
-2. 检查正文中的敏感内容，勾选同意并授权当前简历。授权30分钟，仅本页面会话有效。
+2. 下载工作区即授权当前简历 30 分钟。文件导入始终在网页确认后保存，和 MCP 的直接写回不是同一条路径。
 3. 下载、解压 AI 工作区，在该目录运行 CLI。
 4. 让 Agent 读取 `context/resume.json`、`AGENTS.md` / `CLAUDE.md`，在 `proposals/` 生成 JSON 草稿。
 5. 保持面板打开，导入草稿、核对差异、确认保存。成功后可用编辑器撤销恢复。
@@ -49,33 +49,38 @@ Codex CLI / Claude Code
 站点托管的单文件 relay（构建时打包，依赖内联）
           │ ws://127.0.0.1:9333
           ▼
-网页中的受控业务工具 → 待审草稿 → 人工确认 → Resume Store → 当前存储适配器
+网页中的两个工具 → 直接读写当前简历 → Resume Store → 当前存储适配器
 ```
 
 LocalStorage 和本地文件夹存储均可使用，因为业务工具在页面内调用现有 Store。页面必须保持打开。无需浏览器扩展、浏览器调试端口或云端中转。
 
 ### 接入：一句话
 
-1. 在面板点「启用 MCP 桥接」，保持面板打开。
+1. 在简历主页顶栏点「外部 AI」，再点「启用 MCP 桥接」。关闭对话框或离开主页后连接仍保持，只有点「停止 MCP 桥接」才断开。
 2. 复制面板给出的一行命令到终端执行；或复制「给 AI 的一句话」直接粘给 Codex CLI / Claude Code，由它自己下载 `relay.mjs` 并注册 MCP。
 3. 按 CLI 提示重新加载 MCP，再让 Agent 使用下列业务工具。命令形如：
 
 ```sh
-mkdir -p "$HOME/.sea-resume-ai-relay" && curl -fsSL '<站点>/ai-relay/relay.mjs' -o "$HOME/.sea-resume-ai-relay/relay.mjs" && codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" --host 127.0.0.1 --widget-origin <站点来源> --max-payload 500000
+mkdir -p "$HOME/.sea-resume-ai-relay" && curl -fsSL '<站点>/ai-relay/relay.mjs' -o "$HOME/.sea-resume-ai-relay/relay.mjs" && codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" --host 127.0.0.1 --widget-origin <站点来源> --max-payload 2000000
 ```
 
 Windows 使用面板生成的 PowerShell 版本。其他 MCP 客户端使用面板 JSON 配置，需要 `relay.mjs` 的真实绝对路径（JSON 不展开 `~`）。不需要解压、不需要 `npm ci`，也不需要再次输入 CLI 的 API Key。
 
 | 工具 | 作用 |
 | --- | --- |
-| `sea_resume_get_context` | 当前授权正文、基线版本与协议 |
-| `sea_resume_get_edit_schema` | 操作字段、格式及限制 |
-| `sea_resume_propose_changes` | 接收 `{ proposal: {...} }`，立即返回 pending 和 ID |
-| `sea_resume_get_proposal_status` | 查询 pending / applying / applied / rejected / conflict |
+| `sea_resume_list` | 列出当前存储里的全部简历，返回 id、名称、模板和更新时间 |
+| `sea_resume_get` | 按 id 读取一份完整简历，包括联系方式、头像、隐藏章节、模板和主题 |
+| `sea_resume_set` | 按原 id 整份写回并立即保存。缺主要字段会被拒绝 |
+| `sea_resume_create` | 用一份完整简历新建，id 由网页分配 |
+| `sea_resume_delete` | 按 id 删除。若这份简历正在编辑器中打开，编辑器会离开它，且不会再自动写回 |
 
-上游 relay 还提供来源、工具列表、工具转发及打开页面等管理工具；Sea Resume 自身不提供保存、批准、删除、任意文件读取或执行脚本的工具。不要授予 Agent 其他浏览器自动化权限后让它代替本人批准。
+简历存在浏览器里，本来就是用户自己的数据，所以不再做二次授权或草稿确认。正在编辑的那份由编辑器保存并保留撤销；其他简历直接写入当前存储，并更新主页列表。单份简历最大 1.5 MB，因此 relay 载荷上限是 2 MB。
 
-“桥接已启动”仅代表网页已加载连接宿主，不保证 CLI、relay 和网络许可已就绪。是否连接可在 CLI 的 MCP 工具列表核对。浏览器可能要求本地网络访问许可；被拒绝、页面关闭或企业策略限制时使用文件交换。
+文件交换仍是另一条路：下载的上下文只有可见正文，导入的 JSON 仍在面板里确认后保存。
+
+上游 relay 还提供来源、工具列表和工具转发。这两个业务工具不读取电脑上的任意文件，也不执行命令。
+
+面板在连接宿主加载完成后显示「尚未连接本机 relay」。只有上游 widget 完成本机握手后才显示「本机 relay 已连接」；relay 退出或进入休眠重试时显示「正在重试连接本机 relay」。CLI 是否已加载这五个工具，仍以 CLI 的 MCP 工具列表为准。浏览器可能要求本地网络访问许可；被拒绝时使用文件交换。
 
 ### 为什么打成单文件，而不是裸 npx
 
@@ -87,7 +92,7 @@ Windows 使用面板生成的 PowerShell 版本。其他 MCP 客户端使用面�
 
 ```sh
 npm ci --prefix tools/ai-relay --ignore-scripts
-node tools/ai-relay/start.mjs --host 127.0.0.1 --widget-origin http://localhost:3000 --max-payload 500000
+node tools/ai-relay/start.mjs --host 127.0.0.1 --widget-origin http://localhost:3000 --max-payload 2000000
 ```
 
 上述命令手动启动时占用终端；常规使用应让 MCP 客户端启动，并使用页面显示的真实来源（包含端口）。
@@ -118,6 +123,8 @@ node tools/ai-relay/start.mjs --host 127.0.0.1 --widget-origin http://localhost:
 ## 静态部署和信任边界
 
 `build/relayAssets.ts` 在开发／构建时从固定依赖生成 `ai-relay/`：host、embed、widget、上游许可证、单文件 `relay.mjs` 和启动包 ZIP。`build/relayBundle.ts` 用 rolldown 把上游 CLI 与依赖内联成该单文件，由 Vite 输出到静态资源，支持 `VITE_BASE_PATH` 子路径，不动态执行第三方 CDN 代码。构建仍只输出静态资源。
+
+`build/relayWidget.ts` 只在固定的 6.0.3 widget 中插入三处 `postMessage`：握手成功、连接关闭、进入休眠重试。宿主页校验消息来自自己的隐藏 frame 和本站来源后更新面板；停止桥接即移除监听。插入点不匹配时构建失败，不静默退回旧包。协议、重连和工具调用仍由上游实现。
 
 如部署额外 CSP，需要评估上游 blob iframe、内联 widget 脚本和回环 WebSocket 的许可：例如 frame-src 的本站/blob、connect-src 的本站和所用回环地址；严格策略可能阻止此功能。不要直接为整个站点放开不必要的 script-src。无法安全放行时关闭 MCP、使用文件交换。
 

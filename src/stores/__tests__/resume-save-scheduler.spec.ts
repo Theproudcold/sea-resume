@@ -28,6 +28,15 @@ describe('bounded automatic save scheduler', () => {
     expect(save).toHaveBeenCalledTimes(1);
   });
 
+  it('does not write a resume back after the library removed it', async () => {
+    const store = useResumeStore();
+    const save = vi.spyOn(storageManager, 'save').mockResolvedValue();
+    store.discardOpenResume();
+    store.updateBasic({ name: '复活' });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('persists continuous input at the two-second bound', async () => {
     const store = useResumeStore();
     const save = vi.spyOn(storageManager, 'save').mockResolvedValue();
