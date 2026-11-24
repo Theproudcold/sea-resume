@@ -3,6 +3,7 @@ import type { AiProviderConfig, OptimizationAnalysis, OptimizationFact, Optimiza
 import { requestAiJson, emptyAiUsage, type AiRequestOptions } from './transport';
 import { buildResumeContext, contextSources, contextItemIds, type AiResumeContext } from './resumeContext';
 import { aiRecord, aiString, aiList, aiStrings, aiEnum, aiReferences } from './aiOutputValidation';
+import { validateRewrittenLine, validateRewrittenList, type FactGuardIssue } from '@/utils/aiFactGuard';
 import { applyResumeAiOperations } from './resumeTools';
 import { generateId } from '@/utils/helpers';
 
@@ -82,6 +83,35 @@ export function parseOptimizationOperation(input: unknown, run: ResumeOptimizati
   if (!Object.prototype.hasOwnProperty.call(run.baseline, key) || !Object.prototype.hasOwnProperty.call(contextSources(run.context), key)) throw new Error('只能改写已有可见的白名单字段，不能新增条目或修改组织、日期、联系方式。');
   return operation;
 }
+/**
+ * 对一条建议执行确定性事实校验。
+ *
+ * 判定口径：
+ * - 用模型给出的基线原文（before）与改写值比较。
+ * - 用户在本次运行里确认过的补充事实视为合法来源，其中的数字不算编造。
+ * - run.options 里用户自己填的岗位要求与表达样例也是用户提供的文本，并入合法来源。
+ *
+ * 不抛错：校验失败只把建议标成 reject，让用户看到具体原因，
+ * 同时不影响同批次其它建议。
+ */
+function guardSuggestion(operation: OptimizationOperation, before: string | string[], run: ResumeOptimizationRun): FactGuardIssue[] {
+  const allowedTexts = [
+    ...(run.facts ?? []).map((fact) => fact.text),
+    run.options?.jd ?? '',
+    run.options?.personalSample ?? '',
+  ];
+  // 用户在本次运行里写下的岗位要求与表达样例，就是「本人明确表达意图」的文本来源。
+  const options = { confirmedFacts: allowedTexts, userText: `${run.options?.jd ?? ''}\n${run.options?.personalSample ?? ''}` };
+  const result = Array.isArray(before) || Array.isArray(operation.value)
+    ? validateRewrittenList(
+      Array.isArray(before) ? before : [String(before)],
+      Array.isArray(operation.value) ? operation.value.map(String) : [String(operation.value)],
+      options,
+    )
+    : validateRewrittenLine(String(before), String(operation.value), options);
+  return result.issues;
+}
+
 export function parseOptimizationSuggestions(input: unknown, run: ResumeOptimizationRun): ResumeSuggestion[] {
   const value = aiRecord(input);
   const suggestions = aiList(value.suggestions, 40).map(entry => {
@@ -91,7 +121,24 @@ export function parseOptimizationSuggestions(input: unknown, run: ResumeOptimiza
     if (!sourceRefs.length) throw new Error('每条建议必须引用已有原文或已确认事实。');
     const target = operation.type === 'set_basic' ? 'basic' : operation.id;
     if (sourceRefs.some(ref => ref.startsWith('fact.') && run.facts.find(fact => `fact.${fact.id}` === ref)?.targetId !== target)) throw new Error('补充事实不能写入其他条目。');
-    return { id: identifier(suggestion.id), operation, before: clone(run.baseline[operationKey(operation)]!), reason: aiString(suggestion.reason, 2000), requirement: aiString(suggestion.requirement, 1000), sourceRefs, review: 'unreviewed' as const, reviewReason: '', selected: false, confirmed: false, rejected: false };
+    const before = clone(run.baseline[operationKey(operation)]!);
+    const guard = guardSuggestion(operation, before, run);
+    const blocked = guard.length > 0;
+    return {
+      id: identifier(suggestion.id),
+      operation,
+      before,
+      reason: aiString(suggestion.reason, 2000),
+      requirement: aiString(suggestion.requirement, 1000),
+      sourceRefs,
+      // 未通过确定性校验的建议直接判 reject：它本来就不能应用，同时把原因留给用户核对。
+      review: blocked ? 'reject' as const : 'unreviewed' as const,
+      reviewReason: blocked ? guard.map((issue) => issue.message).join(' ') : '',
+      selected: false,
+      confirmed: false,
+      rejected: false,
+      ...(blocked ? { guard } : {}),
+    };
   });
   if (new Set(suggestions.map(s => s.id)).size !== suggestions.length || new Set(suggestions.map(s => operationKey(s.operation))).size !== suggestions.length) throw new Error('建议 ID 或目标字段重复。');
   return suggestions;
@@ -103,7 +150,12 @@ export function parseOptimizationReview(input: unknown, run: ResumeOptimizationR
     return { id: identifier(review.id), status: aiEnum(review.status, ['pass', 'confirm', 'reject'] as const), reason: aiString(review.reason, 2000) };
   });
   if (entries.length !== run.suggestions.length || new Set(entries.map(e => e.id)).size !== entries.length || entries.some(e => !run.suggestions.some(s => s.id === e.id))) throw new Error('审查必须逐条覆盖所有建议，不得新增或遗漏。');
-  return run.suggestions.map(suggestion => { const review = entries.find(e => e.id === suggestion.id)!; return { ...suggestion, review: review.status, reviewReason: review.reason, selected: false, confirmed: false }; });
+  return run.suggestions.map(suggestion => {
+    const review = entries.find(e => e.id === suggestion.id)!;
+    // 确定性校验的结果优先于模型审查：模型把一条被拦下的建议判成 pass 也不能放行。
+    if (suggestion.guard?.length) return { ...suggestion, reviewReason: review.reason, selected: false, confirmed: false };
+    return { ...suggestion, review: review.status, reviewReason: review.reason, selected: false, confirmed: false };
+  });
 }
 const guard = [
   '使用中文。只返回 JSON，不要 Markdown 代码块，不输出思维过程。',
@@ -206,7 +258,12 @@ export function restoreOptimizationRun(input: ResumeOptimizationRun): ResumeOpti
     return [id, { text: aiString(answer.text, 3000), confirmed: answer.confirmed === true }];
   }));
   const originals = run.suggestions;
-  run.suggestions = parseOptimizationSuggestions({ suggestions: originals }, run).map((suggestion, index) => ({ ...suggestion, review: aiEnum(originals[index]!.review, ['unreviewed', 'pass', 'confirm', 'reject']), reviewReason: aiString(originals[index]!.reviewReason, 2000), rejected: originals[index]!.rejected === true }));
+  run.suggestions = parseOptimizationSuggestions({ suggestions: originals }, run).map((suggestion, index) => {
+    const stored = originals[index]!;
+    // 存档里的 review 是当时模型自审的结论。确定性校验拦下的建议不能因为存档写着 pass 就恢复成可应用。
+    if (suggestion.guard?.length) return { ...suggestion, reviewReason: suggestion.reviewReason || aiString(stored.reviewReason, 2000), rejected: stored.rejected === true };
+    return { ...suggestion, review: aiEnum(stored.review, ['unreviewed', 'pass', 'confirm', 'reject']), reviewReason: aiString(stored.reviewReason, 2000), rejected: stored.rejected === true };
+  });
   if (['analysis', 'rewrite', 'review'].includes(run.stage)) { run.failedStep = run.stage as 'analysis' | 'rewrite' | 'review'; run.stage = 'cancelled'; }
   run.provider = { baseUrl: aiString(run.provider.baseUrl, 2048), model: aiString(run.provider.model, 200) };
   return run;
