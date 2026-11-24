@@ -57,14 +57,14 @@ LocalStorage 和本地文件夹存储均可使用，因为业务工具在页面�
 ### 接入：一句话
 
 1. 在简历主页顶栏点「外部 AI」，再点「启用 MCP 桥接」。关闭对话框或离开主页后连接仍保持，只有点「停止 MCP 桥接」才断开。
-2. 在面板选择客户端，复制命令到终端执行；或复制接入指令直接粘给该 Agent，由它自己下载 `relay.mjs` 并注册 MCP。Codex、Claude Code、Pi、OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI 走各自的 `mcp add`。ZCode、DeepSeek Harness、Crush、Goose 由同一条命令写入它们的配置文件，重复执行只更新 `sea-resume`。
+2. 在面板选择客户端。Codex、Claude Code、Pi、OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI 复制一条终端命令，下载 `relay.mjs` 并执行各自的 `mcp add`。ZCode、DeepSeek Harness、Crush、Goose 的命令会下载文件，并把填好绝对路径的配置打印到终端；把这段输出合并进面板标出的文件，已有 `sea-resume` 时只替换这一项。也可以把接入指令粘给该 Agent，由它自己完成。
 3. 按面板里该客户端的说明重新加载 MCP，再让 Agent 使用下列业务工具。Codex 的命令形如：
 
 ```sh
 mkdir -p "$HOME/.sea-resume-ai-relay" && curl -fsSL '<站点>/ai-relay/relay.mjs' -o "$HOME/.sea-resume-ai-relay/relay.mjs" && codex mcp add sea-resume -- node "$HOME/.sea-resume-ai-relay/relay.mjs" --host 127.0.0.1 --widget-origin <站点来源> --max-payload 2000000
 ```
 
-Windows 使用面板生成的 PowerShell 版本。DeepSeek Harness 会清洗子进程的 PATH，所以写入的是 Node 的绝对路径；ZCode 的协议版本写成 `auto`。不需要解压、不需要 `npm ci`，也不需要再次输入 CLI 的 API Key。Gemini CLI 注册到用户级配置，不写进当前项目目录。
+Windows 使用面板生成的 PowerShell 版本。这些客户端按字面传递参数，所以打印出的配置使用家目录下的绝对路径，而不是 `$HOME`。DeepSeek Harness 会清空 PATH，打印出的 `command` 是 Node 的绝对路径。ZCode 的协议版本写成 `auto`。命令只打印配置，不改这些程序自己的文件。不需要解压、不需要 `npm ci`，也不需要再次输入 CLI 的 API Key。Gemini CLI 注册到用户级配置，不写进当前项目目录。
 
 | 工具 | 作用 |
 | --- | --- |

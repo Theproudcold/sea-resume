@@ -46,7 +46,9 @@ describe('主页 MCP 连接', () => {
     expect(wrapper.text()).toContain('Pi');
     expect(wrapper.text()).toContain('ZCode');
     expect(wrapper.text()).toContain('DeepSeek Harness');
+    expect(wrapper.findAll('pre')).toHaveLength(1);
     expect(wrapper.find('pre').text()).toContain(`${location.origin}${baseUrl}ai-relay/relay.mjs`);
+    expect(wrapper.text()).not.toContain('合并进');
     await button('启用 MCP 桥接').trigger('click');
     await flushPromises();
     expect(wrapper.text()).toContain('尚未连接本机 relay');

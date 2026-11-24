@@ -84,7 +84,7 @@ Sea Resume 基于 Vue 3 与 TypeScript 构建，支持管理多份简历、按�
 
 ### 外部 Agent 与本地 AI
 
-编辑器 **更多 → 用文件交给外部 AI** 下载脱敏工作区并导入 JSON 草稿，确认后才保存。简历主页 **外部 AI** 的 MCP 桥接直接读写简历；面板为 Codex CLI、Claude Code、Pi、ZCode、DeepSeek Harness，以及 OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI、Crush、Goose 生成接入命令。网站保持纯前端，relay 由站点托管；不使用 MCP 时无需安装。
+编辑器 **更多 → 用文件交给外部 AI** 下载脱敏工作区并导入 JSON 草稿，确认后才保存。简历主页 **外部 AI** 的 MCP 桥接直接读写简历；面板为 Codex CLI、Claude Code、Pi、ZCode、DeepSeek Harness，以及 OpenCode、Gemini CLI、Qwen Code、Amp、Copilot CLI、Crush、Goose 生成接入命令，没有 `mcp add` 的客户端改为一段可粘贴的配置。网站保持纯前端，relay 由站点托管；不使用 MCP 时无需安装。
 
 配置、协议、安全边界和开源方案取舍见 [本地模型与外部 AI 接入](docs/local-and-external-ai.md)。
 

@@ -2,6 +2,12 @@
 
 本项目遵循[语义化版本](https://semver.org/lang/zh-CN/)。版本号与发版 tag 一一对应，规则的完整说明见 [CONTRIBUTING.md](CONTRIBUTING.md#版本与发版)。
 
+## [未发布]
+
+### 变更
+
+- **外部 AI**：ZCode、DeepSeek Harness、Crush 和 Goose 的接入命令下载 `relay.mjs` 后，把填好绝对路径的配置打印到终端。面板标出要合并的文件，命令不改这些程序自己的配置。
+
 ## [1.3.0] - 2026-11-24
 
 ### 新增

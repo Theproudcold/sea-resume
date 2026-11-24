@@ -1,6 +1,6 @@
 # Sea Resume 可选 MCP 启动包（离线／源码安装）
 
-常规接入不需要这个目录：网站构建时会用 rolldown 把 `@mcp-b/webmcp-local-relay@6.0.3` 连同依赖打成单文件 `ai-relay/relay.mjs`，面板给出一行命令或一句提示词即可接入。此目录保留两行 ESM 启动器与锁文件，供离线、审计或从源码运行的场景使用。需要 Node.js >=22.13。
+常规接入不需要这个目录：网站构建时会用 rolldown 把 `@mcp-b/webmcp-local-relay@6.0.3` 连同依赖打成单文件 `ai-relay/relay.mjs`，面板给出一行命令、一小段配置，或一句提示词即可接入。此目录保留两行 ESM 启动器与锁文件，供离线、审计或从源码运行的场景使用。需要 Node.js >=22.13。
 
 1. 在此目录运行 `npm ci --ignore-scripts`。
 2. 在简历主页打开「外部 AI」，选择客户端并复制接入命令。

@@ -22,6 +22,7 @@
           <el-radio-button value="powershell">Windows</el-radio-button>
         </el-radio-group>
       </div>
+      <p v-if="configTarget">运行后，把终端打印的配置合并进 {{ configTarget }}</p>
       <p v-if="clientNote">{{ clientNote }}</p>
       <pre class="mcp-command" aria-label="接入命令" tabindex="0">{{ setupCommand }}</pre>
       <p v-if="linkState === 'waiting'">页面已就绪，但尚未连接本机 relay。请先运行上面的命令，并允许浏览器访问本地网络。</p>
@@ -42,7 +43,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { ElMessage } from 'element-plus';
-import { relayAgentPrompt, relayClients, relaySetupCommand, type RelayClient, type RelayShell } from '@/services/ai/externalAiBridge';
+import { relayAgentPrompt, relayClients, relayConfigTarget, relaySetupCommand, type RelayClient, type RelayShell } from '@/services/ai/externalAiBridge';
 import { useMcpBridge } from '@/services/ai/useMcpBridge';
 import HarnessIcon from './HarnessIcon.vue';
 
@@ -59,6 +60,7 @@ const shell = ref<RelayShell>('posix');
 const origin = location.origin;
 const baseUrl = import.meta.env.BASE_URL;
 const setupCommand = computed(() => relaySetupCommand(client.value, origin, baseUrl, shell.value));
+const configTarget = computed(() => relayConfigTarget(client.value, shell.value));
 const agentPrompt = computed(() => relayAgentPrompt(client.value, origin, baseUrl, shell.value));
 const selectedClient = computed(() => relayClients.find((item) => item.id === client.value));
 const clientNote = computed(() => selectedClient.value?.note ?? '');
