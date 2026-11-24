@@ -1,5 +1,5 @@
 import { strToU8, zipSync } from 'fflate';
-import { MAX_PROPOSAL_BYTES, parseChangeProposal } from './changeProposal';
+import { MAX_PROPOSAL_BYTES, parseExternalProposal } from './externalProposal';
 import type { ExternalAiSession } from './ExternalAiSession';
 
 const encode = (text: string) => new Uint8Array(strToU8(text));
@@ -17,7 +17,7 @@ export async function createExternalContextArchive(session: ExternalAiSession): 
 }
 export async function readExternalProposal(file: File) {
   if (file.size > MAX_PROPOSAL_BYTES) throw new Error('修改草稿过大，最大 250 KB。');
-  return parseChangeProposal(await file.text());
+  return parseExternalProposal(await file.text());
 }
 export function downloadContextArchive(bytes: Uint8Array): void {
   const url = URL.createObjectURL(new Blob([Uint8Array.from(bytes).buffer], { type: 'application/zip' }));

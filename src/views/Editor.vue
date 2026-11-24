@@ -190,7 +190,7 @@
         :default-name="`${data.title || '我的简历'}版式`"
         :saving="savingTemplate"
         @update:visible="showSaveLayout = $event"
-        @save="saveCurrentLayout"
+        @save="saveCurrentRecipe"
       />
       <el-dialog v-model="showShortcutHelp" title="编辑快捷键" width="var(--ui-dialog-width-sm)" align-center>
         <ul class="shortcut-list">
@@ -227,10 +227,10 @@ import EditorPanel from '@/components/editor/EditorPanel.vue';
 import PreviewPanel from '@/components/preview/PreviewPanel.vue';
 import ResumeCanvas from '@/components/preview/ResumeCanvas.vue';
 import { previewPageMetricsKey } from '@/components/preview/previewPageMetrics';
-import { useEditorLayout } from '@/composables/useEditorLayout';
-import { EDITOR_WIDTH_MIN } from '@/utils/editorLayout';
+import { useEditorChrome } from '@/composables/useEditorChrome';
+import { EDITOR_WIDTH_MIN } from '@/utils/editorChrome';
 import type { ResumeData } from '@/types/resume';
-import type { ResumeChangeProposal } from '@/services/ai/changeProposal';
+import type { EditProposal } from '@/services/ai/externalProposal';
 import { lazyFeature } from '@/utils/lazyFeature';
 const AiAssistantPanel = defineAsyncComponent(() => import('@/components/editor/AiAssistantPanel.vue'));
 const AiProviderSettingsPanel = lazyFeature(() => import('@/components/workbench/AiProviderSettingsPanel.vue'));
@@ -272,7 +272,7 @@ const {
   resetLayout,
   setPreviewVisible,
   observeContainer,
-} = useEditorLayout();
+} = useEditorChrome();
 const editorContainerRef = ref<HTMLElement | null>(null);
 const sidebarVisible = computed(() => paneVisible('sidebar'));
 const editorVisible = computed(() => paneVisible('editor'));
@@ -456,7 +456,7 @@ const goToTemplates = () => {
   router.push({ path: '/templates', query: { resumeId: String(route.params.id) } });
 };
 
-const applyAiChanges = async (proposal: ResumeChangeProposal, done: (saved: boolean) => void) => {
+const applyAiChanges = async (proposal: EditProposal, done: (saved: boolean) => void) => {
   const previous = resumeStore.exportData();
   try {
     await resumeStore.applyChangeProposal(proposal);
@@ -543,7 +543,7 @@ const saveCurrentAsTemplate = async (payload: { name: string; description: strin
   savingTemplate.value = true;
   try {
     await resumeStore.flushSave();
-    templateStore.saveCurrentResumeAsTemplate(data.value, payload);
+    templateStore.saveCurrentAsSnapshot(data.value, payload);
     showSaveTemplate.value = false;
     ElMessage.success('已存为模板，可在模板库的「我的」分类中使用');
   } catch (error) {
@@ -553,12 +553,12 @@ const saveCurrentAsTemplate = async (payload: { name: string; description: strin
   }
 };
 
-const saveCurrentLayout = async (payload: { name: string; description: string }) => {
+const saveCurrentRecipe = async (payload: { name: string; description: string }) => {
   if (savingTemplate.value) return;
   savingTemplate.value = true;
   try {
     await resumeStore.flushSave();
-    templateStore.saveCurrentLayout(data.value, payload);
+    templateStore.saveCurrentRecipe(data.value, payload);
     showSaveLayout.value = false;
     ElMessage.success('已存为版式。套用时只改排版，不替换简历内容。');
   } catch (error) {

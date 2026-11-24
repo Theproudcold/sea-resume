@@ -3,7 +3,7 @@ import type { ResumeMeta, ResumeData } from '@/types/resume';
 import { storageManager, metaFromResume } from '@/services/storage/StorageManager';
 import { generateId } from '@/utils/helpers';
 import { isBuiltinLayoutId } from '@/utils/custom-template';
-import { isLayoutTemplateId, readLayoutRecipe } from '@/utils/layout-template';
+import { isSavedRecipeId, readLayoutRecipe } from '@/utils/layout-template';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 import { createJobResumeVersion, type JobTarget } from '@/utils/resumeVersions';
 import { describeError } from '@/utils/globalErrorReporting';
@@ -155,7 +155,7 @@ export const useWorkbenchStore = defineStore('workbench', {
         ...JSON.parse(JSON.stringify(source)) as ResumeData,
         id,
         title: title.trim() || source.title || '导入的简历',
-        templateId: layout && isLayoutTemplateId(templateId) ? templateId : (isBuiltinLayoutId(templateId) ? templateId : 'modern'),
+        templateId: layout && isSavedRecipeId(templateId) ? templateId : (isBuiltinLayoutId(templateId) ? templateId : 'modern'),
         theme: {
           color: source.theme?.color || '#2563eb',
           fontFamily: source.theme?.fontFamily && source.theme.fontFamily !== 'sans-serif'

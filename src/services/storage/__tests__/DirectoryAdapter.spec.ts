@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { FileSystemAdapter } from '../FileSystemAdapter';
+import { DirectoryAdapter } from '../DirectoryAdapter';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 
 type PermissionStateStub = 'granted' | 'prompt' | 'denied';
@@ -69,17 +69,17 @@ const meta = (id: string, title = 'Test'): ResumeMeta => ({
   id, title, templateId: 'modern', createdAt: 1, updatedAt: 1,
 });
 
-describe('FileSystemAdapter directory integrity', () => {
+describe('DirectoryAdapter directory integrity', () => {
   it('rejects a malformed legacy index instead of treating it as empty', async () => {
     const { directory } = makeDirectory({ 'index.json': '{broken' });
-    const adapter = new FileSystemAdapter(directory);
+    const adapter = new DirectoryAdapter(directory);
 
     await expect(adapter.list()).rejects.toThrow();
   });
 
   it('does not write resume files when the existing index is invalid', async () => {
     const { directory, writes } = makeDirectory({ 'index.json': '{broken' });
-    const adapter = new FileSystemAdapter(directory);
+    const adapter = new DirectoryAdapter(directory);
 
     await expect(adapter.save({ id: 'resume-1' } as ResumeData, meta('resume-1'))).rejects.toThrow();
     expect(writes).not.toHaveBeenCalled();
@@ -87,7 +87,7 @@ describe('FileSystemAdapter directory integrity', () => {
 
   it('rejects a resume file whose embedded ID differs from the requested ID', async () => {
     const { directory } = makeDirectory({ 'resume-requested.json': JSON.stringify({ id: 'other' }) });
-    const adapter = new FileSystemAdapter(directory);
+    const adapter = new DirectoryAdapter(directory);
 
     await expect(adapter.read('requested')).rejects.toThrow('ID 不匹配');
   });
@@ -98,7 +98,7 @@ describe('FileSystemAdapter directory integrity', () => {
       'index.json': JSON.stringify([meta('legacy-1', 'Old title')]),
       'resume-legacy-1.json': JSON.stringify(legacyResume),
     });
-    const adapter = new FileSystemAdapter(directory);
+    const adapter = new DirectoryAdapter(directory);
     await adapter.save({ id: 'legacy-1', title: 'Updated title' } as ResumeData, meta('legacy-1', 'Updated title'));
     const manifestFile = await directory.getFileHandle('manifest.json');
     const manifest = JSON.parse(await (await manifestFile.getFile()).text());
@@ -115,7 +115,7 @@ describe('FileSystemAdapter directory integrity', () => {
       'index.json': JSON.stringify([meta('legacy-delete', 'Keep me')]),
       'resume-legacy-delete.json': JSON.stringify(legacyResume),
     }, new Error('disk busy'));
-    const adapter = new FileSystemAdapter(directory);
+    const adapter = new DirectoryAdapter(directory);
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     await expect(adapter.delete('legacy-delete')).rejects.toThrow('disk busy');
@@ -130,7 +130,7 @@ describe('FileSystemAdapter directory integrity', () => {
       undefined,
       { permission: 'prompt', requestFails: true },
     );
-    const adapter = new FileSystemAdapter(directory);
+    const adapter = new DirectoryAdapter(directory);
 
     await expect(adapter.save({ id: 'resume-1' } as ResumeData, meta('resume-1'))).rejects.toThrow('读写权限已失效');
     expect(writes).not.toHaveBeenCalled();
@@ -142,7 +142,7 @@ describe('FileSystemAdapter directory integrity', () => {
       undefined,
       { permission: 'granted' },
     );
-    const adapter = new FileSystemAdapter(directory);
+    const adapter = new DirectoryAdapter(directory);
 
     await adapter.save({ id: 'resume-1' } as ResumeData, meta('resume-1'));
     expect(writes).toHaveBeenCalledWith('resumes/resume-1.json');
@@ -155,7 +155,7 @@ describe('FileSystemAdapter directory integrity', () => {
       undefined,
       { hangWritePath: 'resumes/resume-stall.json' },
     );
-    const adapter = new FileSystemAdapter(directory);
+    const adapter = new DirectoryAdapter(directory);
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const pending = adapter.save({ id: 'resume-stall' } as ResumeData, meta('resume-stall'));

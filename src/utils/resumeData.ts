@@ -1,8 +1,11 @@
 import type { BasicInfo, ResumeData, ThemeConfig } from '@/types/resume';
+import { withAlignedCustomBlockOrder, DEFAULT_SECTION_ORDER, DEFAULT_SECTION_TITLES } from '@/resume/sections';
 import { generateId } from '@/utils/helpers';
 import { parseAvatarShape } from '@/utils/avatarShape';
 import { RECOMMENDED_FONT_FAMILY } from '@/utils/fonts';
 import { readLayoutRecipe } from '@/utils/layout-template';
+
+export { DEFAULT_SECTION_ORDER, DEFAULT_SECTION_TITLES };
 
 const DEFAULT_BASIC: BasicInfo = {
   name: '',
@@ -12,13 +15,6 @@ const DEFAULT_BASIC: BasicInfo = {
 };
 
 export const DEFAULT_MODULE_MARGINS = { top: 0, bottom: 24, left: 0, right: 0 };
-export const DEFAULT_SECTION_ORDER = ['experience', 'projects', 'education', 'skills'];
-export const DEFAULT_SECTION_TITLES: ResumeData['sectionTitles'] = {
-  experience: '工作经历',
-  projects: '项目经验',
-  education: '教育背景',
-  skills: '技能证书',
-};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -73,6 +69,7 @@ export function createDefaultResumeData(): ResumeData {
  * `theme`、`basic`、`sectionTitles` 等字段；模板直接读取 `data.theme.displayIcons`
  * 会抛出 “Cannot read properties of undefined”。读取存储、导入或迁移时先归一化，
  * 旧数据就能继续渲染，而不需要的字段保持原样。
+ * 新代码从 parseResume(source, 'read') 进入。
  */
 export function normalizeResumeData(source: unknown): ResumeData {
   const defaults = createDefaultResumeData();
@@ -87,7 +84,7 @@ export function normalizeResumeData(source: unknown): ResumeData {
   const titles: Record<string, string> = isRecord(input.sectionTitles) ? input.sectionTitles as Record<string, string> : {};
   const fontFamily = theme.fontFamily;
 
-  return {
+  const resume: ResumeData = {
     ...defaults,
     ...inputWithoutLayout,
     id: asString(input.id, defaults.id),
@@ -133,4 +130,5 @@ export function normalizeResumeData(source: unknown): ResumeData {
     updatedAt: asString(input.updatedAt, defaults.updatedAt),
     ...(layout ? { layout } : {}),
   };
+  return withAlignedCustomBlockOrder(resume);
 }

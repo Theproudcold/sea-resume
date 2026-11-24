@@ -1,3 +1,4 @@
+import { webcrypto } from 'node:crypto';
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElButton } from 'element-plus';
@@ -24,6 +25,7 @@ async function start() {
   await flushPromises();
 }
 beforeEach(() => {
+  vi.stubGlobal('crypto', webcrypto);
   vi.resetAllMocks(); localStorage.clear(); clearAiModelSettings();
   saveAiModelSettings({ presetId: 'custom', baseUrl: 'https://example.test/v1', model: 'mock', profileName: '测试模型' });
   setAiSessionApiKey('session-key');

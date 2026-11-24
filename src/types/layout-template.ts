@@ -57,7 +57,7 @@ export interface LayoutRecipe {
 }
 
 /** 模板库里的一条版式。已套用的简历自带配方，不随这条记录删除而变。 */
-export interface LayoutTemplate {
+export interface SavedRecipe {
   id: string;
   name: string;
   description: string;
@@ -67,7 +67,7 @@ export interface LayoutTemplate {
 }
 
 /** 导出文件。导入总是新 id，kind 不符或版本不是 1 就整份拒绝。 */
-export interface LayoutTemplateFile {
+export interface SavedRecipeFile {
   kind: 'sea-resume-layout';
   schemaVersion: typeof LAYOUT_SCHEMA_VERSION;
   name: string;

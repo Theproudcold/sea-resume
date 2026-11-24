@@ -4,13 +4,13 @@ import { createDefaultResumeData } from '@/utils/resumeData';
 import {
   applyLayoutToResume,
   builtinToRecipe,
-  buildLayoutTemplate,
+  buildSavedRecipe,
   layoutWithVisibleTheme,
-  parseLayoutTemplateFile,
+  parseSavedRecipeFile,
   readLayoutRecipe,
   recipeFromCurrent,
   reorderColumn,
-  serializeLayoutTemplate,
+  serializeSavedRecipe,
   splitSections,
 } from '@/utils/layout-template';
 import { BUILTIN_LAYOUT_IDS } from '@/utils/custom-template';
@@ -67,15 +67,15 @@ describe('layout recipes', () => {
   });
 
   it('rejects a version 2 file outright and round-trips version 1', () => {
-    const template = buildLayoutTemplate(
+    const template = buildSavedRecipe(
       builtinToRecipe('tech', createDefaultResumeData().theme),
       { name: '  深色单栏  ', description: '  技术岗  ' },
       { id: 'layout-1', now: 10 },
     );
-    const file = serializeLayoutTemplate(template);
-    expect(parseLayoutTemplateFile(file)).toMatchObject({ name: '深色单栏', description: '技术岗' });
-    expect(() => parseLayoutTemplateFile({ ...file, schemaVersion: 2 })).toThrow('版本不受支持');
-    expect(() => parseLayoutTemplateFile({ ...file, kind: 'resume' })).toThrow('不是海简历的版式文件');
+    const file = serializeSavedRecipe(template);
+    expect(parseSavedRecipeFile(file)).toMatchObject({ name: '深色单栏', description: '技术岗' });
+    expect(() => parseSavedRecipeFile({ ...file, schemaVersion: 2 })).toThrow('版本不受支持');
+    expect(() => parseSavedRecipeFile({ ...file, kind: 'resume' })).toThrow('不是海简历的版式文件');
   });
 
   it('applies structure and theme without copying body content', () => {
@@ -83,7 +83,7 @@ describe('layout recipes', () => {
     resume.basic.name = '林夏';
     resume.sectionOrder = ['skills', 'experience'];
     resume.hiddenSections = ['education'];
-    const template = buildLayoutTemplate(
+    const template = buildSavedRecipe(
       builtinToRecipe('professional', { ...resume.theme, color: '#243447' }),
       { name: '双栏' },
       { id: 'pro' },

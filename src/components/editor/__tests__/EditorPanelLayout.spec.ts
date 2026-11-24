@@ -3,13 +3,13 @@ import { nextTick } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import EditorPanel from '@/components/editor/EditorPanel.vue';
-import { resetEditorLayoutState, useEditorLayout } from '@/composables/useEditorLayout';
+import { resetEditorChromeState, useEditorChrome } from '@/composables/useEditorChrome';
 import {
   EDITOR_WIDTH_DEFAULT,
   EDITOR_WIDTH_MIN,
   PANEL_SPLITTER_WIDTH,
   SIDEBAR_WIDTH_DEFAULT,
-} from '@/utils/editorLayout';
+} from '@/utils/editorChrome';
 
 vi.mock('@/components/editor/ThemeEditor.vue', () => ({ default: { name: 'ThemeEditor', template: '<div />' } }));
 vi.mock('@/components/editor/BasicInfoEditor.vue', () => ({ default: { name: 'BasicInfoEditor', template: '<div />' } }));
@@ -49,7 +49,7 @@ describe('编辑器三栏宽度与折叠', () => {
   };
 
   beforeEach(() => {
-    resetEditorLayoutState();
+    resetEditorChromeState();
     setActivePinia(createPinia());
   });
 
@@ -77,7 +77,7 @@ describe('编辑器三栏宽度与折叠', () => {
     expect(wrapper!.get('.editor-panel').attributes('style')).toContain(
       `--editor-panel-width: ${PANEL_SPLITTER_WIDTH + EDITOR_WIDTH_DEFAULT}px`,
     );
-    expect(useEditorLayout().preference.value.sidebarCollapsed).toBe(true);
+    expect(useEditorChrome().preference.value.sidebarCollapsed).toBe(true);
   });
 
   it('拖拽分隔条在编辑区容器总宽不变的前提下调整宽度', async () => {
@@ -94,7 +94,7 @@ describe('编辑器三栏宽度与折叠', () => {
 
   it('窗口变窄时自动收起模块导航，变宽后自动恢复', async () => {
     render();
-    const layout = useEditorLayout();
+    const layout = useEditorChrome();
     layout.setContainerWidth(1280);
     await nextTick();
     expect(wrapper!.get('.editor-sidebar').isVisible()).toBe(false);

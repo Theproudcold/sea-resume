@@ -1,11 +1,11 @@
 import type { ResumeData } from '@/types/resume';
-import type { ResumeAiDraft, ResumeAiOperation } from '@/types/ai';
+import type { ResumePatch, ResumePatchOperation } from '@/types/ai';
 import { readLayoutRecipe } from '@/utils/layout-template';
 import { EXTERNAL_LAYOUT_GUIDANCE, layoutEditBasis } from './layoutPrompt';
-import { parseResumeAiDraft, applyResumeAiOperations } from './resumeTools';
+import { parseResumePatch, applyResumePatch } from './resumePatch';
 import { buildResumeContext, type AiResumeContext } from './resumeContext';
 
-export interface ResumeChangeProposal extends ResumeAiDraft {
+export interface EditProposal extends ResumePatch {
   schemaVersion: 1;
   proposalId: string;
   resumeId: string;
@@ -28,7 +28,7 @@ export async function resumeRevision(resume: ResumeData): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return `sha256:${Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('')}`;
 }
-export function parseChangeProposal(input: unknown): ResumeChangeProposal {
+export function parseExternalProposal(input: unknown): EditProposal {
   if (typeof input === 'string') {
     if (new TextEncoder().encode(input).byteLength > MAX_PROPOSAL_BYTES) throw new Error('修改草稿过大。');
     try { input = JSON.parse(input); } catch { throw new Error('修改草稿不是有效 JSON。'); }
@@ -40,17 +40,17 @@ export function parseChangeProposal(input: unknown): ResumeChangeProposal {
   if (typeof value.proposalId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(value.proposalId)) throw new Error('草稿 ID 无效。');
   if (typeof value.resumeId !== 'string' || !value.resumeId || value.resumeId.length > 250) throw new Error('目标简历 ID 无效。');
   if (typeof value.baseRevision !== 'string' || !/^sha256:[a-f0-9]{64}$/.test(value.baseRevision)) throw new Error('草稿缺少有效基线版本。');
-  return { schemaVersion: 1, proposalId: value.proposalId, resumeId: value.resumeId, baseRevision: value.baseRevision, ...parseResumeAiDraft(value) };
+  return { schemaVersion: 1, proposalId: value.proposalId, resumeId: value.resumeId, baseRevision: value.baseRevision, ...parseResumePatch(value) };
 }
-export async function createChangeProposal(resume: ResumeData, draft: ResumeAiDraft): Promise<ResumeChangeProposal> {
-  return parseChangeProposal({ ...draft, schemaVersion: 1, proposalId: crypto.randomUUID(), resumeId: resume.id, baseRevision: await resumeRevision(resume) });
+export async function createExternalProposal(resume: ResumeData, draft: ResumePatch): Promise<EditProposal> {
+  return parseExternalProposal({ ...draft, schemaVersion: 1, proposalId: crypto.randomUUID(), resumeId: resume.id, baseRevision: await resumeRevision(resume) });
 }
-export async function assertProposalBaseline(resume: ResumeData, proposal: ResumeChangeProposal): Promise<void> {
+export async function assertExternalBaseline(resume: ResumeData, proposal: EditProposal): Promise<void> {
   if (resume.id !== proposal.resumeId) throw new Error('草稿不属于当前简历。');
   if (await resumeRevision(resume) !== proposal.baseRevision) throw new Error('简历已发生变化，请重新读取上下文并生成草稿，不能覆盖当前编辑。');
 }
 /** Restrict external edits to the exact visible fields/IDs shared in the context. */
-export function assertExternalOperations(context: AiResumeContext, operations: ResumeAiOperation[]): void {
+export function assertExternalOperations(context: AiResumeContext, operations: ResumePatchOperation[]): void {
   const collections = {
     update_experience: context.experiences, update_project: context.projects,
     update_education: context.education, update_skill: context.skills, update_custom_block: context.customBlocks,
@@ -70,8 +70,8 @@ export function assertExternalOperations(context: AiResumeContext, operations: R
     }
   }
 }
-export function previewProposal(resume: ResumeData, proposal: ResumeChangeProposal): ResumeData {
-  return applyResumeAiOperations(resume, proposal.operations);
+export function previewExternalProposal(resume: ResumeData, proposal: EditProposal): ResumeData {
+  return applyResumePatch(resume, proposal.operations);
 }
 export const EXTERNAL_EDIT_SCHEMA = {
   schemaVersion: 1,

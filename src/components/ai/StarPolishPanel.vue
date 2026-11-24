@@ -51,15 +51,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import type { ResumeData } from '@/types/resume';
-import type { ResumeChangeProposal } from '@/services/ai/changeProposal';
-import { createChangeProposal } from '@/services/ai/changeProposal';
+import type { EditProposal } from '@/services/ai/externalProposal';
+import { createExternalProposal } from '@/services/ai/externalProposal';
 import { getAiSessionApiKey, hasAiSessionApiKey, isAiProviderReady, loadAiModelSettings, toAiProviderConfig } from '@/services/ai/AiSettings';
 import { assertStarPolishCurrent, collectStarPolishTargets, requestStarPolish, type StarPolishDraft, type StarPolishKind } from '@/services/ai/starPolish';
 
 const props = defineProps<{ resume: ResumeData }>();
 const emit = defineEmits<{
   configure: [];
-  apply: [proposal: ResumeChangeProposal, done: (saved: boolean) => void];
+  apply: [proposal: EditProposal, done: (saved: boolean) => void];
 }>();
 const settings = ref(loadAiModelSettings());
 const keyAvailable = ref(hasAiSessionApiKey());
@@ -116,7 +116,7 @@ function apply() {
   try { assertStarPolishCurrent(props.resume, chosen); }
   catch (cause) { error.value = cause instanceof Error ? cause.message : '内容已变化，请重新生成。'; return; }
   applying.value = true;
-  void createChangeProposal(props.resume, { explanation: draft.value.explanation || '按 STAR 法则润色所选内容。', operations: chosen.map((suggestion) => suggestion.operation) }).then((proposal) => {
+  void createExternalProposal(props.resume, { explanation: draft.value.explanation || '按 STAR 法则润色所选内容。', operations: chosen.map((suggestion) => suggestion.operation) }).then((proposal) => {
     emit('apply', proposal, (saved) => {
       applying.value = false;
       if (saved) { draft.value = null; accepted.value = []; selected.value = []; consent.value = false; }

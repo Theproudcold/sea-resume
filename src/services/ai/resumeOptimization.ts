@@ -4,7 +4,7 @@ import { requestAiJson, emptyAiUsage, type AiRequestOptions } from './transport'
 import { buildResumeContext, contextSources, contextItemIds, type AiResumeContext } from './resumeContext';
 import { aiRecord, aiString, aiList, aiStrings, aiEnum, aiReferences } from './aiOutputValidation';
 import { validateRewrittenLine, validateRewrittenList, type FactGuardIssue } from '@/utils/aiFactGuard';
-import { applyResumeAiOperations } from './resumeTools';
+import { applyResumePatch } from './resumePatch';
 import { generateId } from '@/utils/helpers';
 
 const collections = { update_experience: 'experiences', update_project: 'projects', update_education: 'education', update_skill: 'skills', update_custom_block: 'customBlocks' } as const;
@@ -212,7 +212,7 @@ export function applyOptimizationSuggestions(source: ResumeData, run: ResumeOpti
     parseOptimizationSuggestions({ suggestions: [suggestion] }, run);
     return operation;
   });
-  return applyResumeAiOperations(source, operations);
+  return applyResumePatch(source, operations);
 }
 function restoredContext(input: unknown, resumeId: string): AiResumeContext {
   const value = aiRecord(input);

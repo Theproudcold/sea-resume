@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia';
-import type { LayoutRecipe, LayoutTemplate } from '@/types/layout-template';
+import type { LayoutRecipe, SavedRecipe } from '@/types/layout-template';
 import type { ResumeData, BasicInfo, Experience, Education, Skill, CustomBlock, Project, ThemeConfig, CustomItem } from '@/types/resume';
 import { storageManager } from '@/services/storage/StorageManager';
 import { generateId } from '@/utils/helpers';
 import { applyLayoutToResume, readLayoutRecipe } from '@/utils/layout-template';
+import { syncCustomBlockTitle, withAlignedCustomBlockOrder } from '@/resume/sections';
 import { createDefaultResumeData, normalizeResumeData } from '@/utils/resumeData';
 import { cloneResume, rememberResumeSnapshot } from '@/utils/resumeSnapshot';
-import { assertProposalBaseline, parseChangeProposal, previewProposal } from '@/services/ai/changeProposal';
+import { assertExternalBaseline, parseExternalProposal, previewExternalProposal } from '@/services/ai/externalProposal';
 import { describeError } from '@/utils/globalErrorReporting';
 
 const applyingProposals = new WeakSet<object>();
@@ -41,7 +42,7 @@ export const useResumeStore = defineStore('resume', {
   actions: {
     /** Only UI approval calls this action; external tools can never save directly. */
     async applyChangeProposal(input: unknown, assertAuthorized: () => void = () => undefined): Promise<void> {
-      const proposal = parseChangeProposal(input);
+      const proposal = parseExternalProposal(input);
       if (this.appliedProposalIds.includes(proposal.proposalId)) throw new Error('此草稿已应用，不能重复保存。');
       if (applyingProposals.has(this) || this.isLoading) throw new Error('正在处理简历，请稍后重试。');
       applyingProposals.add(this);
@@ -49,12 +50,12 @@ export const useResumeStore = defineStore('resume', {
         assertAuthorized();
         const previous = cloneResume(this.data);
         const generation = this.saveGeneration;
-        await assertProposalBaseline(previous, proposal);
+        await assertExternalBaseline(previous, proposal);
         assertAuthorized();
         if (this.isLoading || this.saveGeneration !== generation || this.data.id !== previous.id || JSON.stringify({ ...this.data, updatedAt: '' }) !== JSON.stringify({ ...previous, updatedAt: '' })) {
           throw new Error('简历已发生变化，请重新检查草稿。');
         }
-        const next = previewProposal(previous, proposal);
+        const next = previewExternalProposal(previous, proposal);
         const past = [...this.historyPast];
         const future = [...this.historyFuture];
         this.historyLastAt = 0;
@@ -92,6 +93,9 @@ export const useResumeStore = defineStore('resume', {
       this.rememberChange();
     },
 
+    // 文本修改走 scheduleSave（500ms 防抖，最迟 2000ms）。
+    // 增删、排序、显隐走 saveImmediately：后台写，可以被更新的写取代。
+    // 离开页面、导出、切换简历走 flushSave：等到这一笔真正落盘。
     saveImmediately() {
       void this.autoSave(true).catch(() => undefined);
     },
@@ -150,13 +154,13 @@ export const useResumeStore = defineStore('resume', {
       this.scheduleSave();
     },
 
-    // 更新模块标题
+    // 更新模块标题。自定义模块的 sectionTitles 只是旧副本，和 customBlocks.title 一起改。
     updateSectionTitle(section: string, title: string) {
       this.rememberChange();
       if (!this.data.sectionTitles) {
         this.data.sectionTitles = createDefaultResumeData().sectionTitles;
       }
-      this.data.sectionTitles[section] = title;
+      syncCustomBlockTitle(this.data, section, title);
       this.scheduleSave();
     },
 
@@ -215,115 +219,80 @@ export const useResumeStore = defineStore('resume', {
       this.scheduleSave();
     },
 
-    // 添加工作经历
+    /**
+     * 经历、教育、技能、项目是同一套列表操作。
+     * 改 visible 立刻写；其余字段走防抖。找不到 id 时什么都不做。
+     */
+    changeEntries(
+      key: 'experiences' | 'education' | 'skills' | 'projects',
+      action:
+        | { op: 'add'; item: object }
+        | { op: 'update'; id: string; updates: object }
+        | { op: 'remove'; id: string }
+        | { op: 'reorder'; items: object[] },
+    ) {
+      const list = this.data[key];
+      if (action.op === 'update') {
+        const index = list.findIndex((item) => item.id === action.id);
+        const current = list[index];
+        if (!current) return;
+        this.rememberChange();
+        list[index] = { ...current, ...action.updates, id: current.id } as typeof current;
+        if ('visible' in action.updates) this.saveImmediately();
+        else this.scheduleSave();
+        return;
+      }
+      this.rememberChange();
+      const next = action.op === 'add'
+        ? [...list, { id: generateId(), ...action.item }]
+        : action.op === 'remove'
+          ? list.filter((item) => item.id !== action.id)
+          : action.items;
+      if (key === 'experiences') this.data.experiences = next as Experience[];
+      else if (key === 'education') this.data.education = next as Education[];
+      else if (key === 'skills') this.data.skills = next as Skill[];
+      else this.data.projects = next as Project[];
+      this.saveImmediately();
+    },
+
     addExperience(exp: Omit<Experience, 'id'>) {
-      this.rememberChange();
-      const newExp: Experience = { id: generateId(), ...exp };
-      this.data.experiences.push(newExp);
-      this.saveImmediately();
+      this.changeEntries('experiences', { op: 'add', item: exp });
     },
-
-    // 更新工作经历
     updateExperience(id: string, updates: Partial<Experience>) {
-      const index = this.data.experiences.findIndex((e) => e.id === id);
-      if (index !== -1) {
-        this.rememberChange();
-        this.data.experiences[index] = { ...this.data.experiences[index], ...updates } as Experience;
-        if ('visible' in updates) this.saveImmediately();
-        else this.scheduleSave();
-      }
+      this.changeEntries('experiences', { op: 'update', id, updates });
     },
-
-    // 删除工作经历
     removeExperience(id: string) {
-      this.rememberChange();
-      this.data.experiences = this.data.experiences.filter((e) => e.id !== id);
-      this.saveImmediately();
+      this.changeEntries('experiences', { op: 'remove', id });
     },
-
-    // 重新排序工作经历
     reorderExperiences(newOrder: Experience[]) {
-      this.rememberChange();
-      this.data.experiences = newOrder;
-      this.saveImmediately();
+      this.changeEntries('experiences', { op: 'reorder', items: newOrder });
     },
-
-    // 添加教育背景
     addEducation(edu: Omit<Education, 'id'>) {
-      this.rememberChange();
-      const newEdu: Education = { id: generateId(), ...edu };
-      this.data.education.push(newEdu);
-      this.saveImmediately();
+      this.changeEntries('education', { op: 'add', item: edu });
     },
-
-    // 更新教育背景
     updateEducation(id: string, updates: Partial<Education>) {
-      const index = this.data.education.findIndex((e) => e.id === id);
-      if (index !== -1) {
-        this.rememberChange();
-        this.data.education[index] = { ...this.data.education[index], ...updates } as Education;
-        if ('visible' in updates) this.saveImmediately();
-        else this.scheduleSave();
-      }
+      this.changeEntries('education', { op: 'update', id, updates });
     },
-
-    // 删除教育背景
     removeEducation(id: string) {
-      this.rememberChange();
-      this.data.education = this.data.education.filter((e) => e.id !== id);
-      this.saveImmediately();
+      this.changeEntries('education', { op: 'remove', id });
     },
-
-    // 添加技能
     addSkill(skill: Omit<Skill, 'id'>) {
-      this.rememberChange();
-      const newSkill: Skill = { id: generateId(), ...skill };
-      this.data.skills.push(newSkill);
-      this.saveImmediately();
+      this.changeEntries('skills', { op: 'add', item: skill });
     },
-
-    // 更新技能
     updateSkill(id: string, updates: Partial<Skill>) {
-      this.rememberChange();
-      const index = this.data.skills.findIndex((s) => s.id === id);
-      if (index !== -1) {
-        this.data.skills[index] = { ...this.data.skills[index], ...updates } as Skill;
-        if ('visible' in updates) this.saveImmediately();
-        else this.scheduleSave();
-      }
+      this.changeEntries('skills', { op: 'update', id, updates });
     },
-
-    // 删除技能
     removeSkill(id: string) {
-      this.rememberChange();
-      this.data.skills = this.data.skills.filter((s) => s.id !== id);
-      this.saveImmediately();
+      this.changeEntries('skills', { op: 'remove', id });
     },
-
-    // 添加项目经验
     addProject(project: Omit<Project, 'id'>) {
-      this.rememberChange();
-      const newProject: Project = { id: generateId(), ...project };
-      this.data.projects.push(newProject);
-      this.saveImmediately();
+      this.changeEntries('projects', { op: 'add', item: project });
     },
-
-    // 更新项目经验
     updateProject(id: string, updates: Partial<Project>) {
-      const index = this.data.projects.findIndex((p) => p.id === id);
-      if (index !== -1) {
-        this.rememberChange();
-        this.data.projects[index] = { ...this.data.projects[index], ...updates } as Project;
-        if ('visible' in updates) this.saveImmediately();
-        else this.scheduleSave();
-      }
+      this.changeEntries('projects', { op: 'update', id, updates });
     },
-
-    // 删除项目经验
     removeProject(id: string) {
-      this.rememberChange();
-      this.data.projects = this.data.projects.filter((p) => p.id !== id);
-      this.saveImmediately();
+      this.changeEntries('projects', { op: 'remove', id });
     },
 
     // 添加自定义模块
@@ -342,6 +311,7 @@ export const useResumeStore = defineStore('resume', {
       if (index !== -1) {
         this.rememberChange();
         this.data.customBlocks[index] = { ...this.data.customBlocks[index], ...updates } as CustomBlock;
+        if (typeof updates.title === 'string') this.data.sectionTitles[id] = updates.title;
         if ('type' in updates) this.saveImmediately();
         else this.scheduleSave();
       }
@@ -417,7 +387,7 @@ export const useResumeStore = defineStore('resume', {
     },
 
     /** 套用模板库里的版式：替换排版和主题，保留正文、顺序、隐藏模块和岗位信息。 */
-    applyLayout(template: LayoutTemplate) {
+    applyLayout(template: SavedRecipe) {
       this.rememberChange();
       const current = this.data;
       const next = applyLayoutToResume(current, template);
@@ -450,6 +420,8 @@ export const useResumeStore = defineStore('resume', {
     updateSectionOrder(newOrder: string[]) {
       this.rememberChange();
       this.data.sectionOrder = newOrder;
+      const aligned = withAlignedCustomBlockOrder(this.data);
+      if (aligned !== this.data) this.data.customBlocks = aligned.customBlocks;
       this.saveImmediately();
     },
 

@@ -1,5 +1,5 @@
 import type { ResumeData } from '@/types/resume';
-import type { ResumeAiDraft, ResumeAiOperation } from '@/types/ai';
+import type { ResumePatch, ResumePatchOperation } from '@/types/ai';
 import { readLayoutRecipe, themeFromRecipe } from '@/utils/layout-template';
 import { markdownToSafeHtml, sanitizeMarkdownUrl } from '@/utils/markdown/markdownSafety';
 
@@ -26,7 +26,7 @@ function safeStringList(value: unknown, field: string): string[] {
 }
 
 /** Parse and enforce the fixed operation allowlist; never evaluates model output. */
-export function parseResumeAiDraft(input: unknown, options?: { allowEmpty?: boolean }): ResumeAiDraft {
+export function parseResumePatch(input: unknown, options?: { allowEmpty?: boolean }): ResumePatch {
   let parsed = input;
   if (typeof parsed === 'string') {
     const stripped = parsed.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
@@ -42,7 +42,7 @@ export function parseResumeAiDraft(input: unknown, options?: { allowEmpty?: bool
     if (!options?.allowEmpty || !explanation.trim()) throw new Error('AI 没有返回可执行的简历修改，或操作数量超出限制。');
     return { explanation, operations: [] };
   }
-  const operations = object.operations.map((entry): ResumeAiOperation => {
+  const operations = object.operations.map((entry): ResumePatchOperation => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new Error('AI 操作格式无效。');
     const operation = entry as Record<string, unknown>;
     const type = operation.type;
@@ -74,15 +74,15 @@ export function parseResumeAiDraft(input: unknown, options?: { allowEmpty?: bool
     if (type !== 'set_basic' && (typeof id !== 'string' || !id || id.length > 120)) throw new Error('AI 操作缺少有效条目 ID。');
     const listField = (type === 'update_experience' && field === 'highlights') || (type === 'update_project' && field === 'techStack') || (type === 'update_skill' && field === 'items');
     const normalizedValue = listField ? safeStringList(operation.value, field) : safeString(operation.value, field);
-    return { type, field, ...(type === 'set_basic' ? {} : { id }), value: normalizedValue } as ResumeAiOperation;
+    return { type, field, ...(type === 'set_basic' ? {} : { id }), value: normalizedValue } as ResumePatchOperation;
   });
   return { explanation: explanation || '请审阅以下修改建议。', operations };
 }
 
 /** Apply validated operations to a copy; failures never partially mutate the live Pinia store. */
-export function applyResumeAiOperations(source: ResumeData, operations: ResumeAiOperation[]): ResumeData {
+export function applyResumePatch(source: ResumeData, operations: ResumePatchOperation[]): ResumeData {
   const resume = JSON.parse(JSON.stringify(source)) as ResumeData;
-  for (const operation of parseResumeAiDraft({ operations }).operations) {
+  for (const operation of parseResumePatch({ operations }).operations) {
     switch (operation.type) {
       case 'set_basic': {
         const value = safeString(operation.value, operation.field);

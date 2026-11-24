@@ -1,9 +1,9 @@
 import type { IStorageAdapter, StorageType, StorageConfig } from '@/types/storage';
 import type { ResumeData, ResumeMeta } from '@/types/resume';
 import { withTimeout } from '@/utils/asyncTimeout';
-import { normalizeResumeData } from '@/utils/resumeData';
+import { parseResume } from '@/resume/parseResume';
 import { LocalStorageAdapter } from './LocalStorageAdapter';
-import { FileSystemAdapter } from './FileSystemAdapter';
+import { DirectoryAdapter } from './DirectoryAdapter';
 
 /** 存储适配器兜底超时：任何写操作都必须让界面拿到结果，不能无限等待。 */
 const ADAPTER_WRITE_TIMEOUT_MS = 25000;
@@ -91,7 +91,7 @@ export class StorageManager {
     mergeExisting = false,
   ): Promise<{ directoryName: string; addedCount: number; conflictCount: number }> {
     const sourceAdapter = this.currentAdapter;
-    const targetAdapter = new FileSystemAdapter(directoryHandle);
+    const targetAdapter = new DirectoryAdapter(directoryHandle);
     await targetAdapter.init();
     if (!targetAdapter.isReady()) throw new Error('所选目录尚未获得读写授权。');
 
@@ -115,7 +115,7 @@ export class StorageManager {
       }
       const resume = await sourceAdapter.read(meta.id);
       if (resume) {
-        await targetAdapter.save(normalizeResumeData(resume), meta);
+        await targetAdapter.save(parseResume(resume, 'read'), meta);
         existingIds.add(meta.id);
         addedCount++;
       }
@@ -138,7 +138,7 @@ export class StorageManager {
         return new LocalStorageAdapter();
 
       case 'file_system':
-        return new FileSystemAdapter(config?.fileSystem?.directoryHandle);
+        return new DirectoryAdapter(config?.fileSystem?.directoryHandle);
 
       default: {
         const unknown: never = type;
@@ -171,7 +171,7 @@ export class StorageManager {
           console.warn(`简历 ${meta.id} 不存在，跳过`);
           continue;
         }
-        await targetAdapter.save(normalizeResumeData(data), meta);
+        await targetAdapter.save(parseResume(data, 'read'), meta);
       } catch (error) {
         console.error(`迁移简历 ${meta.id} 失败:`, error);
         throw error;
@@ -194,7 +194,7 @@ export class StorageManager {
    */
   async read(id: string): Promise<ResumeData | null> {
     const resume = await this.currentAdapter.read(id);
-    return resume ? normalizeResumeData(resume) : null;
+    return resume ? parseResume(resume, 'read') : null;
   }
 
   /**
@@ -236,12 +236,12 @@ export class StorageManager {
    * 必须在用户点击等手势中调用，否则浏览器不会弹出授权框。
    */
   async reauthorizeFileSystem(): Promise<void> {
-    if (this.currentAdapter instanceof FileSystemAdapter) {
+    if (this.currentAdapter instanceof DirectoryAdapter) {
       await this.currentAdapter.reauthorizeSavedDirectory();
       return;
     }
     const cached = this.adapterCache.get('file_system');
-    if (!(cached instanceof FileSystemAdapter)) {
+    if (!(cached instanceof DirectoryAdapter)) {
       throw new Error('本地目录尚未初始化；请在设置中重新选择目录。');
     }
     await cached.reauthorizeSavedDirectory();
@@ -250,10 +250,10 @@ export class StorageManager {
 
   /** 当前缓存中本地目录的名称；未选择时返回占位文本。 */
   getFileSystemDirectoryName(): string {
-    const adapter = this.currentAdapter instanceof FileSystemAdapter
+    const adapter = this.currentAdapter instanceof DirectoryAdapter
       ? this.currentAdapter
       : this.adapterCache.get('file_system');
-    return adapter instanceof FileSystemAdapter ? adapter.getDirectoryName() : '未选择';
+    return adapter instanceof DirectoryAdapter ? adapter.getDirectoryName() : '未选择';
   }
 }
 
