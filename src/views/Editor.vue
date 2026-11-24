@@ -32,6 +32,9 @@
             <div class="editor-toolbar__group" role="group" aria-label="编辑">
               <el-button link :disabled="!canUndo" aria-label="撤销" title="撤销 (Ctrl/⌘+Z)" @click="undoEdit">撤销</el-button>
               <el-button link :disabled="!canRedo" aria-label="重做" title="重做 (Ctrl/⌘+Shift+Z)" @click="redoEdit">重做</el-button>
+              <el-button link class="history-entry" aria-label="版本历史" title="版本历史" @click="showHistory = true">
+                历史<span v-if="historyStore.dirty" class="history-dirty-dot" aria-hidden="true" />
+              </el-button>
             </div>
             <div class="editor-toolbar__group" role="group" aria-label="检查">
               <el-button v-if="qualityIssues.length" link @click="showQualityPanel = true">{{ qualityButtonLabel }}</el-button>
@@ -178,6 +181,7 @@
         <AiProviderSettingsPanel @saved="handleAiSettingsSaved" />
       </el-dialog>
       <ResumeQualityPanel v-model="showQualityPanel" :issues="qualityIssues" @navigate="(section, target) => jumpToQualitySection(section, target)" />
+      <VersionHistoryDrawer v-model="showHistory" :resume-id="String(route.params.id || '')" />
       <SaveAsTemplateDialog
         :visible="showSaveTemplate"
         :default-name="data.title || '我的简历模板'"
@@ -216,6 +220,7 @@ import { Loading, FullScreen, Grid, Collection, EditPen, ArrowDown, Document, Fo
 import { useResumeStore } from '@/stores/resume';
 import { useTemplateStore } from '@/stores/template';
 import { useWorkbenchStore } from '@/stores/workbench';
+import { useHistoryStore } from '@/stores/history';
 import SaveAsTemplateDialog from '@/components/template-gallery/SaveAsTemplateDialog.vue';
 import { resolveTemplateView } from '@/components/preview/template-registry';
 import { exportToImage } from '@/utils/export-image';
@@ -239,6 +244,7 @@ const AiProviderSettingsPanel = lazyFeature(() => import('@/components/workbench
 const ExternalAiPanel = defineAsyncComponent(() => import('@/components/ai/ExternalAiPanel.vue'));
 import { createPrivacyMaskedResume } from '@/utils/privacyMask';
 import ResumeQualityPanel from '@/components/editor/ResumeQualityPanel.vue';
+import VersionHistoryDrawer from '@/components/history/VersionHistoryDrawer.vue';
 import { checkResumeQuality, type ResumeQualityIssue } from '@/utils/resumeQuality';
 import { focusQualityTarget, waitForElement } from '@/utils/focusQualityTarget';
 import { resolveEditorShortcut } from '@/utils/editorShortcuts';
@@ -249,6 +255,7 @@ const router = useRouter();
 const resumeStore = useResumeStore();
 const templateStore = useTemplateStore();
 const workbenchStore = useWorkbenchStore();
+const historyStore = useHistoryStore();
 const { data, saveStatus, saveError, canUndo, canRedo } = storeToRefs(resumeStore);
 
 const loading = ref(true);
@@ -296,6 +303,7 @@ const showShortcutHelp = ref(false);
 const showSaveTemplate = ref(false);
 const showSaveLayout = ref(false);
 const savingTemplate = ref(false);
+const showHistory = ref(false);
 
 const unsubscribePreviewNavigation = resumeStore.$onAction(({ name }) => {
   if (name !== 'setActiveSection' || activeTab.value !== 'preview' || privacyMode.value) return;
@@ -360,6 +368,8 @@ watch(() => route.params.id, async (routeId) => {
   showQualityPanel.value = false;
   privacyMode.value = false;
   activeTab.value = 'edit';
+  showHistory.value = false;
+  historyStore.close();
 
   if (!id) {
     ElMessage.error('简历 ID 不存在');
@@ -369,6 +379,15 @@ watch(() => route.params.id, async (routeId) => {
 
   try {
     await resumeStore.loadResume(id);
+    if (generation === routeLoadGeneration) {
+      void historyStore.open(id).then(() => {
+        if (route.query.history !== '1' || generation !== routeLoadGeneration) return;
+        showHistory.value = true;
+        const query = { ...route.query };
+        delete query.history;
+        void router.replace({ path: route.path, query });
+      });
+    }
   } catch (error) {
     if (generation !== routeLoadGeneration) return;
     ElMessage.error('加载简历失败: ' + (describeError(error)));
@@ -415,6 +434,7 @@ const flushBeforeNavigation = async () => {
   if (showAiAssistant.value && await aiAssistantRef.value?.beforeClose() === false) return false;
   try {
     await resumeStore.flushSave();
+    await historyStore.checkpoint('auto', '离开编辑器时自动保存');
     return true;
   } catch (error) {
     ElMessage.error(`保存失败，已留在编辑页：${describeError(error)}`);
@@ -426,19 +446,38 @@ onBeforeRouteUpdate(async (to, from) => to.params.id === from.params.id || await
 const saveWhenHidden = () => {
   if (document.visibilityState === 'hidden') void resumeStore.flushSave().catch(() => undefined);
 };
+/** pagehide 是关闭/刷新前最后一个还能发起异步写入的时机；失败也不阻塞关闭。 */
+const saveOnPageHide = () => {
+  void resumeStore.flushSave()
+    .then(() => historyStore.checkpoint('auto', '关闭页面前自动保存'))
+    .catch(() => undefined);
+};
 const warnBeforeUnload = (event: BeforeUnloadEvent) => {
   if (saveStatus.value === 'saved') return;
   void resumeStore.flushSave().catch(() => undefined);
   event.preventDefault();
   event.returnValue = '';
 };
+let autoCheckpointTimer: number | null = null;
+watch(saveStatus, (status) => {
+  if (status === 'saved') historyStore.scheduleDirtyCheck();
+});
 onMounted(() => {
   document.addEventListener('visibilitychange', saveWhenHidden);
+  window.addEventListener('pagehide', saveOnPageHide);
   window.addEventListener('beforeunload', warnBeforeUnload);
+  autoCheckpointTimer = window.setInterval(() => {
+    if (!loading.value && !privacyMode.value) {
+      void historyStore.checkpoint('auto', '自动保存（每 10 分钟）');
+    }
+  }, 10 * 60 * 1000);
 });
 onUnmounted(() => {
   document.removeEventListener('visibilitychange', saveWhenHidden);
+  window.removeEventListener('pagehide', saveOnPageHide);
   window.removeEventListener('beforeunload', warnBeforeUnload);
+  if (autoCheckpointTimer !== null) window.clearInterval(autoCheckpointTimer);
+  historyStore.close();
 });
 
 async function settlePreview() {
@@ -463,6 +502,7 @@ const applyAiChanges = async (proposal: EditProposal, done: (saved: boolean) => 
   try {
     await resumeStore.applyChangeProposal(proposal);
     aiUndoSnapshot.value = previous;
+    void historyStore.checkpoint('ai', 'AI 修改已应用');
     ElMessage.success('AI 修改已应用；可从助手面板撤销。');
     done(true);
   } catch (error) {
@@ -477,6 +517,7 @@ const undoAiChanges = async () => {
   try {
     await resumeStore.importData(snapshot);
     aiUndoSnapshot.value = null;
+    void historyStore.checkpoint('auto', '撤销 AI 修改');
     ElMessage.success('已撤销上一批 AI 修改');
   } catch (error) {
     ElMessage.error('撤销失败: ' + (describeError(error)));
@@ -597,7 +638,10 @@ const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' |
         '重置当前简历',
         { confirmButtonText: '恢复默认内容', cancelButtonText: '取消', type: 'warning' },
       );
+      await historyStore.checkpoint('auto', '重置前自动保存');
       resumeStore.reset();
+      await resumeStore.flushSave();
+      await historyStore.checkpoint('auto', '重置为空白简历');
       ElMessage.success('当前简历已恢复默认内容');
     } catch {
       // Cancelled
@@ -976,4 +1020,7 @@ async function exportResume(type: 'pdf' | 'searchable-pdf' | 'image' | 'json' | 
 .shortcut-list { display: flex; flex-direction: column; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .shortcut-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .shortcut-list kbd { padding: var(--space-2xs) var(--space-xs); border: 1px solid var(--ui-border); border-radius: var(--ui-radius-sm); background: var(--ui-bg-subtle); font-size: var(--ui-font-sm); }
+
+.history-entry { position: relative; }
+.history-dirty-dot { display: inline-block; width: 6px; height: 6px; margin-left: 4px; border-radius: 50%; background: var(--ui-warning); vertical-align: super; }
 </style>

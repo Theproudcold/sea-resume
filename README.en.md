@@ -52,6 +52,7 @@ Sea Resume is a purely client-side resume builder and job-search workbench built
 - **Master Track & Role Branches**: Increment version numbers along a master track (e.g. `v2`) and derive tailored branches for specific companies or roles instead of juggling duplicate files.
 - **Git-Style Version Graph**: Continuous SVG rails visualize master commits, role branch forks, and rebase/sync merges at a glance.
 - **Diff & Sync from Master**: Compare any two versions section by section, cherry-pick changes into a new version, and detect when a role branch falls behind master—then selectively sync new master content without overwriting role-specific wording.
+- **Per-Resume Version History (Git-Style Timeline)**: Open **History** in the editor toolbar or **Version History** from a workbench card to inspect commit timelines, working-tree vs. `HEAD` line diffs, manual commits, tags, and append-only restores. Automatic checkpoints run on leaving the editor, every 10 minutes, on page close, and around AI apply/reset; local-folder storage mirrors history to `.history/`, and full backups optionally include the latest 50 commits per resume.
 
 ### 3. AI Job-Search Loop & Local Guardrails
 

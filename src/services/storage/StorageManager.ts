@@ -250,6 +250,16 @@ export class StorageManager {
     this.currentAdapter = cached;
   }
 
+  /**
+   * 当前存储如果是本地目录，返回已授权的目录句柄；浏览器存储返回 null。
+   * 版本历史镜像只写当前正在使用的目录，避免把 A 目录的历史写进 B 目录。
+   */
+  getActiveFileSystemDirectoryHandle(): FileSystemDirectoryHandle | null {
+    return this.currentAdapter instanceof DirectoryAdapter
+      ? this.currentAdapter.getDirectoryHandle()
+      : null;
+  }
+
   /** 当前缓存中本地目录的名称；未选择时返回占位文本。 */
   getFileSystemDirectoryName(): string {
     const adapter = this.currentAdapter instanceof DirectoryAdapter
