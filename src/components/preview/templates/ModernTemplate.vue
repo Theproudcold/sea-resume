@@ -1,9 +1,9 @@
 <template>
   <div class="modern-template" :style="{
-    '--margin-top': (data.theme?.moduleMargins?.top || 0) + 'px',
-    '--margin-bottom': (data.theme?.moduleMargins?.bottom || 24) + 'px',
-    '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
-    '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
+    '--margin-top': (data.theme?.moduleMargins?.top ?? 0) + 'px',
+    '--margin-bottom': (data.theme?.moduleMargins?.bottom ?? 24) + 'px',
+    '--margin-left': (data.theme?.moduleMargins?.left ?? 0) + 'px',
+    '--margin-right': (data.theme?.moduleMargins?.right ?? 0) + 'px',
     // Restore the typography/spacing tokens consumed by var(...) below; without
     // them the theme font size, line height and module spacing never render.
     '--font-size': (data.theme?.fontSize || 14) + 'px',
@@ -53,7 +53,7 @@
           <ContactIcon v-if="data.theme?.displayIcons !== false" type="custom" :icon="contact.icon" style="color: var(--primary-color)" />
           <span class="truncate"><span v-if="contact.label">{{ contact.label }}：</span>{{ contact.value }}</span>
         </div>
-        <ResumeSmartFields :data="data" />
+        <ResumeSmartFields :data="data" inline />
       </div>
       </div>
     </header>
@@ -79,7 +79,7 @@
     >
       <template #item="{ element: section }">
         <div 
-          class="section-item cursor-pointer hover:bg-gray-50 rounded transition-all -m-2 p-2 mb-4"
+          class="section-item cursor-pointer hover:bg-gray-50 rounded transition-all -m-2 p-2"
           @click.stop="setActiveSection(section)"
         >
           <!-- 自定义模块 -->
@@ -331,7 +331,7 @@ const setActiveSection = (id: string) => {
 }
 
 .summary-block {
-  margin: 0 0 calc(var(--spacing) * 0.85);
+  margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
   padding: 2px;
 }
 

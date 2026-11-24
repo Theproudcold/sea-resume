@@ -1,9 +1,9 @@
 <template>
   <div class="creative-template min-h-full" :style="{
-    '--margin-top': (data.theme?.moduleMargins?.top || 0) + 'px',
-    '--margin-bottom': (data.theme?.moduleMargins?.bottom || 24) + 'px',
-    '--margin-left': (data.theme?.moduleMargins?.left || 0) + 'px',
-    '--margin-right': (data.theme?.moduleMargins?.right || 0) + 'px',
+    '--margin-top': (data.theme?.moduleMargins?.top ?? 0) + 'px',
+    '--margin-bottom': (data.theme?.moduleMargins?.bottom ?? 24) + 'px',
+    '--margin-left': (data.theme?.moduleMargins?.left ?? 0) + 'px',
+    '--margin-right': (data.theme?.moduleMargins?.right ?? 0) + 'px',
     padding: (data.theme?.pageMargins !== undefined ? data.theme.pageMargins : 24) + 'px',
     fontFamily: data.theme?.fontFamily || 'var(--resume-font-family)',
     fontSize: (data.theme?.fontSize || 14) + 'px',
@@ -36,16 +36,16 @@
             <span class="truncate"><span v-if="contact.label">{{ contact.label }}：</span>{{ contact.value }}</span>
           </span>
         </div>
-        <ResumeSmartFields :data="data" class="justify-center mt-3" />
+        <ResumeSmartFields :data="data" align="center" class="mt-2.5 text-sm text-gray-600" />
       </div>
     </div>
 
     <!-- 内容卡片 -->
-    <div class="space-y-4">
+    <div>
       <!-- 个人简介 -->
       <div 
         v-if="data.basic.summary" 
-        class="card cursor-pointer"
+        class="card summary-card cursor-pointer"
         @click="setActiveSection('basic')"
       >
         <h2 class="card-title">个人简介</h2>
@@ -293,11 +293,14 @@ const setActiveSection = (id: string) => {
 }
 
 .card {
-  margin-bottom: 0.7rem;
   padding: 0.95rem 1.05rem 1rem;
   border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--resume-rule));
   border-radius: 14px;
   background: var(--resume-sheet);
+}
+
+.summary-card {
+  margin: var(--margin-top) var(--margin-right) var(--margin-bottom) var(--margin-left);
 }
 
 .card-title {
