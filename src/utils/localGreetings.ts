@@ -41,7 +41,7 @@ function plainText(value: unknown): string {
     : '';
 }
 
-/** 从简历里抽取前几项核心技能词（尽量取短词，长句则截断到第一个标点前）。 */
+/** 从简历里抽取前几项核心技能词（剥离前导熟练度动词，长句截断到第一个标点前）。 */
 function pickSkillKeywords(resume: ResumeData, limit = 4): string[] {
   const hidden = resume.hiddenSections ?? [];
   if (hidden.includes('skills')) return [];
@@ -49,7 +49,8 @@ function pickSkillKeywords(resume: ResumeData, limit = 4): string[] {
   for (const group of resume.skills) {
     if (group.visible === false) continue;
     for (const raw of group.items ?? []) {
-      const cleaned = plainText(raw).split(/[，。；：,;（(]/u)[0]?.trim() ?? '';
+      const firstClause = plainText(raw).split(/[，。；：,;（(]/u)[0]?.trim() ?? '';
+      const cleaned = firstClause.replace(/^(?:熟练使用|熟练掌握|精通|熟悉|了解|掌握|擅长|具备)\s*/u, '').trim();
       if (!cleaned) continue;
       if (cleaned.length <= 18 && !tokens.includes(cleaned)) tokens.push(cleaned);
       if (tokens.length >= limit) return tokens;

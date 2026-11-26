@@ -21,6 +21,8 @@ private@example.test · 13800138000 · 上海
 
     expect(boss).toHaveLength(2);
     expect(boss[0]).toContain('高级后端工程师');
+    expect(boss[0]).toContain('熟悉 MySQL');
+    expect(boss[0]).not.toContain('熟悉 熟练使用');
     expect(boss[0]!.length).toBeLessThanOrEqual(100);
     expect(headhunter[0]).toContain('上海');
     expect(standard[0]).toContain('后端负责人');

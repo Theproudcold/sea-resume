@@ -17,7 +17,7 @@ function collectStrings(value: unknown, parts: string[]): void {
   }
 }
 
-const PDF_CHROME = '个人简介联系方式工作经验教育经历项目经历专业技能技术架构至今';
+const PDF_CHROME = '个人简介联系方式工作经验工作经历教育背景教育经历项目经验项目经历专业技能技能证书技术架构至今电话邮箱所在地网址年龄岁年个月：·、，。（）–—';
 
 /** Characters the searchable PDF can actually draw, plus ASCII so dates and links stay intact. */
 export function collectResumeCharacters(data: ResumeData): string {
