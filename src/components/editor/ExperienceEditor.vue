@@ -65,7 +65,32 @@
             :model-value="exp.description"
             @update:modelValue="(val) => handleUpdate(exp.id, { description: val })"
           />
+          <StarGuideHelper
+            :model-value="exp.description"
+            @update:modelValue="(val) => handleUpdate(exp.id, { description: val })"
+          />
         </el-form-item>
+
+        <el-form-item label="核心成果 / 亮点（选填）">
+          <div class="highlights-editor">
+            <div v-for="(highlight, hIndex) in (exp.highlights || [])" :key="`${exp.id}-h-${hIndex}`" class="highlights-editor__row">
+              <el-input
+                :model-value="highlight"
+                placeholder="一条具体可验证的成果，例如：重构结算链路，接口耗时降低 40%"
+                @update:model-value="(value: string) => updateHighlight(exp, hIndex, value)"
+              />
+              <el-button
+                link
+                type="danger"
+                :aria-label="`删除亮点 ${hIndex + 1}`"
+                @click="removeHighlight(exp, hIndex)"
+              >删除</el-button>
+            </div>
+            <el-button text type="primary" size="small" data-testid="experience-add-highlight" @click="addHighlight(exp)">+ 添加一条成果亮点</el-button>
+          </div>
+        </el-form-item>
+
+        <InterviewNoteBox :resume-id="data.id" :entry-key="`experience:${exp.id}`" />
       </el-form>
       </div></SmoothCollapse>
     </div>
@@ -82,6 +107,8 @@ import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import SmoothCollapse from '@/components/common/SmoothCollapse.vue';
 import EntryDeleteButton from './EntryDeleteButton.vue';
 import MonthRangeField from './MonthRangeField.vue';
+import StarGuideHelper from './StarGuideHelper.vue';
+import InterviewNoteBox from './InterviewNoteBox.vue';
 import { focusNewEntry } from '@/utils/focusNewEntry';
 
 const resumeStore = useResumeStore();
@@ -119,5 +146,37 @@ const removeItem = (id: string) => {
 const handleUpdate = (id: string, updates: Partial<Experience>) => {
   resumeStore.updateExperience(id, updates);
 };
+
+const addHighlight = (exp: Experience) => {
+  handleUpdate(exp.id, { highlights: [...(exp.highlights || []), ''] });
+};
+
+const updateHighlight = (exp: Experience, index: number, value: string) => {
+  const next = [...(exp.highlights || [])];
+  next[index] = value;
+  handleUpdate(exp.id, { highlights: next });
+};
+
+const removeHighlight = (exp: Experience, index: number) => {
+  const next = (exp.highlights || []).filter((_, itemIndex) => itemIndex !== index);
+  handleUpdate(exp.id, { highlights: next });
+};
 defineExpose({ addNew });
 </script>
+
+<style scoped>
+.highlights-editor {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.highlights-editor__row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+}
+</style>

@@ -76,4 +76,16 @@ describe('editor quality panel navigation', () => {
     expect(wrapper.find('.quality-groups').exists()).toBe(false);
     expect(wrapper.findComponent({ name: 'el-empty' }).exists() || wrapper.html().includes('未发现')).toBe(true);
   });
+
+  it('offers one-click descending sort for out-of-order sections and renders typography group', async () => {
+    const wrapper = mountPanel([
+      issue({ id: 'experience-order', section: 'experience', target: null, severity: 'info', action: 'sort-desc', message: '未按时间倒序。' }),
+      issue({ id: 'theme-crowded', section: 'theme', target: null, severity: 'info', message: '行距偏紧。' }),
+    ]);
+    expect(wrapper.findAll('.quality-group__title').map((title) => title.text())).toEqual(['工作经历', '页面排版']);
+    const sortButton = wrapper.findAll('button').find((button) => button.text().includes('一键倒序'));
+    expect(sortButton).toBeTruthy();
+    await sortButton!.trigger('click');
+    expect(wrapper.emitted('sort-section')?.[0]).toEqual(['experience']);
+  });
 });

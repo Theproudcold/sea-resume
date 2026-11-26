@@ -80,12 +80,13 @@
           />
         </el-form-item>
 
-        <el-form-item label="GPA / 绩点（选填）">
+        <el-form-item label="GPA / 排名（选填）">
           <el-input
             :model-value="edu.gpa"
-            placeholder="例如：3.8/4.0"
+            placeholder="例如：3.8/4.0（专业前 10%）"
             @update:model-value="(value: string) => handleUpdate(edu.id, { gpa: value })"
           />
+          <p class="edu-hint">所有高等教育经历请与学信网保持一致；校招/实习时有亮眼排名可附百分比。</p>
         </el-form-item>
       </el-form>
       </div></SmoothCollapse>
@@ -141,3 +142,12 @@ const handleUpdate = (id: string, updates: Partial<Education>) => {
 };
 defineExpose({ addNew });
 </script>
+
+<style scoped>
+.edu-hint {
+  margin: 4px 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+</style>

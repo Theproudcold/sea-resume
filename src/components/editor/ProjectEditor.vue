@@ -66,6 +66,10 @@
               class="project-item__editor"
               @update:modelValue="(val: string) => updateItem(project.id, { description: val })"
             />
+            <StarGuideHelper
+              :model-value="project.description"
+              @update:modelValue="(val: string) => updateItem(project.id, { description: val })"
+            />
           </el-form-item>
 
           <el-form-item label="项目链接">
@@ -94,6 +98,8 @@
               />
             </el-select>
           </el-form-item>
+
+          <InterviewNoteBox :resume-id="data.id" :entry-key="`project:${project.id}`" />
         </el-form>
       </div></SmoothCollapse>
     </div>
@@ -110,6 +116,8 @@ import RichTextEditor from '@/components/common/RichTextEditor.vue';
 import SmoothCollapse from '@/components/common/SmoothCollapse.vue';
 import EntryDeleteButton from './EntryDeleteButton.vue';
 import MonthRangeField from './MonthRangeField.vue';
+import StarGuideHelper from './StarGuideHelper.vue';
+import InterviewNoteBox from './InterviewNoteBox.vue';
 import { focusNewEntry } from '@/utils/focusNewEntry';
 
 const resumeStore = useResumeStore();
