@@ -28,4 +28,17 @@ describe('greeting generation', () => {
     await expect(requestGreetings(config, parseResumeMarkdown('# 测试').resume, 'a'.repeat(10001))).rejects.toThrow('10000');
     expect(requestAiJson).not.toHaveBeenCalled();
   });
+
+  it('supports concise Boss channel length limits (18~80 chars)', async () => {
+    const resume = parseResumeMarkdown('# 测试 | 后端工程师\n\n## 个人简介\n三年 Go 开发经验').resume;
+    const shortMsg = '您好，三年 Go 后端经验，熟悉高并发微服务，想了解贵司岗位细节。';
+    vi.mocked(requestAiJson).mockResolvedValue({ greetings: [shortMsg, shortMsg, shortMsg] });
+    await expect(requestGreetings(config, resume, '', { channel: 'boss' })).resolves.toHaveLength(3);
+    const [, prompt] = vi.mocked(requestAiJson).mock.calls[0]!;
+    expect(prompt).toContain('Boss');
+    expect(prompt).toContain('18 到 80 字');
+
+    vi.mocked(requestAiJson).mockResolvedValue({ greetings: ['啊'.repeat(81), shortMsg, shortMsg] });
+    await expect(requestGreetings(config, resume, '', { channel: 'boss' })).rejects.toThrow('格式无效');
+  });
 });

@@ -77,4 +77,23 @@ describe('STAR polish', () => {
     await expect(requestStarPolish(config, source, [collectStarPolishTargets(source)[0]!.key], '岗'.repeat(201))).rejects.toThrow('200');
     expect(requestAiJson).not.toHaveBeenCalled();
   });
+
+  it('enforces aiFactGuard: allows equivalent numbers/tech IDs and blocks fabricated metrics or contacts', () => {
+    const source = parseResumeMarkdown('# 姓名\n\n## 工作经历\n### 公司 | 工程师 | 2022.01 — 至今\n优化 P99 延迟降低 30%，日均请求量 10k').resume;
+    const target = collectStarPolishTargets(source).find((item) => item.kind === 'experience')!;
+
+    // 同值数字 10000 与技术编号 P99 不应被误拦
+    const okDraft = parseStarPolishDraft({
+      items: [{ key: target.key, value: '- 优化 P99 接口延迟降低 30%，稳定承载日均 10000 请求量' }],
+    }, source, [target.key]);
+    expect(okDraft.suggestions[0]?.guard).toBeUndefined();
+    expect(okDraft.suggestions[0]?.novelNumbers).toEqual([]);
+
+    // 指标主语偷换（延迟 30% -> 成本 30%）与凭空联系方式必须被硬拦截
+    const blockedDraft = parseStarPolishDraft({
+      items: [{ key: target.key, value: '- 成本降低 30%，详见 https://fake.example.com' }],
+    }, source, [target.key]);
+    expect(blockedDraft.suggestions[0]?.guard?.map((issue) => issue.code)).toEqual(expect.arrayContaining(['metric_semantic', 'protected']));
+    expect(() => assertStarPolishCurrent(source, blockedDraft.suggestions)).toThrow('确定性事实校验');
+  });
 });
