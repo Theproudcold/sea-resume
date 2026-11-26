@@ -40,11 +40,13 @@
         <el-radio-button value="quick">快捷修改</el-radio-button>
         <el-radio-button value="greeting">打招呼语</el-radio-button>
         <el-radio-button value="jdRisk">岗位判读</el-radio-button>
+        <el-radio-button value="examAudit">考纲自查</el-radio-button>
       </el-radio-group>
       <ResumeOptimizationPanel v-if="visible && mode === 'optimize'" ref="optimizationPanel" :resume="resume" @configure="configureModel" @applied="handleOptimized" />
       <StarPolishPanel v-if="visible && mode === 'polish'" ref="polishPanel" :resume="resume" @configure="configureModel" @apply="(proposal, done) => emit('apply', proposal, done)" />
       <GreetingPanel v-if="visible && mode === 'greeting'" :resume="resume" @configure="configureModel" />
       <JdRiskPanel v-if="visible && mode === 'jdRisk'" />
+      <ResumeExamAuditPanel v-if="visible && mode === 'examAudit'" :resume="resume" @navigate="(section, target) => emit('navigate', section, target)" @start-interview="emit('start-interview')" />
       <template v-if="mode === 'quick'">
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>隐私说明</template>
@@ -126,6 +128,8 @@ import ResumeOptimizationPanel from '@/components/ai/ResumeOptimizationPanel.vue
 import StarPolishPanel from '@/components/ai/StarPolishPanel.vue';
 import GreetingPanel from '@/components/ai/GreetingPanel.vue';
 import JdRiskPanel from '@/components/ai/JdRiskPanel.vue';
+import ResumeExamAuditPanel from '@/components/ai/ResumeExamAuditPanel.vue';
+import type { ResumeQualitySection } from '@/utils/resumeQuality';
 
 const props = defineProps<{ visible: boolean; resume: ResumeData; undoAvailable: boolean }>();
 const emit = defineEmits<{
@@ -134,6 +138,8 @@ const emit = defineEmits<{
   undo: [];
   configure: [];
   applied: [resumeId: string];
+  navigate: [section: ResumeQualitySection, target: string | null];
+  'start-interview': [];
 }>();
 const { linkState: mcpLinkState } = useMcpState();
 const { driverPreference, setAiDriverPreference } = useAiDriverPreference();
@@ -160,7 +166,7 @@ const loading = ref(false);
 const errorMessage = ref('');
 const pendingDraft = ref<EditProposal | null>(null);
 const applying = ref(false);
-const mode = ref<'quick' | 'optimize' | 'polish' | 'greeting' | 'jdRisk'>('optimize');
+const mode = ref<'quick' | 'optimize' | 'polish' | 'greeting' | 'jdRisk' | 'examAudit'>('optimize');
 const optimizationPanel = ref<InstanceType<typeof ResumeOptimizationPanel>>();
 const polishPanel = ref<InstanceType<typeof StarPolishPanel>>();
 async function beforeClose(): Promise<boolean> {
@@ -170,7 +176,7 @@ async function beforeClose(): Promise<boolean> {
   return true;
 }
 async function closeDrawer(done: () => void) { if (await beforeClose()) done(); }
-async function changeMode(value: string | number | boolean | undefined) { if ((value === 'quick' || value === 'optimize' || value === 'polish' || value === 'greeting' || value === 'jdRisk') && await beforeClose()) mode.value = value; }
+async function changeMode(value: string | number | boolean | undefined) { if ((value === 'quick' || value === 'optimize' || value === 'polish' || value === 'greeting' || value === 'jdRisk' || value === 'examAudit') && await beforeClose()) mode.value = value; }
 async function configureModel() { if (await beforeClose()) emit('configure'); }
 defineExpose({ beforeClose });
 let controller: AbortController | undefined;

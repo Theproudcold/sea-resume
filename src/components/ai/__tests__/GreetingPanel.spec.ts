@@ -114,4 +114,16 @@ describe('GreetingPanel', () => {
       clearExternalTasks();
     }
   });
+
+  it('supports channel switching and offline local greeting generation without an API key', async () => {
+    clearAiModelSettings();
+    clearAiSessionApiKey();
+    setup();
+    await panel.get('[data-testid=greeting-channel-boss]').trigger('click');
+    await panel.get('[data-testid=greeting-local]').trigger('click');
+    await flushPromises();
+    expect(requestGreetings).not.toHaveBeenCalled();
+    expect(panel.findAll('.greeting-result').length).toBeGreaterThanOrEqual(2);
+    expect(panel.text()).toContain('纯本地模板拼接');
+  });
 });

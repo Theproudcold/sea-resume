@@ -51,6 +51,7 @@
                 <el-dropdown-menu>
                   <el-dropdown-item command="privacy"><el-icon><Hide /></el-icon>{{ privacyMode ? '显示个人信息' : '隐藏个人信息' }}</el-dropdown-item>
                   <el-dropdown-item command="quality"><el-icon><CircleCheck /></el-icon>检查简历</el-dropdown-item>
+                  <el-dropdown-item command="ats-preview"><el-icon><Document /></el-icon>官网 ATS 解析预检</el-dropdown-item>
                   <el-dropdown-item command="external-ai" :disabled="privacyMode"><el-icon><Connection /></el-icon>用文件交给外部 AI</el-dropdown-item>
                   <el-dropdown-item command="shortcuts"><el-icon><Key /></el-icon>快捷键</el-dropdown-item>
                   <el-dropdown-item command="fullscreen"><el-icon><FullScreen /></el-icon>全屏预览</el-dropdown-item>
@@ -67,7 +68,8 @@
               <el-button :disabled="exporting" aria-label="更多导出格式">其他格式<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="searchable-pdf"><el-icon><Document /></el-icon>可复制文字的 PDF（排版可能不同）</el-dropdown-item>
+                  <el-dropdown-item command="searchable-pdf"><el-icon><Document /></el-icon>可复制文字的 PDF（适合大厂官网解析）</el-dropdown-item>
+                  <el-dropdown-item command="ats-preview"><el-icon><CircleCheck /></el-icon>官网 ATS 解析预检…</el-dropdown-item>
                   <el-dropdown-item command="print"><el-icon><Printer /></el-icon>打印预览…</el-dropdown-item>
                   <el-dropdown-item command="image"><el-icon><Picture /></el-icon>导出为图片</el-dropdown-item>
                   <el-dropdown-item command="json" :disabled="privacyMode"><el-icon><Folder /></el-icon>简历备份（JSON）</el-dropdown-item>
@@ -175,12 +177,15 @@
         @undo="undoAiChanges"
         @configure="openAiSettings"
         @applied="router.push(`/editor/${$event}`)"
+        @navigate="(section, target) => { showAiAssistant = false; jumpToQualitySection(section, target); }"
+        @start-interview="router.push({ path: '/interview/new', query: { resumeId: data.id } })"
       />
       <ExternalAiPanel v-if="showExternalAi" :visible="showExternalAi" @update:visible="showExternalAi = $event" />
       <el-dialog v-model="showAiSettings" title="AI 服务设置" width="var(--ui-dialog-width-md)" align-center class="app-dialog ai-model-dialog">
         <AiProviderSettingsPanel @saved="handleAiSettingsSaved" />
       </el-dialog>
-      <ResumeQualityPanel v-model="showQualityPanel" :issues="qualityIssues" @navigate="(section, target) => jumpToQualitySection(section, target)" />
+      <ResumeQualityPanel v-model="showQualityPanel" :issues="qualityIssues" @navigate="(section, target) => jumpToQualitySection(section, target)" @sort-section="sortSectionByDateDesc" />
+      <AtsPreviewDialog v-if="showAtsPreview" v-model="showAtsPreview" :resume="previewData" @export-searchable-pdf="handleCommand('searchable-pdf')" />
       <VersionHistoryDrawer v-model="showHistory" :resume-id="String(route.params.id || '')" />
       <SaveAsTemplateDialog
         :visible="showSaveTemplate"
@@ -242,10 +247,11 @@ import { lazyFeature } from '@/utils/lazyFeature';
 const AiAssistantPanel = defineAsyncComponent(() => import('@/components/editor/AiAssistantPanel.vue'));
 const AiProviderSettingsPanel = lazyFeature(() => import('@/components/workbench/AiProviderSettingsPanel.vue'));
 const ExternalAiPanel = defineAsyncComponent(() => import('@/components/ai/ExternalAiPanel.vue'));
+const AtsPreviewDialog = defineAsyncComponent(() => import('@/components/editor/AtsPreviewDialog.vue'));
 import { createPrivacyMaskedResume } from '@/utils/privacyMask';
 import ResumeQualityPanel from '@/components/editor/ResumeQualityPanel.vue';
 import VersionHistoryDrawer from '@/components/history/VersionHistoryDrawer.vue';
-import { checkResumeQuality, type ResumeQualityIssue } from '@/utils/resumeQuality';
+import { checkResumeQuality, sortEntriesByDateDesc, type ResumeQualityIssue } from '@/utils/resumeQuality';
 import { focusQualityTarget, waitForElement } from '@/utils/focusQualityTarget';
 import { resolveEditorShortcut } from '@/utils/editorShortcuts';
 import { describeError } from '@/utils/globalErrorReporting';
@@ -299,6 +305,7 @@ const showAiSettings = ref(false);
 const aiUndoSnapshot = ref<ResumeData | null>(null);
 const privacyMode = ref(false);
 const showQualityPanel = ref(false);
+const showAtsPreview = ref(false);
 const showShortcutHelp = ref(false);
 const showSaveTemplate = ref(false);
 const showSaveLayout = ref(false);
@@ -366,6 +373,7 @@ watch(() => route.params.id, async (routeId) => {
   showExternalAi.value = false;
   aiUndoSnapshot.value = null;
   showQualityPanel.value = false;
+  showAtsPreview.value = false;
   privacyMode.value = false;
   activeTab.value = 'edit';
   showHistory.value = false;
@@ -543,6 +551,7 @@ async function redoEdit() {
 async function jumpToQualitySection(section: ResumeQualityIssue['section'], target: string | null) {
   const token = ++qualityJumpToken;
   showQualityPanel.value = false;
+  showAtsPreview.value = false;
   activeTab.value = 'edit';
   resumeStore.setActiveSection(section);
   await nextTick();
@@ -552,6 +561,22 @@ async function jumpToQualitySection(section: ResumeQualityIssue['section'], targ
   );
   if (!root || token !== qualityJumpToken) return;
   await focusQualityTarget(root, target);
+}
+
+/** 按起止时间由近及远倒序排列对应板块，支持通过编辑器历史撤销。 */
+function sortSectionByDateDesc(section: 'experience' | 'projects' | 'education') {
+  if (section === 'experience') {
+    resumeStore.reorderExperiences(sortEntriesByDateDesc(data.value.experiences));
+    ElMessage.success('工作经历已按时间由近及远排序，可按 Ctrl/⌘+Z 撤销');
+    return;
+  }
+  if (section === 'projects') {
+    resumeStore.reorderProjects(sortEntriesByDateDesc(data.value.projects));
+    ElMessage.success('项目经验已按时间由近及远排序，可按 Ctrl/⌘+Z 撤销');
+    return;
+  }
+  resumeStore.reorderEducation(sortEntriesByDateDesc(data.value.education));
+  ElMessage.success('教育背景已按时间由近及远排序，可按 Ctrl/⌘+Z 撤销');
 }
 
 const handleResumeTitleUpdate = async (title: string) => {
@@ -571,6 +596,7 @@ const handleResumeTitleUpdate = async (title: string) => {
 const handleHeaderMenuCommand = (command: string) => {
   if (command === 'privacy') togglePrivacyMode();
   else if (command === 'quality') showQualityPanel.value = true;
+  else if (command === 'ats-preview') showAtsPreview.value = true;
   else if (command === 'external-ai' && !privacyMode.value) showExternalAi.value = true;
   else if (command === 'shortcuts') showShortcutHelp.value = true;
   else if (command === 'fullscreen') showFullscreen.value = true;
@@ -611,7 +637,11 @@ const saveCurrentRecipe = async (payload: { name: string; description: string })
   }
 };
 
-const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'image' | 'json' | 'markdown' | 'print' | 'import' | 'reset') => {
+const handleCommand = async (type: 'pdf' | 'searchable-pdf' | 'ats-preview' | 'image' | 'json' | 'markdown' | 'print' | 'import' | 'reset') => {
+  if (type === 'ats-preview') {
+    showAtsPreview.value = true;
+    return;
+  }
   if (exporting.value) return;
   if (privacyMode.value && (type === 'json' || type === 'markdown')) {
     ElMessage.warning('备份和 Markdown 包含完整个人信息，请先返回编辑再导出。');

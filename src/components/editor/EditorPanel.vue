@@ -84,7 +84,7 @@
       </div>
 
       <div class="sidebar-footer">
-        <el-dropdown trigger="click" class="sidebar-add-dropdown" @command="(cmd: string) => cmd === 'create_new' ? createCustomBlock() : addExistingSection(cmd)">
+        <el-dropdown trigger="click" class="sidebar-add-dropdown" @command="handleAddSectionCommand">
           <el-button class="sidebar-add-button" :icon="Plus">添加模块</el-button>
           <template #dropdown>
             <el-dropdown-menu>
@@ -95,7 +95,9 @@
                 </div>
               </el-dropdown-item>
               <el-dropdown-item v-if="availableSections.length > 0" divided disabled />
-              <el-dropdown-item command="create_new"><el-icon><Plus /></el-icon>创建新模块</el-dropdown-item>
+              <el-dropdown-item command="preset_research"><el-icon><Plus /></el-icon>新增 科研与论文经历</el-dropdown-item>
+              <el-dropdown-item command="preset_awards"><el-icon><Plus /></el-icon>新增 核心证书与奖项</el-dropdown-item>
+              <el-dropdown-item command="create_new"><el-icon><Plus /></el-icon>创建空白自定义模块</el-dropdown-item>
             </el-dropdown-menu>
           </template>
         </el-dropdown>
@@ -355,6 +357,45 @@ const createCustomBlock = () => {
   });
   
   addExistingSection(id);
+};
+
+/** 创建场景化预设列表模块（科研论文 / 核心证书奖项），降低结构化录入成本。 */
+const createPresetCustomBlock = (preset: 'research' | 'awards') => {
+  const config = preset === 'research'
+    ? {
+      title: '科研与论文经历',
+      item: {
+        id: `${Date.now()}-research`,
+        title: '',
+        subtitle: '第一作者 / 会议或期刊名称',
+        date: '',
+        description: '<p>聚焦研究问题、核心贡献（如一作/核心作者）与可验证成果。</p>',
+      },
+    }
+    : {
+      title: '核心证书与奖项',
+      item: {
+        id: `${Date.now()}-award`,
+        title: '',
+        subtitle: '颁发机构 / 含金量说明',
+        date: '',
+        description: '<p>只保留与岗位相关或行业认可度高的奖项与证书。</p>',
+      },
+    };
+  const id = resumeStore.addCustomBlock({
+    title: config.title,
+    type: 'list',
+    content: [config.item],
+    order: data.value.sectionOrder.length,
+  });
+  addExistingSection(id);
+};
+
+const handleAddSectionCommand = (cmd: string) => {
+  if (cmd === 'create_new') createCustomBlock();
+  else if (cmd === 'preset_research') createPresetCustomBlock('research');
+  else if (cmd === 'preset_awards') createPresetCustomBlock('awards');
+  else addExistingSection(cmd);
 };
 
 // 计算属性：将 store 中的 order 转换为对象列表

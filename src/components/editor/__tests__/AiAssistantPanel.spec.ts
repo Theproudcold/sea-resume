@@ -59,6 +59,26 @@ describe('AI assistant quick editing UX', () => {
     expect(labels).toContain('用工性质');
   });
 
+  it('opens the exam audit mode, marks readiness status and emits navigate to edit risky items', async () => {
+    const sample = parseResumeMarkdown(`# 测试简历
+
+## 工作经历
+### 星海科技 | 后端 | 2022-01 — 至今
+主导高并发接口重构，延迟降低 40%，使用 MySQL InnoDB 与 Redis 缓存。`).resume;
+    panel = mount(AiAssistantPanel, {
+      props: { visible: true, resume: sample, undoAvailable: false },
+      global: {
+        plugins: [ElementPlus],
+        stubs: { ElDrawer: { template: '<section><slot /></section>' }, ResumeOptimizationPanel: { template: '<div />', methods: { beforeClose: async () => true } }, StarPolishPanel: true, GreetingPanel: true },
+      },
+    });
+    panel.getComponent(ElRadioGroup).vm.$emit('update:modelValue', 'examAudit');
+    await flushPromises();
+    expect(panel.findAll('[data-testid=exam-audit-card]').length).toBeGreaterThanOrEqual(2);
+    await panel.get('[data-testid=exam-audit-jump]').trigger('click');
+    expect(panel.emitted('navigate')?.[0]).toBeTruthy();
+  });
+
   it('让模式切换条贴住内容宽度，不再被面板拉成通栏', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/editor/AiAssistantPanel.vue'), 'utf8');
     const modeBar = /\.assistant-panel > :deep\(\.el-radio-group\)\s*\{[^}]*\}/.exec(source)?.[0] ?? '';

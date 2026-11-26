@@ -276,6 +276,9 @@ export const useResumeStore = defineStore('resume', {
     removeEducation(id: string) {
       this.changeEntries('education', { op: 'remove', id });
     },
+    reorderEducation(newOrder: Education[]) {
+      this.changeEntries('education', { op: 'reorder', items: newOrder });
+    },
     addSkill(skill: Omit<Skill, 'id'>) {
       this.changeEntries('skills', { op: 'add', item: skill });
     },
@@ -293,6 +296,9 @@ export const useResumeStore = defineStore('resume', {
     },
     removeProject(id: string) {
       this.changeEntries('projects', { op: 'remove', id });
+    },
+    reorderProjects(newOrder: Project[]) {
+      this.changeEntries('projects', { op: 'reorder', items: newOrder });
     },
 
     // 添加自定义模块

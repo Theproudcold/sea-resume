@@ -10,6 +10,9 @@ describe('searchable PDF font subset', () => {
     expect(characters).toContain('李');
     expect(characters).toContain('个人简介');
     expect(characters).toContain('A');
+    for (const chromeChar of ['电', '话', '邮', '箱', '所', '在', '地', '：', '·']) {
+      expect(characters).toContain(chromeChar);
+    }
     expect(new Set(characters).size).toBe(characters.length);
   });
 

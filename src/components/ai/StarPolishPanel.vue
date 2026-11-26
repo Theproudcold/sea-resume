@@ -30,7 +30,7 @@
       <p v-if="!draft.suggestions.length" class="hint">没有需要改动的内容，原文保持不变。</p>
       <article v-for="suggestion in draft.suggestions" :key="suggestion.key" class="suggestion">
         <label class="target">
-          <input v-model="accepted" type="checkbox" :value="suggestion.key" :disabled="applying" />
+          <input v-model="accepted" type="checkbox" :value="suggestion.key" :disabled="applying || Boolean(suggestion.guard?.length)" />
           <strong>{{ suggestion.label }}</strong>
         </label>
         <div class="diff">
@@ -38,7 +38,10 @@
           <div><small>润色</small><p>{{ suggestion.after }}</p></div>
         </div>
         <p v-if="suggestion.note" class="hint">{{ suggestion.note }}</p>
-        <p v-if="suggestion.novelNumbers.length" class="warning">出现了原文没有的数字：{{ suggestion.novelNumbers.join('、') }}。请核对后再勾选。</p>
+        <p v-if="suggestion.guard?.length" class="error">
+          确定性校验已拦截（不可应用）：{{ suggestion.guard.map((item) => item.message).join(' ') }}
+        </p>
+        <p v-else-if="suggestion.novelNumbers.length" class="warning">出现了原文没有的数字：{{ suggestion.novelNumbers.join('、') }}。请核对后再勾选。</p>
       </article>
       <div class="actions">
         <el-button :disabled="applying" @click="draft = null">返回选择内容</el-button>
@@ -136,7 +139,9 @@ async function polish() {
     const result = await requestStarPolish(toAiProviderConfig(settings.value), props.resume, keys, role.value, { signal: controller.signal });
     if (current !== generation) return;
     draft.value = result;
-    accepted.value = result.suggestions.filter((suggestion) => !suggestion.novelNumbers.length).map((suggestion) => suggestion.key);
+    accepted.value = result.suggestions
+      .filter((suggestion) => !suggestion.guard?.length && !suggestion.novelNumbers.length)
+      .map((suggestion) => suggestion.key);
   } catch (cause) {
     if (current === generation) error.value = cause instanceof Error ? cause.message : '润色失败，请重试。';
   } finally {

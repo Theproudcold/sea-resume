@@ -178,7 +178,10 @@
       <el-row :gutter="16">
         <el-col :span="12">
           <el-form-item label="显示年龄">
-            <el-switch :model-value="localBasic.showAge" :disabled="!localBasic.birthDate" @update:model-value="(showAge: unknown) => handleUpdate({ showAge: !!showAge })" />
+            <div class="smart-field-control">
+              <el-switch :model-value="localBasic.showAge" :disabled="!localBasic.birthDate" @update:model-value="(showAge: unknown) => handleUpdate({ showAge: !!showAge })" />
+              <p class="privacy-note">岗位无硬性要求时建议保持关闭</p>
+            </div>
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -192,6 +195,7 @@
                 需在「工作经历」填写起止年月后自动计算
                 <el-button link type="primary" size="small" class="smart-field-jump" @click="goToExperience">去填写</el-button>
               </p>
+              <p v-else class="privacy-note">按岗位要求决定是否展示；简历中也不宜写期望薪资</p>
             </div>
           </el-form-item>
         </el-col>
@@ -273,7 +277,18 @@
               @update:model-value="(value: string) => updateCustomContact(contact.id, { value })"
             />
           </div>
-          <el-button text type="primary" :icon="Plus" @click="addCustomContact">添加联系方式</el-button>
+          <div class="custom-contact-actions">
+            <el-button text type="primary" :icon="Plus" @click="addCustomContact()">添加联系方式</el-button>
+            <el-button
+              v-for="preset in quickContactPresets"
+              :key="preset.label"
+              text
+              size="small"
+              :disabled="hasContactPreset(preset.label)"
+              :data-testid="`quick-contact-${preset.key}`"
+              @click="addCustomContact(preset)"
+            >+ {{ preset.label }}</el-button>
+          </div>
         </div>
       </el-form-item>
 
@@ -383,9 +398,22 @@ const updateIcon = (field: 'email' | 'phone' | 'location' | 'website', icon: str
 };
 
 const customContactIcons = ['Link', 'Message', 'ChatDotRound', 'ChatLineRound', 'Position', 'Promotion', 'Connection', 'User', 'Star', 'Monitor'];
+const quickContactPresets = [
+  { key: 'wechat', label: '微信', icon: 'ChatDotRound' },
+  { key: 'github', label: 'GitHub', icon: 'Link' },
+  { key: 'blog', label: '技术博客', icon: 'Monitor' },
+] as const;
 
-const addCustomContact = () => {
-  handleUpdate({ customContacts: [...(localBasic.value.customContacts || []), { id: generateId(), label: '', value: '', icon: 'Link' }] });
+const hasContactPreset = (label: string) =>
+  (localBasic.value.customContacts || []).some((contact) => contact.label.trim().toLowerCase() === label.toLowerCase());
+
+const addCustomContact = (preset?: { label: string; icon: string }) => {
+  handleUpdate({
+    customContacts: [
+      ...(localBasic.value.customContacts || []),
+      { id: generateId(), label: preset?.label ?? '', value: '', icon: preset?.icon ?? 'Link' },
+    ],
+  });
 };
 
 const removeCustomContact = (id: string) => {
@@ -509,6 +537,13 @@ const updateCustomContact = (id: string, updates: Partial<CustomContact>) => {
   display: flex;
   align-items: center;
   gap: var(--space-xs);
+}
+
+.custom-contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
 }
 
 .privacy-note {

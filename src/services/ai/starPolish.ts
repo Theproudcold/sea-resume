@@ -3,6 +3,7 @@ import type { ResumeData } from '@/types/resume';
 import { requestAiJson, type AiRequestOptions } from './transport';
 import { aiPlainText, buildResumeContext } from './resumeContext';
 import { aiList, aiRecord, aiString, aiStrings } from './aiOutputValidation';
+import { validateRewrittenLine, validateRewrittenList, type FactGuardIssue } from '@/utils/aiFactGuard';
 
 export type StarPolishKind = 'summary' | 'experience' | 'project' | 'highlights';
 
@@ -25,6 +26,8 @@ export interface StarPolishSuggestion {
   after: string;
   note: string;
   novelNumbers: string[];
+  /** 确定性事实校验命中的问题；非空时禁止勾选应用。 */
+  guard?: FactGuardIssue[];
   operation: ResumePatchOperation;
 }
 
@@ -57,6 +60,35 @@ function sameText(before: string, after: string): boolean {
 export function novelNumbers(before: string, after: string): string[] {
   const source = new Set(before.match(/\d+(?:\.\d+)?%?/g) ?? []);
   return [...new Set(after.match(/\d+(?:\.\d+)?%?/g) ?? [])].filter((value) => !source.has(value));
+}
+
+function splitMarkdownBullets(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[-*+•·]\s+/u, '').trim())
+    .filter(Boolean);
+}
+
+/** 复用确定性事实校验，避免 STAR 润色绕过同值数字、主语偷换、联系方式与语言护栏。 */
+function guardStarSuggestion(target: StarPolishTarget, after: string | string[], targetRole = ''): FactGuardIssue[] {
+  const options = { userText: targetRole };
+  if (target.kind === 'highlights') {
+    const afterList = Array.isArray(after) ? after : [after];
+    return validateRewrittenList(target.items ?? [], afterList, options).issues;
+  }
+  if (target.kind === 'summary') {
+    return validateRewrittenLine(target.text, String(after), options).issues;
+  }
+  const beforeLines = splitMarkdownBullets(target.text);
+  const afterLines = splitMarkdownBullets(String(after));
+  return validateRewrittenList(beforeLines.length ? beforeLines : [target.text], afterLines, options).issues;
+}
+
+function verifiedNovelNumbers(before: string, after: string, guard: FactGuardIssue[]): string[] {
+  const metricIssue = guard.find((issue) => issue.code === 'metric');
+  if (!metricIssue) return [];
+  const rawMatches = novelNumbers(before, after);
+  return rawMatches.length ? rawMatches : metricIssue.details;
 }
 
 /** Visible narrative fields only. Structured contacts and organization names are not included. */
@@ -119,7 +151,7 @@ function toOperation(target: StarPolishTarget, value: string | string[]): Resume
   return { type: 'update_experience', id, field: 'description', value: value as string };
 }
 
-export function parseStarPolishDraft(input: unknown, resume: ResumeData, keys: readonly string[]): StarPolishDraft {
+export function parseStarPolishDraft(input: unknown, resume: ResumeData, keys: readonly string[], targetRole = ''): StarPolishDraft {
   const targets = resolveStarPolishTargets(resume, keys);
   const byKey = new Map(targets.map((target) => [target.key, target]));
   const value = aiRecord(input);
@@ -139,20 +171,45 @@ export function parseStarPolishDraft(input: unknown, resume: ResumeData, keys: r
       if (highlights.length === target.items!.length && highlights.every((text, index) => sameText(text, target.items![index]!))) continue;
       const after = highlights.join('\n');
       if (PLACEHOLDER.test(after) && !PLACEHOLDER.test(target.text)) throw new Error('润色结果包含被替换的组织占位，已拒绝。');
-      suggestions.push({ key, label: target.label, before: target.text, rawBefore: readRaw(resume, key) ?? [], after, note, novelNumbers: novelNumbers(target.text, after), operation: toOperation(target, highlights) });
+      const guard = guardStarSuggestion(target, highlights, targetRole);
+      suggestions.push({
+        key,
+        label: target.label,
+        before: target.text,
+        rawBefore: readRaw(resume, key) ?? [],
+        after,
+        note,
+        novelNumbers: verifiedNovelNumbers(target.text, after, guard),
+        ...(guard.length ? { guard } : {}),
+        operation: toOperation(target, highlights),
+      });
       continue;
     }
     const rewritten = aiString(item.value, 8000);
     if (!rewritten) throw new Error('润色结果不能为空。');
     if (sameText(target.text, rewritten)) continue;
     if (PLACEHOLDER.test(rewritten) && !PLACEHOLDER.test(target.text)) throw new Error('润色结果包含被替换的组织占位，已拒绝。');
-    suggestions.push({ key, label: target.label, before: target.text, rawBefore: readRaw(resume, key) ?? '', after: rewritten, note, novelNumbers: novelNumbers(target.text, rewritten), operation: toOperation(target, rewritten) });
+    const guard = guardStarSuggestion(target, rewritten, targetRole);
+    suggestions.push({
+      key,
+      label: target.label,
+      before: target.text,
+      rawBefore: readRaw(resume, key) ?? '',
+      after: rewritten,
+      note,
+      novelNumbers: verifiedNovelNumbers(target.text, rewritten, guard),
+      ...(guard.length ? { guard } : {}),
+      operation: toOperation(target, rewritten),
+    });
   }
   return { explanation, suggestions };
 }
 
 export function assertStarPolishCurrent(resume: ResumeData, suggestions: readonly StarPolishSuggestion[]): void {
   if (!suggestions.length) throw new Error('没有可应用的润色建议。');
+  if (suggestions.some((suggestion) => suggestion.guard?.length)) {
+    throw new Error('包含未通过确定性事实校验的润色建议，不能应用。');
+  }
   const visible = new Set(collectStarPolishTargets(resume).map((target) => target.key));
   for (const suggestion of suggestions) {
     const current = readRaw(resume, suggestion.key);
@@ -169,5 +226,5 @@ export async function requestStarPolish(config: AiProviderConfig, resume: Resume
     targetRole: role,
     targets: targets.map(({ key, kind, text, items, hint }) => ({ key, kind, text, ...(items ? { items } : {}), hint })),
   };
-  return parseStarPolishDraft(await requestAiJson(config, PROMPT, data, { ...options, temperature: 0.3 }), resume, keys);
+  return parseStarPolishDraft(await requestAiJson(config, PROMPT, data, { ...options, temperature: 0.3 }), resume, keys, role);
 }

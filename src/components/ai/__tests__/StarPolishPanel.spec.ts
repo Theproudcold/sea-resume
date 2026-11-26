@@ -68,6 +68,28 @@ describe('StarPolishPanel', () => {
     expect(panel.text()).toContain('30%');
     expect(panel.get('[data-testid=star-apply]').attributes('disabled')).toBeDefined();
   });
+  it('hard-blocks suggestions flagged by aiFactGuard so they cannot be checked or applied', async () => {
+    setup();
+    const key = panel.get('input[type=checkbox]').attributes('value');
+    vi.mocked(requestStarPolish).mockResolvedValue({
+      explanation: '',
+      suggestions: [{
+        key: key!,
+        label: '公司 · 工程师',
+        before: '负责结算页面改版',
+        rawBefore: resume.experiences[0]!.description,
+        after: '- 改版后耗时缩短 30%',
+        note: '',
+        novelNumbers: ['30%'],
+        guard: [{ code: 'metric', details: ['30'], message: '改写引入了原句没有的数字或指标（30），请先核实再采纳。' }],
+        operation: { type: 'update_experience', id: resume.experiences[0]!.id, field: 'description', value: '- 改版后耗时缩短 30%' },
+      }],
+    });
+    await start();
+    expect(panel.text()).toContain('确定性校验已拦截');
+    expect(panel.get('.suggestion input[type=checkbox]').attributes('disabled')).toBeDefined();
+    expect(panel.get('[data-testid=star-apply]').attributes('disabled')).toBeDefined();
+  });
   it('aborts on cancellation and ignores the late result', async () => {
     setup();
     let resolve!: (value: Awaited<ReturnType<typeof requestStarPolish>>) => void;

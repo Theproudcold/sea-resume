@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseResumeMarkdown } from '@/utils/markdown/parseResumeMarkdown';
-import { checkResumeQuality } from '@/utils/resumeQuality';
+import { checkResumeQuality, sortEntriesByDateDesc } from '@/utils/resumeQuality';
 
 const blankResume = () => {
   const resume = parseResumeMarkdown('# Resume').resume;
@@ -165,5 +165,79 @@ describe('resume quality checks', () => {
     const issues = checkResumeQuality(resume);
     expect(issues.find((issue) => issue.id === 'basic-summary')?.severity).toBe('info');
     expect(issues.find((issue) => issue.id === 'basic-name')?.severity).toBe('warning');
+  });
+
+  it('warns when expected salary appears in basic info or custom contacts', () => {
+    const resume = completeResume();
+    resume.basic.title = '后端工程师（期望薪资 30k）';
+    const issues = checkResumeQuality(resume);
+    expect(issues).toContainEqual(expect.objectContaining({
+      id: 'basic-salary-leak',
+      section: 'basic',
+      target: 'basic-title',
+      severity: 'warning',
+    }));
+
+    resume.basic.title = '后端工程师';
+    resume.basic.customContacts = [{ id: 'c1', label: '期望薪资', value: '25k', icon: 'Link' }];
+    expect(checkResumeQuality(resume)).toContainEqual(expect.objectContaining({
+      id: 'basic-salary-leak',
+      target: null,
+      severity: 'warning',
+    }));
+  });
+
+  it('detects non-reverse-chronological order and provides stable descending sorting', () => {
+    const resume = completeResume();
+    resume.experiences = [
+      { id: 'old', company: '旧公司', position: '开发', startDate: '2020-01', endDate: '2021-06', description: '负责接口开发' },
+      { id: 'new', company: '新公司', position: '高工', startDate: '2022-01', endDate: 'present', description: '负责核心链路' },
+    ];
+    const issues = checkResumeQuality(resume);
+    expect(issues).toContainEqual(expect.objectContaining({
+      id: 'experience-order',
+      section: 'experience',
+      action: 'sort-desc',
+      target: null,
+    }));
+
+    const sorted = sortEntriesByDateDesc(resume.experiences);
+    expect(sorted.map((item) => item.id)).toEqual(['new', 'old']);
+    resume.experiences = sorted;
+    expect(checkResumeQuality(resume).some((issue) => issue.id === 'experience-order')).toBe(false);
+  });
+
+  it('flags cliches, long unstructured walls, common demo projects, shallow skills, and crowded typography', () => {
+    const resume = completeResume();
+    resume.basic.summary = '<p>本人认真负责，抗压能力强，善于沟通。</p>';
+    resume.experiences = [{
+      id: 'e1',
+      company: 'A',
+      position: 'Dev',
+      startDate: '2022-01',
+      endDate: 'present',
+      description: `<p>深度参与核心系统建设，为业务赋能并形成抓手。${'负责日常需求迭代与接口联调维护。'.repeat(14)}</p>`,
+    }];
+    resume.projects = [{
+      id: 'p1',
+      name: '苍穹外卖后台系统',
+      role: '后端',
+      startDate: '2021-01',
+      endDate: '2021-12',
+      description: '<p>负责相关工作，完成下单模块。</p>',
+    }];
+    resume.skills = [{ id: 's1', category: '后端', items: ['Java', 'MySQL', 'Redis', 'Docker'] }];
+    resume.theme = { ...resume.theme, fontSize: 12, lineHeight: 1.2 };
+
+    const ids = checkResumeQuality(resume).map((issue) => issue.id);
+    expect(ids).toEqual(expect.arrayContaining([
+      'basic-summary-cliche',
+      'experience-cliche-e1',
+      'experience-wall-e1',
+      'project-common-demo-p1',
+      'project-cliche-p1',
+      'skill-shallow-s1',
+      'theme-crowded',
+    ]));
   });
 });

@@ -16,7 +16,8 @@
         <el-button type="primary" plain :loading="isFitting" :disabled="fitUnavailable || (estimatedPages ?? 0) <= 1 || isFitting" @click="fitToOnePage">尝试适配一页</el-button>
         <el-button v-if="canRestore" text @click="restoreOriginalTheme">还原原排版</el-button>
       </div>
-      <el-alert v-if="!fitUnavailable && (estimatedPages ?? 0) > 1" class="fit-panel__alert" type="warning" :closable="false" title="当前为多页简历，可压缩排版或精简内容。" />
+      <el-alert v-if="!fitUnavailable && (estimatedPages ?? 0) > 1" class="fit-panel__alert" type="warning" :closable="false" title="当前为多页简历：可尝试压缩排版，或保留 1~2 页舒展留白（社招/项目较多时不必强压一页）。" />
+      <el-alert v-if="isTypographyCrowded" class="fit-panel__alert" type="info" :closable="false" title="当前字号或行间距偏紧，文本容易挤成一团；建议保持行间距在 1.35 以上并留足留白。" />
     </section>
 
     <section class="fit-panel">
@@ -251,6 +252,12 @@ const pageMetrics = inject(previewPageMetricsKey, null) ?? {
 const estimatedPages = pageMetrics.pageCount;
 /** 尚未完成首次有效测量：既没有页数，画布也明确报告 pending。 */
 const fitUnavailable = computed(() => pageMetrics.pending.value || estimatedPages.value === null);
+/** 行距过窄或字号与行距同时触底时提醒可读性，防止文字视觉发糊。 */
+const isTypographyCrowded = computed(() => {
+  const fontSize = data.value.theme?.fontSize ?? 14;
+  const lineHeight = data.value.theme?.lineHeight ?? 1.5;
+  return lineHeight <= 1.2 || (fontSize <= 12 && lineHeight <= 1.3);
+});
 
 // 适配一页由 composable 负责，组件只渲染主题 token 与按钮状态。
 const { isFitting, canRestore, fitToOnePage, restoreOriginalTheme } = useOnePageFit(
